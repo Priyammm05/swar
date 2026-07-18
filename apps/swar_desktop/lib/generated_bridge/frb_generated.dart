@@ -703,16 +703,17 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   DictationSessionConfig dco_decode_dictation_session_config(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 7)
-      throw Exception('unexpected arr length: expect 7 but see ${arr.length}');
+    if (arr.length != 8)
+      throw Exception('unexpected arr length: expect 8 but see ${arr.length}');
     return DictationSessionConfig(
       modelPath: dco_decode_String(arr[0]),
-      language: dco_decode_String(arr[1]),
-      writingMode: dco_decode_String(arr[2]),
-      sourceApplication: dco_decode_String(arr[3]),
-      pasteAutomatically: dco_decode_bool(arr[4]),
-      restoreClipboard: dco_decode_bool(arr[5]),
-      maximumSeconds: dco_decode_u_32(arr[6]),
+      microphoneId: dco_decode_String(arr[1]),
+      language: dco_decode_String(arr[2]),
+      writingMode: dco_decode_String(arr[3]),
+      sourceApplication: dco_decode_String(arr[4]),
+      pasteAutomatically: dco_decode_bool(arr[5]),
+      restoreClipboard: dco_decode_bool(arr[6]),
+      maximumSeconds: dco_decode_u_32(arr[7]),
     );
   }
 
@@ -784,12 +785,13 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   MicrophoneDevice dco_decode_microphone_device(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 3)
-      throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
+    if (arr.length != 4)
+      throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
     return MicrophoneDevice(
       id: dco_decode_String(arr[0]),
       name: dco_decode_String(arr[1]),
       isDefault: dco_decode_bool(arr[2]),
+      isBuiltIn: dco_decode_bool(arr[3]),
     );
   }
 
@@ -797,8 +799,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   NativeSettings dco_decode_native_settings(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 14)
-      throw Exception('unexpected arr length: expect 14 but see ${arr.length}');
+    if (arr.length != 15)
+      throw Exception('unexpected arr length: expect 15 but see ${arr.length}');
     return NativeSettings(
       language: dco_decode_String(arr[0]),
       writingMode: dco_decode_String(arr[1]),
@@ -814,6 +816,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       pasteAutomatically: dco_decode_bool(arr[11]),
       restoreClipboard: dco_decode_bool(arr[12]),
       modelPath: dco_decode_String(arr[13]),
+      microphoneId: dco_decode_String(arr[14]),
     );
   }
 
@@ -1000,6 +1003,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var var_modelPath = sse_decode_String(deserializer);
+    var var_microphoneId = sse_decode_String(deserializer);
     var var_language = sse_decode_String(deserializer);
     var var_writingMode = sse_decode_String(deserializer);
     var var_sourceApplication = sse_decode_String(deserializer);
@@ -1008,6 +1012,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_maximumSeconds = sse_decode_u_32(deserializer);
     return DictationSessionConfig(
       modelPath: var_modelPath,
+      microphoneId: var_microphoneId,
       language: var_language,
       writingMode: var_writingMode,
       sourceApplication: var_sourceApplication,
@@ -1103,10 +1108,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_id = sse_decode_String(deserializer);
     var var_name = sse_decode_String(deserializer);
     var var_isDefault = sse_decode_bool(deserializer);
+    var var_isBuiltIn = sse_decode_bool(deserializer);
     return MicrophoneDevice(
       id: var_id,
       name: var_name,
       isDefault: var_isDefault,
+      isBuiltIn: var_isBuiltIn,
     );
   }
 
@@ -1127,6 +1134,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_pasteAutomatically = sse_decode_bool(deserializer);
     var var_restoreClipboard = sse_decode_bool(deserializer);
     var var_modelPath = sse_decode_String(deserializer);
+    var var_microphoneId = sse_decode_String(deserializer);
     return NativeSettings(
       language: var_language,
       writingMode: var_writingMode,
@@ -1142,6 +1150,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       pasteAutomatically: var_pasteAutomatically,
       restoreClipboard: var_restoreClipboard,
       modelPath: var_modelPath,
+      microphoneId: var_microphoneId,
     );
   }
 
@@ -1360,6 +1369,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_String(self.modelPath, serializer);
+    sse_encode_String(self.microphoneId, serializer);
     sse_encode_String(self.language, serializer);
     sse_encode_String(self.writingMode, serializer);
     sse_encode_String(self.sourceApplication, serializer);
@@ -1450,6 +1460,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_String(self.id, serializer);
     sse_encode_String(self.name, serializer);
     sse_encode_bool(self.isDefault, serializer);
+    sse_encode_bool(self.isBuiltIn, serializer);
   }
 
   @protected
@@ -1472,6 +1483,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_bool(self.pasteAutomatically, serializer);
     sse_encode_bool(self.restoreClipboard, serializer);
     sse_encode_String(self.modelPath, serializer);
+    sse_encode_String(self.microphoneId, serializer);
   }
 
   @protected

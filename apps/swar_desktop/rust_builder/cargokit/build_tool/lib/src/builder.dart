@@ -145,6 +145,12 @@ class RustBuilder {
   Future<String> build() async {
     final extraArgs = _buildOptions?.flags ?? [];
     final manifestPath = path.join(environment.manifestDir, 'Cargo.toml');
+    final buildEnvironment = await _buildEnvironment();
+    final rustc = runCommand(
+      'rustup',
+      ['which', '--toolchain', _toolchain, 'rustc'],
+    ).stdout.toString().trim();
+    buildEnvironment['RUSTC'] = rustc;
     runCommand(
       'rustup',
       [
@@ -168,7 +174,7 @@ class RustBuilder {
         '--target-dir',
         environment.targetTempDir,
       ],
-      environment: await _buildEnvironment(),
+      environment: buildEnvironment,
     );
     return path.join(
       environment.targetTempDir,

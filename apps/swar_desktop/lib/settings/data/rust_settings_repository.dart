@@ -9,11 +9,15 @@ final class RustSettingsRepository implements SettingsRepository {
   SwarSettings read() {
     final value = native.loadSettings();
     final installedModel = models.recommendedModelStatus();
-    final modelPath = value.modelPath.isNotEmpty
-        ? value.modelPath
-        : installedModel.installed
+    final normalizedModelPath = value.modelPath.replaceAll('\\', '/');
+    final usesLegacyManagedModel = normalizedModelPath.endsWith(
+      '/models/ggml-base.bin',
+    );
+    final modelPath =
+        installedModel.installed &&
+            (value.modelPath.isEmpty || usesLegacyManagedModel)
         ? installedModel.path
-        : '';
+        : value.modelPath;
     return SwarSettings(
       language: SwarLanguagePreference.values.byName(value.language),
       writingMode: SwarWritingMode.values.byName(value.writingMode),
@@ -29,6 +33,7 @@ final class RustSettingsRepository implements SettingsRepository {
       pasteAutomatically: value.pasteAutomatically,
       restoreClipboard: value.restoreClipboard,
       modelPath: modelPath,
+      microphoneId: value.microphoneId,
     );
   }
 
@@ -50,6 +55,7 @@ final class RustSettingsRepository implements SettingsRepository {
         pasteAutomatically: settings.pasteAutomatically,
         restoreClipboard: settings.restoreClipboard,
         modelPath: settings.modelPath,
+        microphoneId: settings.microphoneId,
       ),
     );
   }

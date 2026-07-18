@@ -3,11 +3,13 @@ final class SwarMicrophone {
     required this.id,
     required this.name,
     required this.isDefault,
+    required this.isBuiltIn,
   });
 
   final String id;
   final String name;
   final bool isDefault;
+  final bool isBuiltIn;
 }
 
 enum DictationEngineEventKind {
@@ -36,6 +38,7 @@ final class DictationEngineEvent {
 final class DictationEngineConfig {
   const DictationEngineConfig({
     required this.modelPath,
+    required this.microphoneId,
     required this.language,
     required this.writingMode,
     required this.pasteAutomatically,
@@ -43,6 +46,7 @@ final class DictationEngineConfig {
   });
 
   final String modelPath;
+  final String microphoneId;
   final String language;
   final String writingMode;
   final bool pasteAutomatically;

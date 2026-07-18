@@ -20,6 +20,9 @@ A new Flutter FFI plugin project.
   s.source           = { :path => '.' }
   s.source_files     = 'Classes/**/*'
   s.dependency 'FlutterMacOS'
+  s.frameworks = 'Accelerate', 'ApplicationServices', 'AudioToolbox', 'AudioUnit',
+                 'Carbon', 'CoreAudio', 'CoreFoundation'
+  s.libraries = 'c++'
 
   s.platform = :osx, '10.15'
   s.pod_target_xcconfig = { 'DEFINES_MODULE' => 'YES' }

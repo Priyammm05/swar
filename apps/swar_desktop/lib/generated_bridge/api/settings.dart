@@ -30,6 +30,7 @@ class NativeSettings {
   final bool pasteAutomatically;
   final bool restoreClipboard;
   final String modelPath;
+  final String microphoneId;
 
   const NativeSettings({
     required this.language,
@@ -46,6 +47,7 @@ class NativeSettings {
     required this.pasteAutomatically,
     required this.restoreClipboard,
     required this.modelPath,
+    required this.microphoneId,
   });
 
   static Future<NativeSettings> default_() =>
@@ -66,7 +68,8 @@ class NativeSettings {
       milestones.hashCode ^
       pasteAutomatically.hashCode ^
       restoreClipboard.hashCode ^
-      modelPath.hashCode;
+      modelPath.hashCode ^
+      microphoneId.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -86,5 +89,6 @@ class NativeSettings {
           milestones == other.milestones &&
           pasteAutomatically == other.pasteAutomatically &&
           restoreClipboard == other.restoreClipboard &&
-          modelPath == other.modelPath;
+          modelPath == other.modelPath &&
+          microphoneId == other.microphoneId;
 }

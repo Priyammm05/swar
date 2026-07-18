@@ -21,6 +21,7 @@ pub struct NativeSettings {
     pub paste_automatically: bool,
     pub restore_clipboard: bool,
     pub model_path: String,
+    pub microphone_id: String,
 }
 
 impl Default for NativeSettings {
@@ -40,6 +41,7 @@ impl Default for NativeSettings {
             paste_automatically: true,
             restore_clipboard: true,
             model_path: String::new(),
+            microphone_id: String::new(),
         }
     }
 }

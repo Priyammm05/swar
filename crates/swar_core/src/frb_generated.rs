@@ -711,6 +711,7 @@ impl SseDecode for crate::api::dictation::DictationSessionConfig {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
         let mut var_modelPath = <String>::sse_decode(deserializer);
+        let mut var_microphoneId = <String>::sse_decode(deserializer);
         let mut var_language = <String>::sse_decode(deserializer);
         let mut var_writingMode = <String>::sse_decode(deserializer);
         let mut var_sourceApplication = <String>::sse_decode(deserializer);
@@ -719,6 +720,7 @@ impl SseDecode for crate::api::dictation::DictationSessionConfig {
         let mut var_maximumSeconds = <u32>::sse_decode(deserializer);
         return crate::api::dictation::DictationSessionConfig {
             model_path: var_modelPath,
+            microphone_id: var_microphoneId,
             language: var_language,
             writing_mode: var_writingMode,
             source_application: var_sourceApplication,
@@ -828,10 +830,12 @@ impl SseDecode for crate::api::dictation::MicrophoneDevice {
         let mut var_id = <String>::sse_decode(deserializer);
         let mut var_name = <String>::sse_decode(deserializer);
         let mut var_isDefault = <bool>::sse_decode(deserializer);
+        let mut var_isBuiltIn = <bool>::sse_decode(deserializer);
         return crate::api::dictation::MicrophoneDevice {
             id: var_id,
             name: var_name,
             is_default: var_isDefault,
+            is_built_in: var_isBuiltIn,
         };
     }
 }
@@ -853,6 +857,7 @@ impl SseDecode for crate::api::settings::NativeSettings {
         let mut var_pasteAutomatically = <bool>::sse_decode(deserializer);
         let mut var_restoreClipboard = <bool>::sse_decode(deserializer);
         let mut var_modelPath = <String>::sse_decode(deserializer);
+        let mut var_microphoneId = <String>::sse_decode(deserializer);
         return crate::api::settings::NativeSettings {
             language: var_language,
             writing_mode: var_writingMode,
@@ -868,6 +873,7 @@ impl SseDecode for crate::api::settings::NativeSettings {
             paste_automatically: var_pasteAutomatically,
             restore_clipboard: var_restoreClipboard,
             model_path: var_modelPath,
+            microphone_id: var_microphoneId,
         };
     }
 }
@@ -1136,6 +1142,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::dictation::DictationSessionCo
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
         [
             self.model_path.into_into_dart().into_dart(),
+            self.microphone_id.into_into_dart().into_dart(),
             self.language.into_into_dart().into_dart(),
             self.writing_mode.into_into_dart().into_dart(),
             self.source_application.into_into_dart().into_dart(),
@@ -1210,6 +1217,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::dictation::MicrophoneDevice {
             self.id.into_into_dart().into_dart(),
             self.name.into_into_dart().into_dart(),
             self.is_default.into_into_dart().into_dart(),
+            self.is_built_in.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -1243,6 +1251,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::settings::NativeSettings {
             self.paste_automatically.into_into_dart().into_dart(),
             self.restore_clipboard.into_into_dart().into_dart(),
             self.model_path.into_into_dart().into_dart(),
+            self.microphone_id.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -1400,6 +1409,7 @@ impl SseEncode for crate::api::dictation::DictationSessionConfig {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
         <String>::sse_encode(self.model_path, serializer);
+        <String>::sse_encode(self.microphone_id, serializer);
         <String>::sse_encode(self.language, serializer);
         <String>::sse_encode(self.writing_mode, serializer);
         <String>::sse_encode(self.source_application, serializer);
@@ -1486,6 +1496,7 @@ impl SseEncode for crate::api::dictation::MicrophoneDevice {
         <String>::sse_encode(self.id, serializer);
         <String>::sse_encode(self.name, serializer);
         <bool>::sse_encode(self.is_default, serializer);
+        <bool>::sse_encode(self.is_built_in, serializer);
     }
 }
 
@@ -1506,6 +1517,7 @@ impl SseEncode for crate::api::settings::NativeSettings {
         <bool>::sse_encode(self.paste_automatically, serializer);
         <bool>::sse_encode(self.restore_clipboard, serializer);
         <String>::sse_encode(self.model_path, serializer);
+        <String>::sse_encode(self.microphone_id, serializer);
     }
 }
 

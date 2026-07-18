@@ -12,6 +12,7 @@ final class RustDictationEngineGateway implements DictationEngineGateway {
             id: device.id,
             name: device.name,
             isDefault: device.isDefault,
+            isBuiltIn: device.isBuiltIn,
           ),
         )
         .toList(growable: false);
@@ -23,6 +24,7 @@ final class RustDictationEngineGateway implements DictationEngineGateway {
         .startDictationSession(
           config: native.DictationSessionConfig(
             modelPath: config.modelPath,
+            microphoneId: config.microphoneId,
             language: config.language,
             writingMode: config.writingMode,
             sourceApplication: 'Desktop',

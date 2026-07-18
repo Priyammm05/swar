@@ -6,13 +6,14 @@ use std::{
 
 use directories::ProjectDirs;
 use flutter_rust_bridge::frb;
-use sha1::{Digest, Sha1};
+use sha2::{Digest, Sha256};
 
-const RECOMMENDED_MODEL_FILE: &str = "ggml-base.bin";
+const RECOMMENDED_MODEL_FILE: &str = "ggml-small-q5_1.bin";
 const RECOMMENDED_MODEL_URL: &str =
-    "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin";
-const RECOMMENDED_MODEL_SHA1: &str = "465707469ff3a37a2b9b8d8f89f2f99de7299dac";
-const MINIMUM_MODEL_BYTES: u64 = 100_000_000;
+    "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small-q5_1.bin";
+const RECOMMENDED_MODEL_SHA256: &str =
+    "ae85e4a935d7a567bd102fe55afc16bb595bdb618e11b2fc7591bc08120411bb";
+const MINIMUM_MODEL_BYTES: u64 = 180_000_000;
 
 #[derive(Clone, Debug)]
 pub struct OfflineModelStatus {
@@ -47,12 +48,14 @@ pub fn install_recommended_model() -> Result<OfflineModelStatus, String> {
         .map_err(|error| format!("model download failed: {error}"))?;
     let mut reader = response.into_reader();
     let mut file = File::create(&partial).map_err(|error| error.to_string())?;
-    let mut hasher = Sha1::new();
+    let mut hasher = Sha256::new();
     let mut buffer = [0_u8; 64 * 1024];
     let mut size_bytes = 0_u64;
 
     loop {
-        let count = reader.read(&mut buffer).map_err(|error| error.to_string())?;
+        let count = reader
+            .read(&mut buffer)
+            .map_err(|error| error.to_string())?;
         if count == 0 {
             break;
         }
@@ -64,7 +67,7 @@ pub fn install_recommended_model() -> Result<OfflineModelStatus, String> {
     file.sync_all().map_err(|error| error.to_string())?;
 
     let digest = format!("{:x}", hasher.finalize());
-    if size_bytes < MINIMUM_MODEL_BYTES || digest != RECOMMENDED_MODEL_SHA1 {
+    if size_bytes < MINIMUM_MODEL_BYTES || digest != RECOMMENDED_MODEL_SHA256 {
         let _ = fs::remove_file(&partial);
         return Err("downloaded model failed integrity verification".to_owned());
     }
@@ -90,7 +93,7 @@ fn status_for(path: PathBuf) -> OfflineModelStatus {
         installed: metadata.is_some_and(|value| value.is_file())
             && size_bytes >= MINIMUM_MODEL_BYTES,
         size_bytes,
-        model_id: "whisper-base-multilingual".to_owned(),
+        model_id: "whisper-small-q5_1-multilingual".to_owned(),
     }
 }
 
@@ -100,7 +103,7 @@ mod tests {
 
     #[test]
     fn recommended_model_is_multilingual() {
-        assert_eq!(RECOMMENDED_MODEL_FILE, "ggml-base.bin");
+        assert_eq!(RECOMMENDED_MODEL_FILE, "ggml-small-q5_1.bin");
         assert!(!RECOMMENDED_MODEL_FILE.contains(".en."));
     }
 }
