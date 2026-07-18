@@ -1,6 +1,7 @@
 #include "flutter_window.h"
 
 #include <optional>
+#include <flutter/standard_method_codec.h>
 
 #include "flutter/generated_plugin_registrant.h"
 
@@ -25,6 +26,26 @@ bool FlutterWindow::OnCreate() {
     return false;
   }
   RegisterPlugins(flutter_controller_->engine());
+  desktop_channel_ =
+      std::make_unique<flutter::MethodChannel<flutter::EncodableValue>>(
+          flutter_controller_->engine()->messenger(), "dev.swar/desktop",
+          &flutter::StandardMethodCodec::GetInstance());
+  desktop_channel_->SetMethodCallHandler(
+      [this](const flutter::MethodCall<flutter::EncodableValue>& call,
+             std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result) {
+        if (call.method_name() == "registerGlobalShortcut") {
+          const bool registered =
+              RegisterHotKey(GetHandle(), 1, MOD_CONTROL | MOD_NOREPEAT, VK_SPACE) != 0;
+          result->Success(flutter::EncodableValue(registered));
+        } else if (call.method_name() == "unregisterGlobalShortcut") {
+          UnregisterHotKey(GetHandle(), 1);
+          result->Success();
+        } else if (call.method_name() == "requestInsertionPermission") {
+          result->Success(flutter::EncodableValue(true));
+        } else {
+          result->NotImplemented();
+        }
+      });
   SetChildContent(flutter_controller_->view()->GetNativeWindow());
 
   flutter_controller_->engine()->SetNextFrameCallback([&]() {
@@ -40,6 +61,8 @@ bool FlutterWindow::OnCreate() {
 }
 
 void FlutterWindow::OnDestroy() {
+  UnregisterHotKey(GetHandle(), 1);
+  desktop_channel_.reset();
   if (flutter_controller_) {
     flutter_controller_ = nullptr;
   }
@@ -62,6 +85,12 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
   }
 
   switch (message) {
+    case WM_HOTKEY:
+      if (wparam == 1 && desktop_channel_) {
+        desktop_channel_->InvokeMethod(
+            "shortcutPressed", std::make_unique<flutter::EncodableValue>());
+        return 0;
+      }
     case WM_FONTCHANGE:
       flutter_controller_->engine()->ReloadSystemFonts();
       break;

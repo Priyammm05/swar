@@ -72,11 +72,40 @@ if [ -z "$head_sha" ]; then
   head_sha=$(gh api "repos/$repository/git/ref/heads/$branch" --jq '.object.sha')
 fi
 
-printf '{"tree":[]}' >"$publish_temp_dir/tree.json"
+base_tree_sha=$(gh api "repos/$repository/git/commits/$head_sha" --jq '.tree.sha')
 
-git --git-dir="$publish_temp_dir/git/.git" \
-  --work-tree="$workspace_dir" \
-  ls-files --others --exclude-standard |
+jq -n --arg base_tree "$base_tree_sha" \
+  '{base_tree: $base_tree, tree: []}' >"$publish_temp_dir/tree.json"
+
+if [ -n "${SWAR_PUBLISH_PATHS_FILE:-}" ]; then
+  if [ ! -f "$SWAR_PUBLISH_PATHS_FILE" ]; then
+    echo "Publish path manifest does not exist: $SWAR_PUBLISH_PATHS_FILE" >&2
+    exit 1
+  fi
+  cp "$SWAR_PUBLISH_PATHS_FILE" "$publish_temp_dir/paths.txt"
+else
+  git --git-dir="$publish_temp_dir/git/.git" \
+    --work-tree="$workspace_dir" \
+    ls-files --others --exclude-standard >"$publish_temp_dir/paths.txt"
+fi
+
+while IFS= read -r relative_path; do
+  case "$relative_path" in
+    ""|'#'*) continue ;;
+    /*|../*|*/../*)
+      echo "Unsafe publish path: $relative_path" >&2
+      exit 1
+      ;;
+  esac
+
+  if git --git-dir="$publish_temp_dir/git/.git" \
+    --work-tree="$workspace_dir" check-ignore --quiet "$relative_path"; then
+    echo "Refusing to publish ignored path: $relative_path" >&2
+    exit 1
+  fi
+
+  printf '%s\n' "$relative_path"
+done <"$publish_temp_dir/paths.txt" |
 while IFS= read -r relative_path; do
   file_path="$workspace_dir/$relative_path"
 

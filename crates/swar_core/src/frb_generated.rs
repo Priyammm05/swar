@@ -38,7 +38,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.12.0";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -606916465;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 1210105913;
 
 // Section: executor
 
@@ -46,6 +46,106 @@ flutter_rust_bridge::frb_generated_default_handler!();
 
 // Section: wire_funcs
 
+fn wire__crate__api__dictation__cancel_dictation_session_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "cancel_dictation_session",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_session_id = <String>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, String>((move || {
+                    let output_ok =
+                        crate::api::dictation::cancel_dictation_session(api_session_id)?;
+                    Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
+fn wire__crate__api__history__clear_local_history_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "clear_local_history",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, String>((move || {
+                    let output_ok = crate::api::history::clear_local_history()?;
+                    Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
+fn wire__crate__api__dictation__finish_dictation_session_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "finish_dictation_session",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_session_id = <String>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, String>((move || {
+                    let output_ok =
+                        crate::api::dictation::finish_dictation_session(api_session_id)?;
+                    Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
 fn wire__crate__api__diagnostics__get_core_version_impl(
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
     rust_vec_len_: i32,
@@ -72,6 +172,399 @@ fn wire__crate__api__diagnostics__get_core_version_impl(
                 let output_ok = Result::<_, ()>::Ok(crate::api::diagnostics::get_core_version())?;
                 Ok(output_ok)
             })())
+        },
+    )
+}
+fn wire__crate__api__history__initialize_local_store_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "initialize_local_store",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, String>((move || {
+                    let output_ok = crate::api::history::initialize_local_store()?;
+                    Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
+fn wire__crate__api__history__insights_snapshot_default_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "insights_snapshot_default",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, ()>((move || {
+                    let output_ok =
+                        Result::<_, ()>::Ok(crate::api::history::InsightsSnapshot::default())?;
+                    Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
+fn wire__crate__api__models__install_recommended_model_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "install_recommended_model",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, String>((move || {
+                    let output_ok = crate::api::models::install_recommended_model()?;
+                    Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
+fn wire__crate__api__dictation__list_microphones_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "list_microphones",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, String>((move || {
+                    let output_ok = crate::api::dictation::list_microphones()?;
+                    Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
+fn wire__crate__api__history__load_history_page_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "load_history_page",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_search_text = <String>::sse_decode(&mut deserializer);
+            let api_offset = <u32>::sse_decode(&mut deserializer);
+            let api_limit = <u32>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, String>((move || {
+                    let output_ok = crate::api::history::load_history_page(
+                        api_search_text,
+                        api_offset,
+                        api_limit,
+                    )?;
+                    Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
+fn wire__crate__api__history__load_insights_snapshot_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "load_insights_snapshot",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, String>((move || {
+                    let output_ok = crate::api::history::load_insights_snapshot()?;
+                    Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
+fn wire__crate__api__settings__load_settings_impl(
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "load_settings",
+            port: None,
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            deserializer.end();
+            transform_result_sse::<_, String>((move || {
+                let output_ok = crate::api::settings::load_settings()?;
+                Ok(output_ok)
+            })())
+        },
+    )
+}
+fn wire__crate__api__settings__native_settings_default_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "native_settings_default",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, ()>((move || {
+                    let output_ok =
+                        Result::<_, ()>::Ok(crate::api::settings::NativeSettings::default())?;
+                    Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
+fn wire__crate__api__dictation__offline_model_is_ready_impl(
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "offline_model_is_ready",
+            port: None,
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_model_path = <String>::sse_decode(&mut deserializer);
+            deserializer.end();
+            transform_result_sse::<_, ()>((move || {
+                let output_ok = Result::<_, ()>::Ok(
+                    crate::api::dictation::offline_model_is_ready(api_model_path),
+                )?;
+                Ok(output_ok)
+            })())
+        },
+    )
+}
+fn wire__crate__api__models__recommended_model_status_impl(
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "recommended_model_status",
+            port: None,
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            deserializer.end();
+            transform_result_sse::<_, String>((move || {
+                let output_ok = crate::api::models::recommended_model_status()?;
+                Ok(output_ok)
+            })())
+        },
+    )
+}
+fn wire__crate__api__settings__save_settings_impl(
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "save_settings",
+            port: None,
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_settings =
+                <crate::api::settings::NativeSettings>::sse_decode(&mut deserializer);
+            deserializer.end();
+            transform_result_sse::<_, String>((move || {
+                let output_ok = crate::api::settings::save_settings(api_settings)?;
+                Ok(output_ok)
+            })())
+        },
+    )
+}
+fn wire__crate__api__dictation__start_dictation_session_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "start_dictation_session",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_config =
+                <crate::api::dictation::DictationSessionConfig>::sse_decode(&mut deserializer);
+            let api_sink = <StreamSink<
+                crate::api::dictation::DictationEvent,
+                flutter_rust_bridge::for_generated::SseCodec,
+            >>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, String>((move || {
+                    let output_ok =
+                        crate::api::dictation::start_dictation_session(api_config, api_sink)?;
+                    Ok(output_ok)
+                })())
+            }
         },
     )
 }
@@ -124,6 +617,19 @@ impl SseDecode for flutter_rust_bridge::for_generated::anyhow::Error {
     }
 }
 
+impl SseDecode
+    for StreamSink<
+        crate::api::dictation::DictationEvent,
+        flutter_rust_bridge::for_generated::SseCodec,
+    >
+{
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut inner = <String>::sse_decode(deserializer);
+        return StreamSink::deserialize(inner);
+    }
+}
+
 impl SseDecode for StreamSink<u32, flutter_rust_bridge::for_generated::SseCodec> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -140,6 +646,156 @@ impl SseDecode for String {
     }
 }
 
+impl SseDecode for bool {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        deserializer.cursor.read_u8().unwrap() != 0
+    }
+}
+
+impl SseDecode for crate::api::dictation::DictationCompletion {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_sessionId = <String>::sse_decode(deserializer);
+        let mut var_rawText = <String>::sse_decode(deserializer);
+        let mut var_finalText = <String>::sse_decode(deserializer);
+        let mut var_audioDurationMs = <u64>::sse_decode(deserializer);
+        let mut var_processingDurationMs = <u64>::sse_decode(deserializer);
+        let mut var_insertionStatus = <String>::sse_decode(deserializer);
+        let mut var_insertionMethod = <String>::sse_decode(deserializer);
+        return crate::api::dictation::DictationCompletion {
+            session_id: var_sessionId,
+            raw_text: var_rawText,
+            final_text: var_finalText,
+            audio_duration_ms: var_audioDurationMs,
+            processing_duration_ms: var_processingDurationMs,
+            insertion_status: var_insertionStatus,
+            insertion_method: var_insertionMethod,
+        };
+    }
+}
+
+impl SseDecode for crate::api::dictation::DictationEvent {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_sessionId = <String>::sse_decode(deserializer);
+        let mut var_kind = <crate::api::dictation::DictationEventKind>::sse_decode(deserializer);
+        let mut var_audioLevel = <Option<f64>>::sse_decode(deserializer);
+        let mut var_message = <Option<String>>::sse_decode(deserializer);
+        return crate::api::dictation::DictationEvent {
+            session_id: var_sessionId,
+            kind: var_kind,
+            audio_level: var_audioLevel,
+            message: var_message,
+        };
+    }
+}
+
+impl SseDecode for crate::api::dictation::DictationEventKind {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut inner = <i32>::sse_decode(deserializer);
+        return match inner {
+            0 => crate::api::dictation::DictationEventKind::Preparing,
+            1 => crate::api::dictation::DictationEventKind::Recording,
+            2 => crate::api::dictation::DictationEventKind::AudioLevel,
+            3 => crate::api::dictation::DictationEventKind::Finalising,
+            4 => crate::api::dictation::DictationEventKind::Cancelled,
+            5 => crate::api::dictation::DictationEventKind::Failed,
+            _ => unreachable!("Invalid variant for DictationEventKind: {}", inner),
+        };
+    }
+}
+
+impl SseDecode for crate::api::dictation::DictationSessionConfig {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_modelPath = <String>::sse_decode(deserializer);
+        let mut var_language = <String>::sse_decode(deserializer);
+        let mut var_writingMode = <String>::sse_decode(deserializer);
+        let mut var_sourceApplication = <String>::sse_decode(deserializer);
+        let mut var_pasteAutomatically = <bool>::sse_decode(deserializer);
+        let mut var_restoreClipboard = <bool>::sse_decode(deserializer);
+        let mut var_maximumSeconds = <u32>::sse_decode(deserializer);
+        return crate::api::dictation::DictationSessionConfig {
+            model_path: var_modelPath,
+            language: var_language,
+            writing_mode: var_writingMode,
+            source_application: var_sourceApplication,
+            paste_automatically: var_pasteAutomatically,
+            restore_clipboard: var_restoreClipboard,
+            maximum_seconds: var_maximumSeconds,
+        };
+    }
+}
+
+impl SseDecode for f64 {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        deserializer.cursor.read_f64::<NativeEndian>().unwrap()
+    }
+}
+
+impl SseDecode for crate::api::history::HistoryPage {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_totalCount = <u32>::sse_decode(deserializer);
+        let mut var_records = <Vec<crate::api::history::StoredDictation>>::sse_decode(deserializer);
+        return crate::api::history::HistoryPage {
+            total_count: var_totalCount,
+            records: var_records,
+        };
+    }
+}
+
+impl SseDecode for i32 {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        deserializer.cursor.read_i32::<NativeEndian>().unwrap()
+    }
+}
+
+impl SseDecode for i64 {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        deserializer.cursor.read_i64::<NativeEndian>().unwrap()
+    }
+}
+
+impl SseDecode for crate::api::history::InsightsSnapshot {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_totalWords = <u64>::sse_decode(deserializer);
+        let mut var_totalDictations = <u64>::sse_decode(deserializer);
+        let mut var_totalSpeechDurationMs = <u64>::sse_decode(deserializer);
+        let mut var_averageWordsPerMinute = <f64>::sse_decode(deserializer);
+        let mut var_currentStreakDays = <u32>::sse_decode(deserializer);
+        let mut var_longestStreakDays = <u32>::sse_decode(deserializer);
+        return crate::api::history::InsightsSnapshot {
+            total_words: var_totalWords,
+            total_dictations: var_totalDictations,
+            total_speech_duration_ms: var_totalSpeechDurationMs,
+            average_words_per_minute: var_averageWordsPerMinute,
+            current_streak_days: var_currentStreakDays,
+            longest_streak_days: var_longestStreakDays,
+        };
+    }
+}
+
+impl SseDecode for Vec<crate::api::dictation::MicrophoneDevice> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut len_ = <i32>::sse_decode(deserializer);
+        let mut ans_ = Vec::with_capacity(len_ as usize);
+        for idx_ in 0..len_ {
+            ans_.push(<crate::api::dictation::MicrophoneDevice>::sse_decode(
+                deserializer,
+            ));
+        }
+        return ans_;
+    }
+}
+
 impl SseDecode for Vec<u8> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -152,10 +808,151 @@ impl SseDecode for Vec<u8> {
     }
 }
 
+impl SseDecode for Vec<crate::api::history::StoredDictation> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut len_ = <i32>::sse_decode(deserializer);
+        let mut ans_ = Vec::with_capacity(len_ as usize);
+        for idx_ in 0..len_ {
+            ans_.push(<crate::api::history::StoredDictation>::sse_decode(
+                deserializer,
+            ));
+        }
+        return ans_;
+    }
+}
+
+impl SseDecode for crate::api::dictation::MicrophoneDevice {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_id = <String>::sse_decode(deserializer);
+        let mut var_name = <String>::sse_decode(deserializer);
+        let mut var_isDefault = <bool>::sse_decode(deserializer);
+        return crate::api::dictation::MicrophoneDevice {
+            id: var_id,
+            name: var_name,
+            is_default: var_isDefault,
+        };
+    }
+}
+
+impl SseDecode for crate::api::settings::NativeSettings {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_language = <String>::sse_decode(deserializer);
+        let mut var_writingMode = <String>::sse_decode(deserializer);
+        let mut var_launchAtLogin = <bool>::sse_decode(deserializer);
+        let mut var_showInDock = <bool>::sse_decode(deserializer);
+        let mut var_keepModelsWarm = <bool>::sse_decode(deserializer);
+        let mut var_showSwarBar = <bool>::sse_decode(deserializer);
+        let mut var_dictationSounds = <bool>::sse_decode(deserializer);
+        let mut var_muteMusic = <bool>::sse_decode(deserializer);
+        let mut var_suggestions = <bool>::sse_decode(deserializer);
+        let mut var_announcements = <bool>::sse_decode(deserializer);
+        let mut var_milestones = <bool>::sse_decode(deserializer);
+        let mut var_pasteAutomatically = <bool>::sse_decode(deserializer);
+        let mut var_restoreClipboard = <bool>::sse_decode(deserializer);
+        let mut var_modelPath = <String>::sse_decode(deserializer);
+        return crate::api::settings::NativeSettings {
+            language: var_language,
+            writing_mode: var_writingMode,
+            launch_at_login: var_launchAtLogin,
+            show_in_dock: var_showInDock,
+            keep_models_warm: var_keepModelsWarm,
+            show_swar_bar: var_showSwarBar,
+            dictation_sounds: var_dictationSounds,
+            mute_music: var_muteMusic,
+            suggestions: var_suggestions,
+            announcements: var_announcements,
+            milestones: var_milestones,
+            paste_automatically: var_pasteAutomatically,
+            restore_clipboard: var_restoreClipboard,
+            model_path: var_modelPath,
+        };
+    }
+}
+
+impl SseDecode for crate::api::models::OfflineModelStatus {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_path = <String>::sse_decode(deserializer);
+        let mut var_installed = <bool>::sse_decode(deserializer);
+        let mut var_sizeBytes = <u64>::sse_decode(deserializer);
+        let mut var_modelId = <String>::sse_decode(deserializer);
+        return crate::api::models::OfflineModelStatus {
+            path: var_path,
+            installed: var_installed,
+            size_bytes: var_sizeBytes,
+            model_id: var_modelId,
+        };
+    }
+}
+
+impl SseDecode for Option<String> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        if (<bool>::sse_decode(deserializer)) {
+            return Some(<String>::sse_decode(deserializer));
+        } else {
+            return None;
+        }
+    }
+}
+
+impl SseDecode for Option<f64> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        if (<bool>::sse_decode(deserializer)) {
+            return Some(<f64>::sse_decode(deserializer));
+        } else {
+            return None;
+        }
+    }
+}
+
+impl SseDecode for crate::api::history::StoredDictation {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_id = <String>::sse_decode(deserializer);
+        let mut var_createdAtMs = <i64>::sse_decode(deserializer);
+        let mut var_rawText = <String>::sse_decode(deserializer);
+        let mut var_finalText = <String>::sse_decode(deserializer);
+        let mut var_language = <String>::sse_decode(deserializer);
+        let mut var_writingMode = <String>::sse_decode(deserializer);
+        let mut var_sourceApplication = <String>::sse_decode(deserializer);
+        let mut var_wordCount = <u32>::sse_decode(deserializer);
+        let mut var_audioDurationMs = <u64>::sse_decode(deserializer);
+        let mut var_speechDurationMs = <u64>::sse_decode(deserializer);
+        let mut var_processingDurationMs = <u64>::sse_decode(deserializer);
+        let mut var_insertionStatus = <String>::sse_decode(deserializer);
+        return crate::api::history::StoredDictation {
+            id: var_id,
+            created_at_ms: var_createdAtMs,
+            raw_text: var_rawText,
+            final_text: var_finalText,
+            language: var_language,
+            writing_mode: var_writingMode,
+            source_application: var_sourceApplication,
+            word_count: var_wordCount,
+            audio_duration_ms: var_audioDurationMs,
+            speech_duration_ms: var_speechDurationMs,
+            processing_duration_ms: var_processingDurationMs,
+            insertion_status: var_insertionStatus,
+        };
+    }
+}
+
 impl SseDecode for u32 {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
         deserializer.cursor.read_u32::<NativeEndian>().unwrap()
+    }
+}
+
+impl SseDecode for u64 {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        deserializer.cursor.read_u64::<NativeEndian>().unwrap()
     }
 }
 
@@ -171,20 +968,6 @@ impl SseDecode for () {
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {}
 }
 
-impl SseDecode for i32 {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
-        deserializer.cursor.read_i32::<NativeEndian>().unwrap()
-    }
-}
-
-impl SseDecode for bool {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
-        deserializer.cursor.read_u8().unwrap() != 0
-    }
-}
-
 fn pde_ffi_dispatcher_primary_impl(
     func_id: i32,
     port: flutter_rust_bridge::for_generated::MessagePort,
@@ -194,7 +977,58 @@ fn pde_ffi_dispatcher_primary_impl(
 ) {
     // Codec=Pde (Serialization + dispatch), see doc to use other codecs
     match func_id {
-        2 => wire__crate__api__diagnostics__stream_demo_events_impl(
+        1 => wire__crate__api__dictation__cancel_dictation_session_impl(
+            port,
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
+        2 => wire__crate__api__history__clear_local_history_impl(port, ptr, rust_vec_len, data_len),
+        3 => wire__crate__api__dictation__finish_dictation_session_impl(
+            port,
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
+        5 => wire__crate__api__history__initialize_local_store_impl(
+            port,
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
+        6 => wire__crate__api__history__insights_snapshot_default_impl(
+            port,
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
+        7 => wire__crate__api__models__install_recommended_model_impl(
+            port,
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
+        8 => wire__crate__api__dictation__list_microphones_impl(port, ptr, rust_vec_len, data_len),
+        9 => wire__crate__api__history__load_history_page_impl(port, ptr, rust_vec_len, data_len),
+        10 => wire__crate__api__history__load_insights_snapshot_impl(
+            port,
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
+        12 => wire__crate__api__settings__native_settings_default_impl(
+            port,
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
+        16 => wire__crate__api__dictation__start_dictation_session_impl(
+            port,
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
+        17 => wire__crate__api__diagnostics__stream_demo_events_impl(
             port,
             ptr,
             rust_vec_len,
@@ -212,17 +1046,289 @@ fn pde_ffi_dispatcher_sync_impl(
 ) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
     // Codec=Pde (Serialization + dispatch), see doc to use other codecs
     match func_id {
-        1 => wire__crate__api__diagnostics__get_core_version_impl(ptr, rust_vec_len, data_len),
+        4 => wire__crate__api__diagnostics__get_core_version_impl(ptr, rust_vec_len, data_len),
+        11 => wire__crate__api__settings__load_settings_impl(ptr, rust_vec_len, data_len),
+        13 => wire__crate__api__dictation__offline_model_is_ready_impl(ptr, rust_vec_len, data_len),
+        14 => wire__crate__api__models__recommended_model_status_impl(ptr, rust_vec_len, data_len),
+        15 => wire__crate__api__settings__save_settings_impl(ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
 
 // Section: rust2dart
 
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::dictation::DictationCompletion {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.session_id.into_into_dart().into_dart(),
+            self.raw_text.into_into_dart().into_dart(),
+            self.final_text.into_into_dart().into_dart(),
+            self.audio_duration_ms.into_into_dart().into_dart(),
+            self.processing_duration_ms.into_into_dart().into_dart(),
+            self.insertion_status.into_into_dart().into_dart(),
+            self.insertion_method.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::dictation::DictationCompletion
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::dictation::DictationCompletion>
+    for crate::api::dictation::DictationCompletion
+{
+    fn into_into_dart(self) -> crate::api::dictation::DictationCompletion {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::dictation::DictationEvent {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.session_id.into_into_dart().into_dart(),
+            self.kind.into_into_dart().into_dart(),
+            self.audio_level.into_into_dart().into_dart(),
+            self.message.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::dictation::DictationEvent
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::dictation::DictationEvent>
+    for crate::api::dictation::DictationEvent
+{
+    fn into_into_dart(self) -> crate::api::dictation::DictationEvent {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::dictation::DictationEventKind {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        match self {
+            Self::Preparing => 0.into_dart(),
+            Self::Recording => 1.into_dart(),
+            Self::AudioLevel => 2.into_dart(),
+            Self::Finalising => 3.into_dart(),
+            Self::Cancelled => 4.into_dart(),
+            Self::Failed => 5.into_dart(),
+            _ => unreachable!(),
+        }
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::dictation::DictationEventKind
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::dictation::DictationEventKind>
+    for crate::api::dictation::DictationEventKind
+{
+    fn into_into_dart(self) -> crate::api::dictation::DictationEventKind {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::dictation::DictationSessionConfig {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.model_path.into_into_dart().into_dart(),
+            self.language.into_into_dart().into_dart(),
+            self.writing_mode.into_into_dart().into_dart(),
+            self.source_application.into_into_dart().into_dart(),
+            self.paste_automatically.into_into_dart().into_dart(),
+            self.restore_clipboard.into_into_dart().into_dart(),
+            self.maximum_seconds.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::dictation::DictationSessionConfig
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::dictation::DictationSessionConfig>
+    for crate::api::dictation::DictationSessionConfig
+{
+    fn into_into_dart(self) -> crate::api::dictation::DictationSessionConfig {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::history::HistoryPage {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.total_count.into_into_dart().into_dart(),
+            self.records.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::history::HistoryPage
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::history::HistoryPage>
+    for crate::api::history::HistoryPage
+{
+    fn into_into_dart(self) -> crate::api::history::HistoryPage {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::history::InsightsSnapshot {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.total_words.into_into_dart().into_dart(),
+            self.total_dictations.into_into_dart().into_dart(),
+            self.total_speech_duration_ms.into_into_dart().into_dart(),
+            self.average_words_per_minute.into_into_dart().into_dart(),
+            self.current_streak_days.into_into_dart().into_dart(),
+            self.longest_streak_days.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::history::InsightsSnapshot
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::history::InsightsSnapshot>
+    for crate::api::history::InsightsSnapshot
+{
+    fn into_into_dart(self) -> crate::api::history::InsightsSnapshot {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::dictation::MicrophoneDevice {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.id.into_into_dart().into_dart(),
+            self.name.into_into_dart().into_dart(),
+            self.is_default.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::dictation::MicrophoneDevice
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::dictation::MicrophoneDevice>
+    for crate::api::dictation::MicrophoneDevice
+{
+    fn into_into_dart(self) -> crate::api::dictation::MicrophoneDevice {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::settings::NativeSettings {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.language.into_into_dart().into_dart(),
+            self.writing_mode.into_into_dart().into_dart(),
+            self.launch_at_login.into_into_dart().into_dart(),
+            self.show_in_dock.into_into_dart().into_dart(),
+            self.keep_models_warm.into_into_dart().into_dart(),
+            self.show_swar_bar.into_into_dart().into_dart(),
+            self.dictation_sounds.into_into_dart().into_dart(),
+            self.mute_music.into_into_dart().into_dart(),
+            self.suggestions.into_into_dart().into_dart(),
+            self.announcements.into_into_dart().into_dart(),
+            self.milestones.into_into_dart().into_dart(),
+            self.paste_automatically.into_into_dart().into_dart(),
+            self.restore_clipboard.into_into_dart().into_dart(),
+            self.model_path.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::settings::NativeSettings
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::settings::NativeSettings>
+    for crate::api::settings::NativeSettings
+{
+    fn into_into_dart(self) -> crate::api::settings::NativeSettings {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::models::OfflineModelStatus {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.path.into_into_dart().into_dart(),
+            self.installed.into_into_dart().into_dart(),
+            self.size_bytes.into_into_dart().into_dart(),
+            self.model_id.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::models::OfflineModelStatus
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::models::OfflineModelStatus>
+    for crate::api::models::OfflineModelStatus
+{
+    fn into_into_dart(self) -> crate::api::models::OfflineModelStatus {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::history::StoredDictation {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.id.into_into_dart().into_dart(),
+            self.created_at_ms.into_into_dart().into_dart(),
+            self.raw_text.into_into_dart().into_dart(),
+            self.final_text.into_into_dart().into_dart(),
+            self.language.into_into_dart().into_dart(),
+            self.writing_mode.into_into_dart().into_dart(),
+            self.source_application.into_into_dart().into_dart(),
+            self.word_count.into_into_dart().into_dart(),
+            self.audio_duration_ms.into_into_dart().into_dart(),
+            self.speech_duration_ms.into_into_dart().into_dart(),
+            self.processing_duration_ms.into_into_dart().into_dart(),
+            self.insertion_status.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::history::StoredDictation
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::history::StoredDictation>
+    for crate::api::history::StoredDictation
+{
+    fn into_into_dart(self) -> crate::api::history::StoredDictation {
+        self
+    }
+}
+
 impl SseEncode for flutter_rust_bridge::for_generated::anyhow::Error {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
         <String>::sse_encode(format!("{:?}", self), serializer);
+    }
+}
+
+impl SseEncode
+    for StreamSink<
+        crate::api::dictation::DictationEvent,
+        flutter_rust_bridge::for_generated::SseCodec,
+    >
+{
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        unimplemented!("")
     }
 }
 
@@ -240,6 +1346,120 @@ impl SseEncode for String {
     }
 }
 
+impl SseEncode for bool {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        serializer.cursor.write_u8(self as _).unwrap();
+    }
+}
+
+impl SseEncode for crate::api::dictation::DictationCompletion {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.session_id, serializer);
+        <String>::sse_encode(self.raw_text, serializer);
+        <String>::sse_encode(self.final_text, serializer);
+        <u64>::sse_encode(self.audio_duration_ms, serializer);
+        <u64>::sse_encode(self.processing_duration_ms, serializer);
+        <String>::sse_encode(self.insertion_status, serializer);
+        <String>::sse_encode(self.insertion_method, serializer);
+    }
+}
+
+impl SseEncode for crate::api::dictation::DictationEvent {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.session_id, serializer);
+        <crate::api::dictation::DictationEventKind>::sse_encode(self.kind, serializer);
+        <Option<f64>>::sse_encode(self.audio_level, serializer);
+        <Option<String>>::sse_encode(self.message, serializer);
+    }
+}
+
+impl SseEncode for crate::api::dictation::DictationEventKind {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(
+            match self {
+                crate::api::dictation::DictationEventKind::Preparing => 0,
+                crate::api::dictation::DictationEventKind::Recording => 1,
+                crate::api::dictation::DictationEventKind::AudioLevel => 2,
+                crate::api::dictation::DictationEventKind::Finalising => 3,
+                crate::api::dictation::DictationEventKind::Cancelled => 4,
+                crate::api::dictation::DictationEventKind::Failed => 5,
+                _ => {
+                    unimplemented!("");
+                }
+            },
+            serializer,
+        );
+    }
+}
+
+impl SseEncode for crate::api::dictation::DictationSessionConfig {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.model_path, serializer);
+        <String>::sse_encode(self.language, serializer);
+        <String>::sse_encode(self.writing_mode, serializer);
+        <String>::sse_encode(self.source_application, serializer);
+        <bool>::sse_encode(self.paste_automatically, serializer);
+        <bool>::sse_encode(self.restore_clipboard, serializer);
+        <u32>::sse_encode(self.maximum_seconds, serializer);
+    }
+}
+
+impl SseEncode for f64 {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        serializer.cursor.write_f64::<NativeEndian>(self).unwrap();
+    }
+}
+
+impl SseEncode for crate::api::history::HistoryPage {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <u32>::sse_encode(self.total_count, serializer);
+        <Vec<crate::api::history::StoredDictation>>::sse_encode(self.records, serializer);
+    }
+}
+
+impl SseEncode for i32 {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        serializer.cursor.write_i32::<NativeEndian>(self).unwrap();
+    }
+}
+
+impl SseEncode for i64 {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        serializer.cursor.write_i64::<NativeEndian>(self).unwrap();
+    }
+}
+
+impl SseEncode for crate::api::history::InsightsSnapshot {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <u64>::sse_encode(self.total_words, serializer);
+        <u64>::sse_encode(self.total_dictations, serializer);
+        <u64>::sse_encode(self.total_speech_duration_ms, serializer);
+        <f64>::sse_encode(self.average_words_per_minute, serializer);
+        <u32>::sse_encode(self.current_streak_days, serializer);
+        <u32>::sse_encode(self.longest_streak_days, serializer);
+    }
+}
+
+impl SseEncode for Vec<crate::api::dictation::MicrophoneDevice> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(self.len() as _, serializer);
+        for item in self {
+            <crate::api::dictation::MicrophoneDevice>::sse_encode(item, serializer);
+        }
+    }
+}
+
 impl SseEncode for Vec<u8> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -250,10 +1470,104 @@ impl SseEncode for Vec<u8> {
     }
 }
 
+impl SseEncode for Vec<crate::api::history::StoredDictation> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(self.len() as _, serializer);
+        for item in self {
+            <crate::api::history::StoredDictation>::sse_encode(item, serializer);
+        }
+    }
+}
+
+impl SseEncode for crate::api::dictation::MicrophoneDevice {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.id, serializer);
+        <String>::sse_encode(self.name, serializer);
+        <bool>::sse_encode(self.is_default, serializer);
+    }
+}
+
+impl SseEncode for crate::api::settings::NativeSettings {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.language, serializer);
+        <String>::sse_encode(self.writing_mode, serializer);
+        <bool>::sse_encode(self.launch_at_login, serializer);
+        <bool>::sse_encode(self.show_in_dock, serializer);
+        <bool>::sse_encode(self.keep_models_warm, serializer);
+        <bool>::sse_encode(self.show_swar_bar, serializer);
+        <bool>::sse_encode(self.dictation_sounds, serializer);
+        <bool>::sse_encode(self.mute_music, serializer);
+        <bool>::sse_encode(self.suggestions, serializer);
+        <bool>::sse_encode(self.announcements, serializer);
+        <bool>::sse_encode(self.milestones, serializer);
+        <bool>::sse_encode(self.paste_automatically, serializer);
+        <bool>::sse_encode(self.restore_clipboard, serializer);
+        <String>::sse_encode(self.model_path, serializer);
+    }
+}
+
+impl SseEncode for crate::api::models::OfflineModelStatus {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.path, serializer);
+        <bool>::sse_encode(self.installed, serializer);
+        <u64>::sse_encode(self.size_bytes, serializer);
+        <String>::sse_encode(self.model_id, serializer);
+    }
+}
+
+impl SseEncode for Option<String> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <bool>::sse_encode(self.is_some(), serializer);
+        if let Some(value) = self {
+            <String>::sse_encode(value, serializer);
+        }
+    }
+}
+
+impl SseEncode for Option<f64> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <bool>::sse_encode(self.is_some(), serializer);
+        if let Some(value) = self {
+            <f64>::sse_encode(value, serializer);
+        }
+    }
+}
+
+impl SseEncode for crate::api::history::StoredDictation {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.id, serializer);
+        <i64>::sse_encode(self.created_at_ms, serializer);
+        <String>::sse_encode(self.raw_text, serializer);
+        <String>::sse_encode(self.final_text, serializer);
+        <String>::sse_encode(self.language, serializer);
+        <String>::sse_encode(self.writing_mode, serializer);
+        <String>::sse_encode(self.source_application, serializer);
+        <u32>::sse_encode(self.word_count, serializer);
+        <u64>::sse_encode(self.audio_duration_ms, serializer);
+        <u64>::sse_encode(self.speech_duration_ms, serializer);
+        <u64>::sse_encode(self.processing_duration_ms, serializer);
+        <String>::sse_encode(self.insertion_status, serializer);
+    }
+}
+
 impl SseEncode for u32 {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
         serializer.cursor.write_u32::<NativeEndian>(self).unwrap();
+    }
+}
+
+impl SseEncode for u64 {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        serializer.cursor.write_u64::<NativeEndian>(self).unwrap();
     }
 }
 
@@ -267,20 +1581,6 @@ impl SseEncode for u8 {
 impl SseEncode for () {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {}
-}
-
-impl SseEncode for i32 {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
-        serializer.cursor.write_i32::<NativeEndian>(self).unwrap();
-    }
-}
-
-impl SseEncode for bool {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
-        serializer.cursor.write_u8(self as _).unwrap();
-    }
 }
 
 #[cfg(not(target_family = "wasm"))]

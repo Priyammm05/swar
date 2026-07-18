@@ -7,6 +7,10 @@
 // ignore_for_file: argument_type_not_assignable
 
 import 'api/diagnostics.dart';
+import 'api/dictation.dart';
+import 'api/history.dart';
+import 'api/models.dart';
+import 'api/settings.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'frb_generated.dart';
@@ -24,16 +28,89 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   AnyhowException dco_decode_AnyhowException(dynamic raw);
 
   @protected
+  RustStreamSink<DictationEvent> dco_decode_StreamSink_dictation_event_Sse(
+    dynamic raw,
+  );
+
+  @protected
   RustStreamSink<int> dco_decode_StreamSink_u_32_Sse(dynamic raw);
 
   @protected
   String dco_decode_String(dynamic raw);
 
   @protected
+  bool dco_decode_bool(dynamic raw);
+
+  @protected
+  DictationSessionConfig dco_decode_box_autoadd_dictation_session_config(
+    dynamic raw,
+  );
+
+  @protected
+  double dco_decode_box_autoadd_f_64(dynamic raw);
+
+  @protected
+  NativeSettings dco_decode_box_autoadd_native_settings(dynamic raw);
+
+  @protected
+  DictationCompletion dco_decode_dictation_completion(dynamic raw);
+
+  @protected
+  DictationEvent dco_decode_dictation_event(dynamic raw);
+
+  @protected
+  DictationEventKind dco_decode_dictation_event_kind(dynamic raw);
+
+  @protected
+  DictationSessionConfig dco_decode_dictation_session_config(dynamic raw);
+
+  @protected
+  double dco_decode_f_64(dynamic raw);
+
+  @protected
+  HistoryPage dco_decode_history_page(dynamic raw);
+
+  @protected
+  int dco_decode_i_32(dynamic raw);
+
+  @protected
+  PlatformInt64 dco_decode_i_64(dynamic raw);
+
+  @protected
+  InsightsSnapshot dco_decode_insights_snapshot(dynamic raw);
+
+  @protected
+  List<MicrophoneDevice> dco_decode_list_microphone_device(dynamic raw);
+
+  @protected
   Uint8List dco_decode_list_prim_u_8_strict(dynamic raw);
 
   @protected
+  List<StoredDictation> dco_decode_list_stored_dictation(dynamic raw);
+
+  @protected
+  MicrophoneDevice dco_decode_microphone_device(dynamic raw);
+
+  @protected
+  NativeSettings dco_decode_native_settings(dynamic raw);
+
+  @protected
+  OfflineModelStatus dco_decode_offline_model_status(dynamic raw);
+
+  @protected
+  String? dco_decode_opt_String(dynamic raw);
+
+  @protected
+  double? dco_decode_opt_box_autoadd_f_64(dynamic raw);
+
+  @protected
+  StoredDictation dco_decode_stored_dictation(dynamic raw);
+
+  @protected
   int dco_decode_u_32(dynamic raw);
+
+  @protected
+  BigInt dco_decode_u_64(dynamic raw);
 
   @protected
   int dco_decode_u_8(dynamic raw);
@@ -45,6 +122,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   AnyhowException sse_decode_AnyhowException(SseDeserializer deserializer);
 
   @protected
+  RustStreamSink<DictationEvent> sse_decode_StreamSink_dictation_event_Sse(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   RustStreamSink<int> sse_decode_StreamSink_u_32_Sse(
     SseDeserializer deserializer,
   );
@@ -53,10 +135,92 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   String sse_decode_String(SseDeserializer deserializer);
 
   @protected
+  bool sse_decode_bool(SseDeserializer deserializer);
+
+  @protected
+  DictationSessionConfig sse_decode_box_autoadd_dictation_session_config(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  double sse_decode_box_autoadd_f_64(SseDeserializer deserializer);
+
+  @protected
+  NativeSettings sse_decode_box_autoadd_native_settings(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  DictationCompletion sse_decode_dictation_completion(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  DictationEvent sse_decode_dictation_event(SseDeserializer deserializer);
+
+  @protected
+  DictationEventKind sse_decode_dictation_event_kind(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  DictationSessionConfig sse_decode_dictation_session_config(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  double sse_decode_f_64(SseDeserializer deserializer);
+
+  @protected
+  HistoryPage sse_decode_history_page(SseDeserializer deserializer);
+
+  @protected
+  int sse_decode_i_32(SseDeserializer deserializer);
+
+  @protected
+  PlatformInt64 sse_decode_i_64(SseDeserializer deserializer);
+
+  @protected
+  InsightsSnapshot sse_decode_insights_snapshot(SseDeserializer deserializer);
+
+  @protected
+  List<MicrophoneDevice> sse_decode_list_microphone_device(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   Uint8List sse_decode_list_prim_u_8_strict(SseDeserializer deserializer);
 
   @protected
+  List<StoredDictation> sse_decode_list_stored_dictation(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  MicrophoneDevice sse_decode_microphone_device(SseDeserializer deserializer);
+
+  @protected
+  NativeSettings sse_decode_native_settings(SseDeserializer deserializer);
+
+  @protected
+  OfflineModelStatus sse_decode_offline_model_status(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  String? sse_decode_opt_String(SseDeserializer deserializer);
+
+  @protected
+  double? sse_decode_opt_box_autoadd_f_64(SseDeserializer deserializer);
+
+  @protected
+  StoredDictation sse_decode_stored_dictation(SseDeserializer deserializer);
+
+  @protected
   int sse_decode_u_32(SseDeserializer deserializer);
+
+  @protected
+  BigInt sse_decode_u_64(SseDeserializer deserializer);
 
   @protected
   int sse_decode_u_8(SseDeserializer deserializer);
@@ -65,14 +229,14 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_decode_unit(SseDeserializer deserializer);
 
   @protected
-  int sse_decode_i_32(SseDeserializer deserializer);
-
-  @protected
-  bool sse_decode_bool(SseDeserializer deserializer);
-
-  @protected
   void sse_encode_AnyhowException(
     AnyhowException self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_StreamSink_dictation_event_Sse(
+    RustStreamSink<DictationEvent> self,
     SseSerializer serializer,
   );
 
@@ -86,8 +250,110 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_String(String self, SseSerializer serializer);
 
   @protected
+  void sse_encode_bool(bool self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_box_autoadd_dictation_session_config(
+    DictationSessionConfig self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_f_64(double self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_box_autoadd_native_settings(
+    NativeSettings self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_dictation_completion(
+    DictationCompletion self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_dictation_event(
+    DictationEvent self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_dictation_event_kind(
+    DictationEventKind self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_dictation_session_config(
+    DictationSessionConfig self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_f_64(double self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_history_page(HistoryPage self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_i_32(int self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_i_64(PlatformInt64 self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_insights_snapshot(
+    InsightsSnapshot self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_microphone_device(
+    List<MicrophoneDevice> self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_list_prim_u_8_strict(
     Uint8List self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_stored_dictation(
+    List<StoredDictation> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_microphone_device(
+    MicrophoneDevice self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_native_settings(
+    NativeSettings self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_offline_model_status(
+    OfflineModelStatus self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_opt_String(String? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_opt_box_autoadd_f_64(double? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_stored_dictation(
+    StoredDictation self,
     SseSerializer serializer,
   );
 
@@ -95,16 +361,13 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_u_32(int self, SseSerializer serializer);
 
   @protected
+  void sse_encode_u_64(BigInt self, SseSerializer serializer);
+
+  @protected
   void sse_encode_u_8(int self, SseSerializer serializer);
 
   @protected
   void sse_encode_unit(void self, SseSerializer serializer);
-
-  @protected
-  void sse_encode_i_32(int self, SseSerializer serializer);
-
-  @protected
-  void sse_encode_bool(bool self, SseSerializer serializer);
 }
 
 // Section: wire_class

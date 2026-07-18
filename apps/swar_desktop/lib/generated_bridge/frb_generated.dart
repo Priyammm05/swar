@@ -4,6 +4,10 @@
 // ignore_for_file: unused_import, unused_element, unnecessary_import, duplicate_ignore, invalid_use_of_internal_member, annotate_overrides, non_constant_identifier_names, curly_braces_in_flow_control_structures, prefer_const_literals_to_create_immutables, unused_field
 
 import 'api/diagnostics.dart';
+import 'api/dictation.dart';
+import 'api/history.dart';
+import 'api/models.dart';
+import 'api/settings.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'frb_generated.dart';
@@ -64,7 +68,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.12.0';
 
   @override
-  int get rustContentHash => -606916465;
+  int get rustContentHash => 1210105913;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -76,7 +80,47 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
 }
 
 abstract class RustLibApi extends BaseApi {
+  Future<void> crateApiDictationCancelDictationSession({
+    required String sessionId,
+  });
+
+  Future<void> crateApiHistoryClearLocalHistory();
+
+  Future<DictationCompletion> crateApiDictationFinishDictationSession({
+    required String sessionId,
+  });
+
   String crateApiDiagnosticsGetCoreVersion();
+
+  Future<String> crateApiHistoryInitializeLocalStore();
+
+  Future<InsightsSnapshot> crateApiHistoryInsightsSnapshotDefault();
+
+  Future<OfflineModelStatus> crateApiModelsInstallRecommendedModel();
+
+  Future<List<MicrophoneDevice>> crateApiDictationListMicrophones();
+
+  Future<HistoryPage> crateApiHistoryLoadHistoryPage({
+    required String searchText,
+    required int offset,
+    required int limit,
+  });
+
+  Future<InsightsSnapshot> crateApiHistoryLoadInsightsSnapshot();
+
+  NativeSettings crateApiSettingsLoadSettings();
+
+  Future<NativeSettings> crateApiSettingsNativeSettingsDefault();
+
+  bool crateApiDictationOfflineModelIsReady({required String modelPath});
+
+  OfflineModelStatus crateApiModelsRecommendedModelStatus();
+
+  void crateApiSettingsSaveSettings({required NativeSettings settings});
+
+  Stream<DictationEvent> crateApiDictationStartDictationSession({
+    required DictationSessionConfig config,
+  });
 
   Stream<int> crateApiDiagnosticsStreamDemoEvents();
 }
@@ -90,12 +134,105 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   });
 
   @override
+  Future<void> crateApiDictationCancelDictationSession({
+    required String sessionId,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(sessionId, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 1,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiDictationCancelDictationSessionConstMeta,
+        argValues: [sessionId],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiDictationCancelDictationSessionConstMeta =>
+      const TaskConstMeta(
+        debugName: "cancel_dictation_session",
+        argNames: ["sessionId"],
+      );
+
+  @override
+  Future<void> crateApiHistoryClearLocalHistory() {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 2,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiHistoryClearLocalHistoryConstMeta,
+        argValues: [],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiHistoryClearLocalHistoryConstMeta =>
+      const TaskConstMeta(debugName: "clear_local_history", argNames: []);
+
+  @override
+  Future<DictationCompletion> crateApiDictationFinishDictationSession({
+    required String sessionId,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(sessionId, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 3,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_dictation_completion,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiDictationFinishDictationSessionConstMeta,
+        argValues: [sessionId],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiDictationFinishDictationSessionConstMeta =>
+      const TaskConstMeta(
+        debugName: "finish_dictation_session",
+        argNames: ["sessionId"],
+      );
+
+  @override
   String crateApiDiagnosticsGetCoreVersion() {
     return handler.executeSync(
       SyncTask(
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 1)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 4)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_String,
@@ -112,6 +249,336 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       const TaskConstMeta(debugName: "get_core_version", argNames: []);
 
   @override
+  Future<String> crateApiHistoryInitializeLocalStore() {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 5,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_String,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiHistoryInitializeLocalStoreConstMeta,
+        argValues: [],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiHistoryInitializeLocalStoreConstMeta =>
+      const TaskConstMeta(debugName: "initialize_local_store", argNames: []);
+
+  @override
+  Future<InsightsSnapshot> crateApiHistoryInsightsSnapshotDefault() {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 6,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_insights_snapshot,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiHistoryInsightsSnapshotDefaultConstMeta,
+        argValues: [],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiHistoryInsightsSnapshotDefaultConstMeta =>
+      const TaskConstMeta(debugName: "insights_snapshot_default", argNames: []);
+
+  @override
+  Future<OfflineModelStatus> crateApiModelsInstallRecommendedModel() {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 7,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_offline_model_status,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiModelsInstallRecommendedModelConstMeta,
+        argValues: [],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiModelsInstallRecommendedModelConstMeta =>
+      const TaskConstMeta(debugName: "install_recommended_model", argNames: []);
+
+  @override
+  Future<List<MicrophoneDevice>> crateApiDictationListMicrophones() {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 8,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_list_microphone_device,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiDictationListMicrophonesConstMeta,
+        argValues: [],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiDictationListMicrophonesConstMeta =>
+      const TaskConstMeta(debugName: "list_microphones", argNames: []);
+
+  @override
+  Future<HistoryPage> crateApiHistoryLoadHistoryPage({
+    required String searchText,
+    required int offset,
+    required int limit,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(searchText, serializer);
+          sse_encode_u_32(offset, serializer);
+          sse_encode_u_32(limit, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 9,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_history_page,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiHistoryLoadHistoryPageConstMeta,
+        argValues: [searchText, offset, limit],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiHistoryLoadHistoryPageConstMeta =>
+      const TaskConstMeta(
+        debugName: "load_history_page",
+        argNames: ["searchText", "offset", "limit"],
+      );
+
+  @override
+  Future<InsightsSnapshot> crateApiHistoryLoadInsightsSnapshot() {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 10,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_insights_snapshot,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiHistoryLoadInsightsSnapshotConstMeta,
+        argValues: [],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiHistoryLoadInsightsSnapshotConstMeta =>
+      const TaskConstMeta(debugName: "load_insights_snapshot", argNames: []);
+
+  @override
+  NativeSettings crateApiSettingsLoadSettings() {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 11)!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_native_settings,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiSettingsLoadSettingsConstMeta,
+        argValues: [],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSettingsLoadSettingsConstMeta =>
+      const TaskConstMeta(debugName: "load_settings", argNames: []);
+
+  @override
+  Future<NativeSettings> crateApiSettingsNativeSettingsDefault() {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 12,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_native_settings,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiSettingsNativeSettingsDefaultConstMeta,
+        argValues: [],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSettingsNativeSettingsDefaultConstMeta =>
+      const TaskConstMeta(debugName: "native_settings_default", argNames: []);
+
+  @override
+  bool crateApiDictationOfflineModelIsReady({required String modelPath}) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(modelPath, serializer);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 13)!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_bool,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiDictationOfflineModelIsReadyConstMeta,
+        argValues: [modelPath],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiDictationOfflineModelIsReadyConstMeta =>
+      const TaskConstMeta(
+        debugName: "offline_model_is_ready",
+        argNames: ["modelPath"],
+      );
+
+  @override
+  OfflineModelStatus crateApiModelsRecommendedModelStatus() {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 14)!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_offline_model_status,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiModelsRecommendedModelStatusConstMeta,
+        argValues: [],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiModelsRecommendedModelStatusConstMeta =>
+      const TaskConstMeta(debugName: "recommended_model_status", argNames: []);
+
+  @override
+  void crateApiSettingsSaveSettings({required NativeSettings settings}) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_box_autoadd_native_settings(settings, serializer);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 15)!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiSettingsSaveSettingsConstMeta,
+        argValues: [settings],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSettingsSaveSettingsConstMeta =>
+      const TaskConstMeta(debugName: "save_settings", argNames: ["settings"]);
+
+  @override
+  Stream<DictationEvent> crateApiDictationStartDictationSession({
+    required DictationSessionConfig config,
+  }) {
+    final sink = RustStreamSink<DictationEvent>();
+    unawaited(
+      handler.executeNormal(
+        NormalTask(
+          callFfi: (port_) {
+            final serializer = SseSerializer(generalizedFrbRustBinding);
+            sse_encode_box_autoadd_dictation_session_config(config, serializer);
+            sse_encode_StreamSink_dictation_event_Sse(sink, serializer);
+            pdeCallFfi(
+              generalizedFrbRustBinding,
+              serializer,
+              funcId: 16,
+              port: port_,
+            );
+          },
+          codec: SseCodec(
+            decodeSuccessData: sse_decode_String,
+            decodeErrorData: sse_decode_String,
+          ),
+          constMeta: kCrateApiDictationStartDictationSessionConstMeta,
+          argValues: [config, sink],
+          apiImpl: this,
+        ),
+      ),
+    );
+    return sink.stream;
+  }
+
+  TaskConstMeta get kCrateApiDictationStartDictationSessionConstMeta =>
+      const TaskConstMeta(
+        debugName: "start_dictation_session",
+        argNames: ["config", "sink"],
+      );
+
+  @override
   Stream<int> crateApiDiagnosticsStreamDemoEvents() {
     final sink = RustStreamSink<int>();
     unawaited(
@@ -123,7 +590,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             pdeCallFfi(
               generalizedFrbRustBinding,
               serializer,
-              funcId: 2,
+              funcId: 17,
               port: port_,
             );
           },
@@ -150,6 +617,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  RustStreamSink<DictationEvent> dco_decode_StreamSink_dictation_event_Sse(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    throw UnimplementedError();
+  }
+
+  @protected
   RustStreamSink<int> dco_decode_StreamSink_u_32_Sse(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     throw UnimplementedError();
@@ -162,15 +637,244 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  bool dco_decode_bool(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw as bool;
+  }
+
+  @protected
+  DictationSessionConfig dco_decode_box_autoadd_dictation_session_config(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_dictation_session_config(raw);
+  }
+
+  @protected
+  double dco_decode_box_autoadd_f_64(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw as double;
+  }
+
+  @protected
+  NativeSettings dco_decode_box_autoadd_native_settings(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_native_settings(raw);
+  }
+
+  @protected
+  DictationCompletion dco_decode_dictation_completion(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 7)
+      throw Exception('unexpected arr length: expect 7 but see ${arr.length}');
+    return DictationCompletion(
+      sessionId: dco_decode_String(arr[0]),
+      rawText: dco_decode_String(arr[1]),
+      finalText: dco_decode_String(arr[2]),
+      audioDurationMs: dco_decode_u_64(arr[3]),
+      processingDurationMs: dco_decode_u_64(arr[4]),
+      insertionStatus: dco_decode_String(arr[5]),
+      insertionMethod: dco_decode_String(arr[6]),
+    );
+  }
+
+  @protected
+  DictationEvent dco_decode_dictation_event(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 4)
+      throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
+    return DictationEvent(
+      sessionId: dco_decode_String(arr[0]),
+      kind: dco_decode_dictation_event_kind(arr[1]),
+      audioLevel: dco_decode_opt_box_autoadd_f_64(arr[2]),
+      message: dco_decode_opt_String(arr[3]),
+    );
+  }
+
+  @protected
+  DictationEventKind dco_decode_dictation_event_kind(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return DictationEventKind.values[raw as int];
+  }
+
+  @protected
+  DictationSessionConfig dco_decode_dictation_session_config(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 7)
+      throw Exception('unexpected arr length: expect 7 but see ${arr.length}');
+    return DictationSessionConfig(
+      modelPath: dco_decode_String(arr[0]),
+      language: dco_decode_String(arr[1]),
+      writingMode: dco_decode_String(arr[2]),
+      sourceApplication: dco_decode_String(arr[3]),
+      pasteAutomatically: dco_decode_bool(arr[4]),
+      restoreClipboard: dco_decode_bool(arr[5]),
+      maximumSeconds: dco_decode_u_32(arr[6]),
+    );
+  }
+
+  @protected
+  double dco_decode_f_64(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw as double;
+  }
+
+  @protected
+  HistoryPage dco_decode_history_page(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 2)
+      throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
+    return HistoryPage(
+      totalCount: dco_decode_u_32(arr[0]),
+      records: dco_decode_list_stored_dictation(arr[1]),
+    );
+  }
+
+  @protected
+  int dco_decode_i_32(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw as int;
+  }
+
+  @protected
+  PlatformInt64 dco_decode_i_64(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dcoDecodeI64(raw);
+  }
+
+  @protected
+  InsightsSnapshot dco_decode_insights_snapshot(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 6)
+      throw Exception('unexpected arr length: expect 6 but see ${arr.length}');
+    return InsightsSnapshot(
+      totalWords: dco_decode_u_64(arr[0]),
+      totalDictations: dco_decode_u_64(arr[1]),
+      totalSpeechDurationMs: dco_decode_u_64(arr[2]),
+      averageWordsPerMinute: dco_decode_f_64(arr[3]),
+      currentStreakDays: dco_decode_u_32(arr[4]),
+      longestStreakDays: dco_decode_u_32(arr[5]),
+    );
+  }
+
+  @protected
+  List<MicrophoneDevice> dco_decode_list_microphone_device(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_microphone_device).toList();
+  }
+
+  @protected
   Uint8List dco_decode_list_prim_u_8_strict(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw as Uint8List;
   }
 
   @protected
+  List<StoredDictation> dco_decode_list_stored_dictation(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_stored_dictation).toList();
+  }
+
+  @protected
+  MicrophoneDevice dco_decode_microphone_device(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 3)
+      throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
+    return MicrophoneDevice(
+      id: dco_decode_String(arr[0]),
+      name: dco_decode_String(arr[1]),
+      isDefault: dco_decode_bool(arr[2]),
+    );
+  }
+
+  @protected
+  NativeSettings dco_decode_native_settings(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 14)
+      throw Exception('unexpected arr length: expect 14 but see ${arr.length}');
+    return NativeSettings(
+      language: dco_decode_String(arr[0]),
+      writingMode: dco_decode_String(arr[1]),
+      launchAtLogin: dco_decode_bool(arr[2]),
+      showInDock: dco_decode_bool(arr[3]),
+      keepModelsWarm: dco_decode_bool(arr[4]),
+      showSwarBar: dco_decode_bool(arr[5]),
+      dictationSounds: dco_decode_bool(arr[6]),
+      muteMusic: dco_decode_bool(arr[7]),
+      suggestions: dco_decode_bool(arr[8]),
+      announcements: dco_decode_bool(arr[9]),
+      milestones: dco_decode_bool(arr[10]),
+      pasteAutomatically: dco_decode_bool(arr[11]),
+      restoreClipboard: dco_decode_bool(arr[12]),
+      modelPath: dco_decode_String(arr[13]),
+    );
+  }
+
+  @protected
+  OfflineModelStatus dco_decode_offline_model_status(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 4)
+      throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
+    return OfflineModelStatus(
+      path: dco_decode_String(arr[0]),
+      installed: dco_decode_bool(arr[1]),
+      sizeBytes: dco_decode_u_64(arr[2]),
+      modelId: dco_decode_String(arr[3]),
+    );
+  }
+
+  @protected
+  String? dco_decode_opt_String(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null ? null : dco_decode_String(raw);
+  }
+
+  @protected
+  double? dco_decode_opt_box_autoadd_f_64(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null ? null : dco_decode_box_autoadd_f_64(raw);
+  }
+
+  @protected
+  StoredDictation dco_decode_stored_dictation(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 12)
+      throw Exception('unexpected arr length: expect 12 but see ${arr.length}');
+    return StoredDictation(
+      id: dco_decode_String(arr[0]),
+      createdAtMs: dco_decode_i_64(arr[1]),
+      rawText: dco_decode_String(arr[2]),
+      finalText: dco_decode_String(arr[3]),
+      language: dco_decode_String(arr[4]),
+      writingMode: dco_decode_String(arr[5]),
+      sourceApplication: dco_decode_String(arr[6]),
+      wordCount: dco_decode_u_32(arr[7]),
+      audioDurationMs: dco_decode_u_64(arr[8]),
+      speechDurationMs: dco_decode_u_64(arr[9]),
+      processingDurationMs: dco_decode_u_64(arr[10]),
+      insertionStatus: dco_decode_String(arr[11]),
+    );
+  }
+
+  @protected
   int dco_decode_u_32(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw as int;
+  }
+
+  @protected
+  BigInt dco_decode_u_64(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dcoDecodeU64(raw);
   }
 
   @protected
@@ -193,6 +897,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  RustStreamSink<DictationEvent> sse_decode_StreamSink_dictation_event_Sse(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    throw UnimplementedError('Unreachable ()');
+  }
+
+  @protected
   RustStreamSink<int> sse_decode_StreamSink_u_32_Sse(
     SseDeserializer deserializer,
   ) {
@@ -208,6 +920,163 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  bool sse_decode_bool(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return deserializer.buffer.getUint8() != 0;
+  }
+
+  @protected
+  DictationSessionConfig sse_decode_box_autoadd_dictation_session_config(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_dictation_session_config(deserializer));
+  }
+
+  @protected
+  double sse_decode_box_autoadd_f_64(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_f_64(deserializer));
+  }
+
+  @protected
+  NativeSettings sse_decode_box_autoadd_native_settings(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_native_settings(deserializer));
+  }
+
+  @protected
+  DictationCompletion sse_decode_dictation_completion(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_sessionId = sse_decode_String(deserializer);
+    var var_rawText = sse_decode_String(deserializer);
+    var var_finalText = sse_decode_String(deserializer);
+    var var_audioDurationMs = sse_decode_u_64(deserializer);
+    var var_processingDurationMs = sse_decode_u_64(deserializer);
+    var var_insertionStatus = sse_decode_String(deserializer);
+    var var_insertionMethod = sse_decode_String(deserializer);
+    return DictationCompletion(
+      sessionId: var_sessionId,
+      rawText: var_rawText,
+      finalText: var_finalText,
+      audioDurationMs: var_audioDurationMs,
+      processingDurationMs: var_processingDurationMs,
+      insertionStatus: var_insertionStatus,
+      insertionMethod: var_insertionMethod,
+    );
+  }
+
+  @protected
+  DictationEvent sse_decode_dictation_event(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_sessionId = sse_decode_String(deserializer);
+    var var_kind = sse_decode_dictation_event_kind(deserializer);
+    var var_audioLevel = sse_decode_opt_box_autoadd_f_64(deserializer);
+    var var_message = sse_decode_opt_String(deserializer);
+    return DictationEvent(
+      sessionId: var_sessionId,
+      kind: var_kind,
+      audioLevel: var_audioLevel,
+      message: var_message,
+    );
+  }
+
+  @protected
+  DictationEventKind sse_decode_dictation_event_kind(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var inner = sse_decode_i_32(deserializer);
+    return DictationEventKind.values[inner];
+  }
+
+  @protected
+  DictationSessionConfig sse_decode_dictation_session_config(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_modelPath = sse_decode_String(deserializer);
+    var var_language = sse_decode_String(deserializer);
+    var var_writingMode = sse_decode_String(deserializer);
+    var var_sourceApplication = sse_decode_String(deserializer);
+    var var_pasteAutomatically = sse_decode_bool(deserializer);
+    var var_restoreClipboard = sse_decode_bool(deserializer);
+    var var_maximumSeconds = sse_decode_u_32(deserializer);
+    return DictationSessionConfig(
+      modelPath: var_modelPath,
+      language: var_language,
+      writingMode: var_writingMode,
+      sourceApplication: var_sourceApplication,
+      pasteAutomatically: var_pasteAutomatically,
+      restoreClipboard: var_restoreClipboard,
+      maximumSeconds: var_maximumSeconds,
+    );
+  }
+
+  @protected
+  double sse_decode_f_64(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return deserializer.buffer.getFloat64();
+  }
+
+  @protected
+  HistoryPage sse_decode_history_page(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_totalCount = sse_decode_u_32(deserializer);
+    var var_records = sse_decode_list_stored_dictation(deserializer);
+    return HistoryPage(totalCount: var_totalCount, records: var_records);
+  }
+
+  @protected
+  int sse_decode_i_32(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return deserializer.buffer.getInt32();
+  }
+
+  @protected
+  PlatformInt64 sse_decode_i_64(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return deserializer.buffer.getPlatformInt64();
+  }
+
+  @protected
+  InsightsSnapshot sse_decode_insights_snapshot(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_totalWords = sse_decode_u_64(deserializer);
+    var var_totalDictations = sse_decode_u_64(deserializer);
+    var var_totalSpeechDurationMs = sse_decode_u_64(deserializer);
+    var var_averageWordsPerMinute = sse_decode_f_64(deserializer);
+    var var_currentStreakDays = sse_decode_u_32(deserializer);
+    var var_longestStreakDays = sse_decode_u_32(deserializer);
+    return InsightsSnapshot(
+      totalWords: var_totalWords,
+      totalDictations: var_totalDictations,
+      totalSpeechDurationMs: var_totalSpeechDurationMs,
+      averageWordsPerMinute: var_averageWordsPerMinute,
+      currentStreakDays: var_currentStreakDays,
+      longestStreakDays: var_longestStreakDays,
+    );
+  }
+
+  @protected
+  List<MicrophoneDevice> sse_decode_list_microphone_device(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <MicrophoneDevice>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_microphone_device(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
   Uint8List sse_decode_list_prim_u_8_strict(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var len_ = sse_decode_i_32(deserializer);
@@ -215,9 +1084,147 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  List<StoredDictation> sse_decode_list_stored_dictation(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <StoredDictation>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_stored_dictation(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
+  MicrophoneDevice sse_decode_microphone_device(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_id = sse_decode_String(deserializer);
+    var var_name = sse_decode_String(deserializer);
+    var var_isDefault = sse_decode_bool(deserializer);
+    return MicrophoneDevice(
+      id: var_id,
+      name: var_name,
+      isDefault: var_isDefault,
+    );
+  }
+
+  @protected
+  NativeSettings sse_decode_native_settings(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_language = sse_decode_String(deserializer);
+    var var_writingMode = sse_decode_String(deserializer);
+    var var_launchAtLogin = sse_decode_bool(deserializer);
+    var var_showInDock = sse_decode_bool(deserializer);
+    var var_keepModelsWarm = sse_decode_bool(deserializer);
+    var var_showSwarBar = sse_decode_bool(deserializer);
+    var var_dictationSounds = sse_decode_bool(deserializer);
+    var var_muteMusic = sse_decode_bool(deserializer);
+    var var_suggestions = sse_decode_bool(deserializer);
+    var var_announcements = sse_decode_bool(deserializer);
+    var var_milestones = sse_decode_bool(deserializer);
+    var var_pasteAutomatically = sse_decode_bool(deserializer);
+    var var_restoreClipboard = sse_decode_bool(deserializer);
+    var var_modelPath = sse_decode_String(deserializer);
+    return NativeSettings(
+      language: var_language,
+      writingMode: var_writingMode,
+      launchAtLogin: var_launchAtLogin,
+      showInDock: var_showInDock,
+      keepModelsWarm: var_keepModelsWarm,
+      showSwarBar: var_showSwarBar,
+      dictationSounds: var_dictationSounds,
+      muteMusic: var_muteMusic,
+      suggestions: var_suggestions,
+      announcements: var_announcements,
+      milestones: var_milestones,
+      pasteAutomatically: var_pasteAutomatically,
+      restoreClipboard: var_restoreClipboard,
+      modelPath: var_modelPath,
+    );
+  }
+
+  @protected
+  OfflineModelStatus sse_decode_offline_model_status(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_path = sse_decode_String(deserializer);
+    var var_installed = sse_decode_bool(deserializer);
+    var var_sizeBytes = sse_decode_u_64(deserializer);
+    var var_modelId = sse_decode_String(deserializer);
+    return OfflineModelStatus(
+      path: var_path,
+      installed: var_installed,
+      sizeBytes: var_sizeBytes,
+      modelId: var_modelId,
+    );
+  }
+
+  @protected
+  String? sse_decode_opt_String(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    if (sse_decode_bool(deserializer)) {
+      return (sse_decode_String(deserializer));
+    } else {
+      return null;
+    }
+  }
+
+  @protected
+  double? sse_decode_opt_box_autoadd_f_64(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    if (sse_decode_bool(deserializer)) {
+      return (sse_decode_box_autoadd_f_64(deserializer));
+    } else {
+      return null;
+    }
+  }
+
+  @protected
+  StoredDictation sse_decode_stored_dictation(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_id = sse_decode_String(deserializer);
+    var var_createdAtMs = sse_decode_i_64(deserializer);
+    var var_rawText = sse_decode_String(deserializer);
+    var var_finalText = sse_decode_String(deserializer);
+    var var_language = sse_decode_String(deserializer);
+    var var_writingMode = sse_decode_String(deserializer);
+    var var_sourceApplication = sse_decode_String(deserializer);
+    var var_wordCount = sse_decode_u_32(deserializer);
+    var var_audioDurationMs = sse_decode_u_64(deserializer);
+    var var_speechDurationMs = sse_decode_u_64(deserializer);
+    var var_processingDurationMs = sse_decode_u_64(deserializer);
+    var var_insertionStatus = sse_decode_String(deserializer);
+    return StoredDictation(
+      id: var_id,
+      createdAtMs: var_createdAtMs,
+      rawText: var_rawText,
+      finalText: var_finalText,
+      language: var_language,
+      writingMode: var_writingMode,
+      sourceApplication: var_sourceApplication,
+      wordCount: var_wordCount,
+      audioDurationMs: var_audioDurationMs,
+      speechDurationMs: var_speechDurationMs,
+      processingDurationMs: var_processingDurationMs,
+      insertionStatus: var_insertionStatus,
+    );
+  }
+
+  @protected
   int sse_decode_u_32(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return deserializer.buffer.getUint32();
+  }
+
+  @protected
+  BigInt sse_decode_u_64(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return deserializer.buffer.getBigUint64();
   }
 
   @protected
@@ -232,24 +1239,29 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  int sse_decode_i_32(SseDeserializer deserializer) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    return deserializer.buffer.getInt32();
-  }
-
-  @protected
-  bool sse_decode_bool(SseDeserializer deserializer) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    return deserializer.buffer.getUint8() != 0;
-  }
-
-  @protected
   void sse_encode_AnyhowException(
     AnyhowException self,
     SseSerializer serializer,
   ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_String(self.message, serializer);
+  }
+
+  @protected
+  void sse_encode_StreamSink_dictation_event_Sse(
+    RustStreamSink<DictationEvent> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(
+      self.setupAndSerialize(
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_dictation_event,
+          decodeErrorData: sse_decode_AnyhowException,
+        ),
+      ),
+      serializer,
+    );
   }
 
   @protected
@@ -276,6 +1288,138 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_bool(bool self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    serializer.buffer.putUint8(self ? 1 : 0);
+  }
+
+  @protected
+  void sse_encode_box_autoadd_dictation_session_config(
+    DictationSessionConfig self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_dictation_session_config(self, serializer);
+  }
+
+  @protected
+  void sse_encode_box_autoadd_f_64(double self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_f_64(self, serializer);
+  }
+
+  @protected
+  void sse_encode_box_autoadd_native_settings(
+    NativeSettings self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_native_settings(self, serializer);
+  }
+
+  @protected
+  void sse_encode_dictation_completion(
+    DictationCompletion self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.sessionId, serializer);
+    sse_encode_String(self.rawText, serializer);
+    sse_encode_String(self.finalText, serializer);
+    sse_encode_u_64(self.audioDurationMs, serializer);
+    sse_encode_u_64(self.processingDurationMs, serializer);
+    sse_encode_String(self.insertionStatus, serializer);
+    sse_encode_String(self.insertionMethod, serializer);
+  }
+
+  @protected
+  void sse_encode_dictation_event(
+    DictationEvent self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.sessionId, serializer);
+    sse_encode_dictation_event_kind(self.kind, serializer);
+    sse_encode_opt_box_autoadd_f_64(self.audioLevel, serializer);
+    sse_encode_opt_String(self.message, serializer);
+  }
+
+  @protected
+  void sse_encode_dictation_event_kind(
+    DictationEventKind self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.index, serializer);
+  }
+
+  @protected
+  void sse_encode_dictation_session_config(
+    DictationSessionConfig self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.modelPath, serializer);
+    sse_encode_String(self.language, serializer);
+    sse_encode_String(self.writingMode, serializer);
+    sse_encode_String(self.sourceApplication, serializer);
+    sse_encode_bool(self.pasteAutomatically, serializer);
+    sse_encode_bool(self.restoreClipboard, serializer);
+    sse_encode_u_32(self.maximumSeconds, serializer);
+  }
+
+  @protected
+  void sse_encode_f_64(double self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    serializer.buffer.putFloat64(self);
+  }
+
+  @protected
+  void sse_encode_history_page(HistoryPage self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_u_32(self.totalCount, serializer);
+    sse_encode_list_stored_dictation(self.records, serializer);
+  }
+
+  @protected
+  void sse_encode_i_32(int self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    serializer.buffer.putInt32(self);
+  }
+
+  @protected
+  void sse_encode_i_64(PlatformInt64 self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    serializer.buffer.putPlatformInt64(self);
+  }
+
+  @protected
+  void sse_encode_insights_snapshot(
+    InsightsSnapshot self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_u_64(self.totalWords, serializer);
+    sse_encode_u_64(self.totalDictations, serializer);
+    sse_encode_u_64(self.totalSpeechDurationMs, serializer);
+    sse_encode_f_64(self.averageWordsPerMinute, serializer);
+    sse_encode_u_32(self.currentStreakDays, serializer);
+    sse_encode_u_32(self.longestStreakDays, serializer);
+  }
+
+  @protected
+  void sse_encode_list_microphone_device(
+    List<MicrophoneDevice> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_microphone_device(item, serializer);
+    }
+  }
+
+  @protected
   void sse_encode_list_prim_u_8_strict(
     Uint8List self,
     SseSerializer serializer,
@@ -286,9 +1430,112 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_list_stored_dictation(
+    List<StoredDictation> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_stored_dictation(item, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_microphone_device(
+    MicrophoneDevice self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.id, serializer);
+    sse_encode_String(self.name, serializer);
+    sse_encode_bool(self.isDefault, serializer);
+  }
+
+  @protected
+  void sse_encode_native_settings(
+    NativeSettings self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.language, serializer);
+    sse_encode_String(self.writingMode, serializer);
+    sse_encode_bool(self.launchAtLogin, serializer);
+    sse_encode_bool(self.showInDock, serializer);
+    sse_encode_bool(self.keepModelsWarm, serializer);
+    sse_encode_bool(self.showSwarBar, serializer);
+    sse_encode_bool(self.dictationSounds, serializer);
+    sse_encode_bool(self.muteMusic, serializer);
+    sse_encode_bool(self.suggestions, serializer);
+    sse_encode_bool(self.announcements, serializer);
+    sse_encode_bool(self.milestones, serializer);
+    sse_encode_bool(self.pasteAutomatically, serializer);
+    sse_encode_bool(self.restoreClipboard, serializer);
+    sse_encode_String(self.modelPath, serializer);
+  }
+
+  @protected
+  void sse_encode_offline_model_status(
+    OfflineModelStatus self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.path, serializer);
+    sse_encode_bool(self.installed, serializer);
+    sse_encode_u_64(self.sizeBytes, serializer);
+    sse_encode_String(self.modelId, serializer);
+  }
+
+  @protected
+  void sse_encode_opt_String(String? self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_String(self, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_opt_box_autoadd_f_64(double? self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_box_autoadd_f_64(self, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_stored_dictation(
+    StoredDictation self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.id, serializer);
+    sse_encode_i_64(self.createdAtMs, serializer);
+    sse_encode_String(self.rawText, serializer);
+    sse_encode_String(self.finalText, serializer);
+    sse_encode_String(self.language, serializer);
+    sse_encode_String(self.writingMode, serializer);
+    sse_encode_String(self.sourceApplication, serializer);
+    sse_encode_u_32(self.wordCount, serializer);
+    sse_encode_u_64(self.audioDurationMs, serializer);
+    sse_encode_u_64(self.speechDurationMs, serializer);
+    sse_encode_u_64(self.processingDurationMs, serializer);
+    sse_encode_String(self.insertionStatus, serializer);
+  }
+
+  @protected
   void sse_encode_u_32(int self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     serializer.buffer.putUint32(self);
+  }
+
+  @protected
+  void sse_encode_u_64(BigInt self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    serializer.buffer.putBigUint64(self);
   }
 
   @protected
@@ -300,17 +1547,5 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   @protected
   void sse_encode_unit(void self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
-  }
-
-  @protected
-  void sse_encode_i_32(int self, SseSerializer serializer) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    serializer.buffer.putInt32(self);
-  }
-
-  @protected
-  void sse_encode_bool(bool self, SseSerializer serializer) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    serializer.buffer.putUint8(self ? 1 : 0);
   }
 }
