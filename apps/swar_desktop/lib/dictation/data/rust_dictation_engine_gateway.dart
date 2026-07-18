@@ -1,0 +1,81 @@
+import 'package:swar_desktop/dictation/domain/dictation_engine_gateway.dart';
+import 'package:swar_desktop/generated_bridge/api/dictation.dart' as native;
+import 'package:swar_desktop/generated_bridge/api/models.dart' as models;
+
+final class RustDictationEngineGateway implements DictationEngineGateway {
+  @override
+  Future<List<SwarMicrophone>> listMicrophones() async {
+    final devices = await native.listMicrophones();
+    return devices
+        .map(
+          (device) => SwarMicrophone(
+            id: device.id,
+            name: device.name,
+            isDefault: device.isDefault,
+          ),
+        )
+        .toList(growable: false);
+  }
+
+  @override
+  Stream<DictationEngineEvent> start(DictationEngineConfig config) {
+    return native
+        .startDictationSession(
+          config: native.DictationSessionConfig(
+            modelPath: config.modelPath,
+            language: config.language,
+            writingMode: config.writingMode,
+            sourceApplication: 'Desktop',
+            pasteAutomatically: config.pasteAutomatically,
+            restoreClipboard: config.restoreClipboard,
+            maximumSeconds: 300,
+          ),
+        )
+        .map(
+          (event) => DictationEngineEvent(
+            sessionId: event.sessionId,
+            kind: DictationEngineEventKind.values[event.kind.index],
+            audioLevel: event.audioLevel,
+            message: event.message,
+          ),
+        );
+  }
+
+  @override
+  Future<DictationEngineCompletion> finish(String sessionId) async {
+    final result = await native.finishDictationSession(sessionId: sessionId);
+    return DictationEngineCompletion(
+      finalText: result.finalText,
+      insertionStatus: result.insertionStatus,
+    );
+  }
+
+  @override
+  Future<void> cancel(String sessionId) =>
+      native.cancelDictationSession(sessionId: sessionId);
+
+  @override
+  bool modelIsReady(String modelPath) =>
+      native.offlineModelIsReady(modelPath: modelPath);
+
+  @override
+  OfflineModelInstallation recommendedModelStatus() {
+    final status = models.recommendedModelStatus();
+    return _modelInstallation(status);
+  }
+
+  @override
+  Future<OfflineModelInstallation> installRecommendedModel() async {
+    return _modelInstallation(await models.installRecommendedModel());
+  }
+
+  OfflineModelInstallation _modelInstallation(
+    models.OfflineModelStatus status,
+  ) {
+    return OfflineModelInstallation(
+      path: status.path,
+      installed: status.installed,
+      sizeBytes: status.sizeBytes.toInt(),
+    );
+  }
+}
