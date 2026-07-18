@@ -1,0 +1,10 @@
+apps/swar_desktop/lib/main.dart
+apps/swar_desktop/lib/app/swar_app.dart
+apps/swar_desktop/lib/app/swar_shell.dart
+apps/swar_desktop/lib/settings/data/rust_settings_repository.dart
+apps/swar_desktop/lib/dictation/domain/dictation_engine_gateway.dart
+apps/swar_desktop/lib/dictation/data/rust_dictation_engine_gateway.dart
+apps/swar_desktop/lib/dictation/presentation/dictation_session_view_model.dart
+apps/swar_desktop/lib/settings/presentation/settings_page.dart
+apps/swar_desktop/test/dictation_session_view_model_test.dart
+apps/swar_desktop/test/swar_shell_test.dart

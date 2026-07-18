@@ -12,7 +12,9 @@ import 'package:integration_test/integration_test.dart';
 import 'package:swar_desktop/app/swar_app.dart';
 import 'package:swar_desktop/diagnostics/data/rust_core_diagnostics_gateway.dart';
 import 'package:swar_desktop/dictation/data/fake_dictation_history_repository.dart';
+import 'package:swar_desktop/dictation/data/rust_dictation_engine_gateway.dart';
 import 'package:swar_desktop/generated_bridge/frb_generated.dart';
+import 'package:swar_desktop/insights/data/fake_insights_repository.dart';
 import 'package:swar_desktop/settings/data/in_memory_settings_repository.dart';
 
 void main() {
@@ -25,7 +27,7 @@ void main() {
     addTearDown(RustLib.dispose);
 
     tester.view
-      ..physicalSize = const Size(1000, 700)
+      ..physicalSize = const Size(1405, 760)
       ..devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
@@ -40,22 +42,33 @@ void main() {
       SwarApp(
         diagnosticsGateway: RustCoreDiagnosticsGateway(),
         dictationRepository: FakeDictationHistoryRepository(),
+        insightsRepository: const FakeInsightsRepository(),
+        dictationEngineGateway: RustDictationEngineGateway(),
         settingsRepository: InMemorySettingsRepository(),
       ),
     );
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('swar-shell')), findsOneWidget);
-    expect(find.text('Dictation'), findsWidgets);
+    expect(find.text('Insights'), findsWidgets);
+    expect(find.byKey(const Key('insights-grid')), findsOneWidget);
+    expect(find.byKey(const Key('insights-pace-card')), findsOneWidget);
+    _recordCheck(binding, 'SHELL-001 Insights is the default destination');
+    await _captureFlutterSurface(binding, tester, 'shell-001-insights');
+
+    tester.view.physicalSize = const Size(1405, 760);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('top-dictation-nav')));
+    await tester.pumpAndSettle();
     expect(find.byKey(const Key('dictation-list')), findsOneWidget);
     expect(find.byKey(const Key('dictation-record-0')), findsOneWidget);
     expect(find.byKey(const Key('dictation-record-9999')), findsNothing);
-    expect(find.text('Local only'), findsOneWidget);
     _recordCheck(
       binding,
       'SHELL-001 Dictation opens with a lazy local-history list',
     );
-    await _captureFlutterSurface(binding, tester, 'shell-001-dictation');
+    await _captureFlutterSurface(binding, tester, 'shell-002-dictation');
 
     await tester.enterText(find.byKey(const Key('dictation-search')), 'launch');
     await tester.pump();
@@ -71,21 +84,26 @@ void main() {
     tester.view.physicalSize = const Size(620, 700);
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('compact-navigation')), findsOneWidget);
-    expect(find.byKey(const Key('sidebar-dictation-nav')), findsNothing);
+    expect(find.byKey(const Key('top-dictation-nav')), findsNothing);
     _recordCheck(binding, 'SHELL-002 compact navigation replaces the sidebar');
     await _captureFlutterSurface(binding, tester, 'shell-002-compact');
 
     await tester.tap(find.byKey(const Key('compact-insights-nav')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('insights-grid')), findsOneWidget);
-    expect(find.text('Estimated time saved'), findsOneWidget);
+    expect(find.text('Desktop usage'), findsOneWidget);
     _recordCheck(
       binding,
       'SHELL-002 Insights is reachable from compact navigation',
     );
 
-    await tester.tap(find.byKey(const Key('compact-settings-nav')));
+    tester.view.physicalSize = const Size(1600, 1000);
     await tester.pumpAndSettle();
+    expect(find.byKey(const Key('top-navigation')), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('top-settings-nav')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('settings-dialog')), findsOneWidget);
     expect(find.byKey(const Key('general-settings-page')), findsOneWidget);
     expect(find.byKey(const Key('writing-mode-setting')), findsOneWidget);
     _recordCheck(
@@ -93,7 +111,27 @@ void main() {
       'SHELL-002 General settings opens from the persistent shell',
     );
 
-    await tester.tap(find.text('System'));
+    final testDictation = find.byKey(const Key('test-dictation-button'));
+    await tester.scrollUntilVisible(
+      testDictation,
+      260,
+      scrollable: find.descendant(
+        of: find.byKey(const Key('general-settings-scroll')),
+        matching: find.byType(Scrollable),
+      ).first,
+    );
+    await tester.tap(testDictation);
+    await tester.pump();
+    expect(
+      find.text('Choose an offline Whisper model before testing dictation.'),
+      findsOneWidget,
+    );
+    _recordCheck(
+      binding,
+      'DICTATION-001 missing offline model is explained before microphone capture',
+    );
+
+    await tester.tap(find.byKey(const Key('settings-system-nav')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('system-settings-page')), findsOneWidget);
     final launchAtLogin = find.byKey(const Key('launch-at-login-setting'));
@@ -102,20 +140,30 @@ void main() {
     await tester.tap(launchAtLogin);
     await tester.pump();
 
-    await tester.tap(find.byKey(const Key('compact-insights-nav')));
+    await tester.tap(find.byKey(const Key('settings-close-button')));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('compact-settings-nav')));
+    await tester.tap(find.byKey(const Key('top-settings-nav')));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('System'));
+    await tester.tap(find.byKey(const Key('settings-system-nav')));
     await tester.pumpAndSettle();
     final launchSetting = tester.widget<SwitchListTile>(
-      find.byKey(const Key('launch-at-login-setting')),
+      find.descendant(
+        of: find.byKey(const Key('launch-at-login-setting')),
+        matching: find.byType(SwitchListTile),
+      ),
     );
     expect(launchSetting.value, isTrue);
     _recordCheck(binding, 'SHELL-003 mock settings persist across navigation');
 
     final checkButton = find.byKey(const Key('check-core-button'));
-    await tester.ensureVisible(checkButton);
+    await tester.scrollUntilVisible(
+      checkButton,
+      300,
+      scrollable: find.descendant(
+        of: find.byKey(const Key('system-settings-scroll')),
+        matching: find.byType(Scrollable),
+      ).first,
+    );
     await tester.pumpAndSettle();
     final buttonSemantics = tester.getSemantics(checkButton);
     expect(buttonSemantics.label, contains('Run system check'));
@@ -127,23 +175,22 @@ void main() {
     );
     await _captureFlutterSurface(binding, tester, 'shell-005-system');
 
-    final firstRun = Stopwatch()..start();
     await tester.tap(checkButton);
-    await _pumpUntilFound(
+    final firstRunElapsed = await _pumpUntilFound(
       tester,
       find.byKey(const Key('core-event-5')),
       timeout: const Duration(seconds: 5),
     );
-    firstRun.stop();
 
     expect(find.text('Connected. Version 0.1.0'), findsOneWidget);
     for (var event = 1; event <= 5; event++) {
       expect(find.byKey(Key('core-event-$event')), findsOneWidget);
     }
-    expect(firstRun.elapsed, lessThan(const Duration(seconds: 5)));
+    expect(firstRunElapsed, lessThan(const Duration(seconds: 5)));
     _recordCheck(
       binding,
-      'SHELL-003 real native stream completed in ${firstRun.elapsedMilliseconds} ms',
+      'SHELL-003 real native stream completed in '
+      '${firstRunElapsed.inMilliseconds} ms of foreground interaction time',
     );
     await _captureFlutterSurface(binding, tester, 'shell-006-core-connected');
 
@@ -190,6 +237,9 @@ void main() {
 
 void _recordCheck(IntegrationTestWidgetsFlutterBinding binding, String check) {
   (binding.reportData!['checks']! as List<String>).add(check);
+  // A host-visible checkpoint makes a stuck desktop journey diagnosable.
+  // ignore: avoid_print
+  print('SWAR_SYNTHETIC_CHECK=$check');
 }
 
 Future<void> _captureFlutterSurface(
@@ -201,8 +251,16 @@ Future<void> _captureFlutterSurface(
   final boundary = tester.renderObject<RenderRepaintBoundary>(
     find.byKey(const Key('swar-app-capture-boundary')),
   );
-  final image = await boundary.toImage();
-  final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+  final image = await boundary.toImage().timeout(
+    const Duration(seconds: 15),
+    onTimeout: () => throw TestFailure('Screenshot $name did not render.'),
+  );
+  final byteData = await image
+      .toByteData(format: ui.ImageByteFormat.png)
+      .timeout(
+        const Duration(seconds: 15),
+        onTimeout: () => throw TestFailure('Screenshot $name did not encode.'),
+      );
   image.dispose();
 
   expect(byteData, isNotNull);
@@ -250,7 +308,7 @@ Future<void> _writeEvidence(
   print('SWAR_SYNTHETIC_USER_EVIDENCE=${outputDirectory.path}');
 }
 
-Future<void> _pumpUntilFound(
+Future<Duration> _pumpUntilFound(
   WidgetTester tester,
   Finder finder, {
   required Duration timeout,
@@ -268,6 +326,7 @@ Future<void> _pumpUntilFound(
     findsOneWidget,
     reason: 'The expected user-visible state did not appear within $timeout.',
   );
+  return elapsed;
 }
 
 Future<void> _pumpUntilAbsent(

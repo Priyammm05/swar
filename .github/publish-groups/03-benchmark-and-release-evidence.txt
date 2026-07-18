@@ -1,0 +1,9 @@
+benchmark/README.md
+benchmark/cases/english-01.txt
+benchmark/compare_transcripts.py
+scripts/run_dictation_benchmark.sh
+apps/swar_desktop/integration_test/synthetic_user_journey_test.dart
+docs/phase-1.md
+.github/publish-groups/01-native-model-and-platform.txt
+.github/publish-groups/02-daily-dictation-experience.txt
+.github/publish-groups/03-benchmark-and-release-evidence.txt
