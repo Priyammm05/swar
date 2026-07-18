@@ -15,13 +15,22 @@ abstract final class SwarTheme {
       useMaterial3: true,
       colorScheme: colorScheme,
       scaffoldBackgroundColor: SwarColors.canvas,
-      fontFamily: 'Arial',
+      fontFamily: 'Manrope',
+      fontFamilyFallback: const ['Segoe UI', '.AppleSystemUIFont', 'Arial'],
       textTheme: const TextTheme(
+        displaySmall: TextStyle(
+          color: SwarColors.ink,
+          fontSize: 32,
+          height: 1.25,
+          fontWeight: FontWeight.w700,
+          letterSpacing: -0.64,
+        ),
         headlineMedium: TextStyle(
           color: SwarColors.ink,
-          fontSize: 30,
-          fontWeight: FontWeight.w700,
-          letterSpacing: -0.7,
+          fontSize: 24,
+          height: 1.33,
+          fontWeight: FontWeight.w600,
+          letterSpacing: -0.24,
         ),
         titleMedium: TextStyle(
           color: SwarColors.ink,
@@ -30,18 +39,45 @@ abstract final class SwarTheme {
         ),
         bodyLarge: TextStyle(color: SwarColors.ink, fontSize: 16, height: 1.5),
         bodyMedium: TextStyle(
-          color: SwarColors.mutedInk,
+          color: SwarColors.ink,
           fontSize: 14,
-          height: 1.45,
+          height: 1.43,
+        ),
+        bodySmall: TextStyle(color: SwarColors.ink, fontSize: 12, height: 1.33),
+        labelLarge: TextStyle(
+          color: SwarColors.ink,
+          fontSize: 14,
+          fontWeight: FontWeight.w600,
         ),
       ),
       cardTheme: const CardThemeData(
-        color: SwarColors.surface,
+        color: SwarColors.panel,
         elevation: 0,
         shape: RoundedRectangleBorder(
           side: BorderSide(color: SwarColors.border),
-          borderRadius: BorderRadius.all(Radius.circular(16)),
+          borderRadius: BorderRadius.all(Radius.circular(14)),
         ),
+      ),
+      dividerColor: SwarColors.border,
+      dialogTheme: const DialogThemeData(
+        backgroundColor: SwarColors.surface,
+        elevation: 18,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.all(Radius.circular(26)),
+        ),
+      ),
+      switchTheme: SwitchThemeData(
+        thumbColor: WidgetStateProperty.resolveWith(
+          (states) => states.contains(WidgetState.selected)
+              ? Colors.white
+              : SwarColors.surface,
+        ),
+        trackColor: WidgetStateProperty.resolveWith(
+          (states) => states.contains(WidgetState.selected)
+              ? SwarColors.leaf
+              : const Color(0xFFC9C6BD),
+        ),
+        trackOutlineColor: const WidgetStatePropertyAll(Colors.transparent),
       ),
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
