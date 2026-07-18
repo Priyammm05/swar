@@ -263,7 +263,8 @@ final class _GeneralSettings extends StatelessWidget {
           children: [
             _SettingRow(
               title: 'Shortcut',
-              subtitle: 'Hold Control + Space and speak.',
+              subtitle:
+                  'Hold Option and release to finish. Double-tap Option to lock recording.',
               trailing: OutlinedButton(
                 onPressed: null,
                 child: const Text('Change'),
@@ -271,11 +272,11 @@ final class _GeneralSettings extends StatelessWidget {
             ),
             _SettingRow(
               title: 'Microphone',
-              subtitle: 'System default microphone (recommended)',
-              trailing: OutlinedButton(
-                key: const Key('refresh-microphones-button'),
-                onPressed: sessionViewModel.listMicrophones,
-                child: const Text('Check'),
+              subtitle:
+                  'Swar uses the built-in microphone unless you choose another.',
+              trailing: _MicrophoneSelector(
+                viewModel: viewModel,
+                sessionViewModel: sessionViewModel,
               ),
             ),
             _SettingRow(
@@ -392,6 +393,7 @@ final class _GeneralSettings extends StatelessWidget {
                       : () => sessionViewModel.start(
                           DictationEngineConfig(
                             modelPath: settings.modelPath,
+                            microphoneId: settings.microphoneId,
                             language: settings.language.name,
                             writingMode: settings.writingMode.name,
                             pasteAutomatically: settings.pasteAutomatically,
@@ -600,6 +602,103 @@ final class _SettingsGroup extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+final class _MicrophoneSelector extends StatefulWidget {
+  const _MicrophoneSelector({
+    required this.viewModel,
+    required this.sessionViewModel,
+  });
+
+  final SettingsViewModel viewModel;
+  final DictationSessionViewModel sessionViewModel;
+
+  @override
+  State<_MicrophoneSelector> createState() => _MicrophoneSelectorState();
+}
+
+final class _MicrophoneSelectorState extends State<_MicrophoneSelector> {
+  late Future<List<SwarMicrophone>> _microphones;
+
+  @override
+  void initState() {
+    super.initState();
+    _microphones = widget.sessionViewModel.listMicrophones();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 260,
+      child: FutureBuilder<List<SwarMicrophone>>(
+        future: _microphones,
+        builder: (context, snapshot) {
+          final microphones = snapshot.data ?? const <SwarMicrophone>[];
+          if (snapshot.connectionState != ConnectionState.done) {
+            return const Align(
+              alignment: Alignment.center,
+              child: SizedBox.square(
+                dimension: 20,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+            );
+          }
+          if (microphones.isEmpty) {
+            return OutlinedButton.icon(
+              onPressed: _reload,
+              icon: const Icon(Icons.refresh_rounded, size: 18),
+              label: const Text('Check microphones'),
+            );
+          }
+
+          final savedId = widget.viewModel.settings.microphoneId;
+          final selected = microphones.where((item) => item.id == savedId);
+          final selectedId = selected.isNotEmpty
+              ? selected.first.id
+              : microphones
+                    .firstWhere(
+                      (item) => item.isBuiltIn,
+                      orElse: () => microphones.first,
+                    )
+                    .id;
+          return DropdownButtonFormField<String>(
+            key: ValueKey('microphone-$selectedId'),
+            initialValue: selectedId,
+            isExpanded: true,
+            decoration: const InputDecoration(
+              border: OutlineInputBorder(),
+              contentPadding: EdgeInsets.symmetric(
+                horizontal: 14,
+                vertical: 12,
+              ),
+            ),
+            items: microphones
+                .map(
+                  (microphone) => DropdownMenuItem(
+                    value: microphone.id,
+                    child: Text(
+                      microphone.isBuiltIn
+                          ? '${microphone.name} · Built-in'
+                          : microphone.name,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                )
+                .toList(growable: false),
+            onChanged: (value) {
+              if (value != null) widget.viewModel.setMicrophoneId(value);
+            },
+          );
+        },
+      ),
+    );
+  }
+
+  void _reload() {
+    setState(() {
+      _microphones = widget.sessionViewModel.listMicrophones();
+    });
   }
 }
 

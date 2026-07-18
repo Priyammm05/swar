@@ -24,12 +24,17 @@ class FlutterWindow : public Win32Window {
                          LPARAM const lparam) noexcept override;
 
  private:
+  static LRESULT CALLBACK KeyboardHook(int code, WPARAM wparam, LPARAM lparam);
+  static FlutterWindow* shortcut_window_;
+
   // The project to run.
   flutter::DartProject project_;
 
   // The Flutter instance hosted by this window.
   std::unique_ptr<flutter::FlutterViewController> flutter_controller_;
   std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>> desktop_channel_;
+  HHOOK keyboard_hook_ = nullptr;
+  bool option_pressed_ = false;
 };
 
 #endif  // RUNNER_FLUTTER_WINDOW_H_

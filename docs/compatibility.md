@@ -52,6 +52,40 @@ Every release candidate must cover:
 
 CI verifies compilation and binary architecture. Minimum-version runtime testing uses maintained physical machines or virtual machines because hosted CI runners generally run recent operating systems.
 
+## Evidence levels
+
+- **Configured** means the deployment target, architecture, and CI lane exist.
+- **Built** means the release artifact compiled and its binary architecture was inspected.
+- **Run** means the application launched and the automated desktop user completed on that platform.
+- **Minimum OS verified** means the release candidate completed the full native interaction checklist on the oldest supported operating system.
+
+Never describe a configured or cross-compiled target as runtime-tested.
+
+## Current evidence (2026-07-19)
+
+| Target | Configured | Built | Run | Minimum OS verified | Current evidence |
+| --- | --- | --- | --- | --- | --- |
+| macOS arm64 | Yes | Yes | Yes | Pending | Native synthetic user passed on Apple Silicon; release bundle inspected |
+| macOS x86_64 | Yes | Yes | Pending physical Intel run | Pending | Universal 2 executable and `swar_core.framework` both contain x86_64 |
+| Windows 10/11 x64 | Yes | Pending Windows CI | Pending Windows CI/VM | Pending | Windows 2022 CI lane builds and runs the same native synthetic user |
+
+The verified macOS release bundle contains `arm64` and `x86_64` slices in both the executable and Rust framework, declares macOS 10.15 as its minimum, and includes the microphone usage description. This proves packaging, not execution on Catalina or Intel hardware.
+
+## Native interaction checklist
+
+Run this checklist on every minimum and current OS machine:
+
+1. Fresh install and first launch.
+2. Microphone permission denied, then granted.
+3. Offline model missing, invalid, and valid.
+4. Record, stop, transcribe, clean, and persist a dictation.
+5. Paste into a browser, native text editor, Electron app, and Microsoft Office app.
+6. Clipboard preservation and copied fallback.
+7. Global shortcut while the app is unfocused.
+8. Menu-bar or tray state, Dock/taskbar visibility, sleep, wake, and relaunch.
+9. English, Hindi, and Hinglish final transcription.
+10. Lite-model performance on baseline CPU and memory hardware.
+
 ## Dependency review
 
 Before adding or upgrading Flutter plugins, Rust crates, C or C++ libraries, or native SDK features:
@@ -61,4 +95,3 @@ Before adding or upgrading Flutter plugins, Rust crates, C or C++ libraries, or 
 3. Confirm Windows x64 support without a recent CPU instruction requirement.
 4. Add runtime fallbacks for optional acceleration.
 5. Update and execute the compatibility matrix.
-

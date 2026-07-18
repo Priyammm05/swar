@@ -8,6 +8,8 @@
 FlutterWindow::FlutterWindow(const flutter::DartProject& project)
     : project_(project) {}
 
+FlutterWindow* FlutterWindow::shortcut_window_ = nullptr;
+
 FlutterWindow::~FlutterWindow() {}
 
 bool FlutterWindow::OnCreate() {
@@ -34,14 +36,20 @@ bool FlutterWindow::OnCreate() {
       [this](const flutter::MethodCall<flutter::EncodableValue>& call,
              std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result) {
         if (call.method_name() == "registerGlobalShortcut") {
-          const bool registered =
-              RegisterHotKey(GetHandle(), 1, MOD_CONTROL | MOD_NOREPEAT, VK_SPACE) != 0;
-          result->Success(flutter::EncodableValue(registered));
+          shortcut_window_ = this;
+          keyboard_hook_ = SetWindowsHookEx(
+              WH_KEYBOARD_LL, KeyboardHook, GetModuleHandle(nullptr), 0);
+          result->Success(flutter::EncodableValue(keyboard_hook_ != nullptr));
         } else if (call.method_name() == "unregisterGlobalShortcut") {
-          UnregisterHotKey(GetHandle(), 1);
+          if (keyboard_hook_) UnhookWindowsHookEx(keyboard_hook_);
+          keyboard_hook_ = nullptr;
+          shortcut_window_ = nullptr;
           result->Success();
         } else if (call.method_name() == "requestInsertionPermission") {
           result->Success(flutter::EncodableValue(true));
+        } else if (call.method_name() == "updateDictationOverlay" ||
+                   call.method_name() == "hideDictationOverlay") {
+          result->Success();
         } else {
           result->NotImplemented();
         }
@@ -61,7 +69,9 @@ bool FlutterWindow::OnCreate() {
 }
 
 void FlutterWindow::OnDestroy() {
-  UnregisterHotKey(GetHandle(), 1);
+  if (keyboard_hook_) UnhookWindowsHookEx(keyboard_hook_);
+  keyboard_hook_ = nullptr;
+  shortcut_window_ = nullptr;
   desktop_channel_.reset();
   if (flutter_controller_) {
     flutter_controller_ = nullptr;
@@ -85,16 +95,32 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
   }
 
   switch (message) {
-    case WM_HOTKEY:
-      if (wparam == 1 && desktop_channel_) {
-        desktop_channel_->InvokeMethod(
-            "shortcutPressed", std::make_unique<flutter::EncodableValue>());
-        return 0;
-      }
     case WM_FONTCHANGE:
       flutter_controller_->engine()->ReloadSystemFonts();
       break;
   }
 
   return Win32Window::MessageHandler(hwnd, message, wparam, lparam);
+}
+
+LRESULT CALLBACK FlutterWindow::KeyboardHook(int code, WPARAM wparam,
+                                             LPARAM lparam) {
+  if (code == HC_ACTION && shortcut_window_ &&
+      shortcut_window_->desktop_channel_) {
+    const auto* key = reinterpret_cast<KBDLLHOOKSTRUCT*>(lparam);
+    if (key->vkCode == VK_LMENU || key->vkCode == VK_RMENU) {
+      const bool pressed = wparam == WM_KEYDOWN || wparam == WM_SYSKEYDOWN;
+      const bool released = wparam == WM_KEYUP || wparam == WM_SYSKEYUP;
+      if (pressed && !shortcut_window_->option_pressed_) {
+        shortcut_window_->option_pressed_ = true;
+        shortcut_window_->desktop_channel_->InvokeMethod(
+            "dictationKeyPressed", std::make_unique<flutter::EncodableValue>());
+      } else if (released && shortcut_window_->option_pressed_) {
+        shortcut_window_->option_pressed_ = false;
+        shortcut_window_->desktop_channel_->InvokeMethod(
+            "dictationKeyReleased", std::make_unique<flutter::EncodableValue>());
+      }
+    }
+  }
+  return CallNextHookEx(nullptr, code, wparam, lparam);
 }

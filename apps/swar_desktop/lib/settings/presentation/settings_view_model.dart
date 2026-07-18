@@ -36,6 +36,36 @@ final class SettingsViewModel extends ChangeNotifier {
     _save(_settings.copyWith(keepModelsWarm: enabled));
   }
 
+  void setShowSwarBar({required bool enabled}) =>
+      _save(_settings.copyWith(showSwarBar: enabled));
+
+  void setDictationSounds({required bool enabled}) =>
+      _save(_settings.copyWith(dictationSounds: enabled));
+
+  void setMuteMusic({required bool enabled}) =>
+      _save(_settings.copyWith(muteMusic: enabled));
+
+  void setSuggestions({required bool enabled}) =>
+      _save(_settings.copyWith(suggestions: enabled));
+
+  void setAnnouncements({required bool enabled}) =>
+      _save(_settings.copyWith(announcements: enabled));
+
+  void setMilestones({required bool enabled}) =>
+      _save(_settings.copyWith(milestones: enabled));
+
+  void setPasteAutomatically({required bool enabled}) =>
+      _save(_settings.copyWith(pasteAutomatically: enabled));
+
+  void setRestoreClipboard({required bool enabled}) =>
+      _save(_settings.copyWith(restoreClipboard: enabled));
+
+  void setModelPath(String value) =>
+      _save(_settings.copyWith(modelPath: value.trim()));
+
+  void setMicrophoneId(String value) =>
+      _save(_settings.copyWith(microphoneId: value.trim()));
+
   void _save(SwarSettings settings) {
     _settings = settings;
     _repository.save(settings);

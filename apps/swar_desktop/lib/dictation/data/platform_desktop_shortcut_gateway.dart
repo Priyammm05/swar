@@ -6,15 +6,23 @@ import 'package:swar_desktop/dictation/domain/desktop_shortcut_gateway.dart';
 /// Thin platform adapter. Native runners own the actual global registration.
 final class PlatformDesktopShortcutGateway implements DesktopShortcutGateway {
   static const _channel = MethodChannel('dev.swar/desktop');
-  final _activations = StreamController<void>.broadcast();
+  final _events = StreamController<DesktopShortcutEvent>.broadcast();
 
   @override
-  Stream<void> get activations => _activations.stream;
+  Stream<DesktopShortcutEvent> get events => _events.stream;
 
   @override
   Future<bool> initialize() async {
     _channel.setMethodCallHandler((call) async {
-      if (call.method == 'shortcutPressed') _activations.add(null);
+      final kind = switch (call.method) {
+        'dictationKeyPressed' => DesktopShortcutEventKind.pressed,
+        'dictationKeyReleased' => DesktopShortcutEventKind.released,
+        'shortcutPressed' => DesktopShortcutEventKind.toggle,
+        'overlayStopPressed' => DesktopShortcutEventKind.stop,
+        'overlayCancelPressed' => DesktopShortcutEventKind.cancel,
+        _ => null,
+      };
+      if (kind != null) _events.add(DesktopShortcutEvent(kind));
     });
     return await _channel.invokeMethod<bool>('registerGlobalShortcut') ?? false;
   }
@@ -26,8 +34,25 @@ final class PlatformDesktopShortcutGateway implements DesktopShortcutGateway {
   }
 
   @override
+  Future<void> updateOverlay({
+    required DesktopOverlayState state,
+    required double audioLevel,
+    required bool isLatched,
+  }) {
+    return _channel.invokeMethod<void>('updateDictationOverlay', {
+      'state': state.name,
+      'audioLevel': audioLevel,
+      'isLatched': isLatched,
+    });
+  }
+
+  @override
+  Future<void> hideOverlay() =>
+      _channel.invokeMethod<void>('hideDictationOverlay');
+
+  @override
   Future<void> dispose() async {
     await _channel.invokeMethod<void>('unregisterGlobalShortcut');
-    await _activations.close();
+    await _events.close();
   }
 }
