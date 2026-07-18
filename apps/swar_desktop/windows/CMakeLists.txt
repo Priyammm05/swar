@@ -8,7 +8,7 @@ add_compile_definitions(WINVER=0x0A00 _WIN32_WINNT=0x0A00)
 
 # The name of the executable created for the application. Change this to change
 # the on-disk name of your application.
-set(BINARY_NAME "swar_desktop")
+set(BINARY_NAME "swar")
 
 # Explicitly opt in to modern CMake behaviors to avoid warnings with recent
 # versions of CMake.

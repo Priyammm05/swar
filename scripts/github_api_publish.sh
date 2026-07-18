@@ -84,10 +84,13 @@ while IFS= read -r relative_path; do
     continue
   fi
 
-  encoded_content=$(base64 <"$file_path" | tr -d '\n')
+  base64 <"$file_path" | tr -d '\n' >"$publish_temp_dir/blob.base64"
+  jq -n \
+    --rawfile content "$publish_temp_dir/blob.base64" \
+    '{content: $content, encoding: "base64"}' \
+    >"$publish_temp_dir/blob.json"
   blob_sha=$(gh api --method POST "repos/$repository/git/blobs" \
-    -f content="$encoded_content" \
-    -f encoding=base64 \
+    --input "$publish_temp_dir/blob.json" \
     --jq '.sha')
 
   file_mode=100644

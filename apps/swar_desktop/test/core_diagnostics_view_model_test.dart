@@ -23,10 +23,42 @@ void main() {
     viewModel.dispose();
     await gateway.events.close();
   });
+
+  test(
+    'does not update after disposal while an old stream is cancelling',
+    () async {
+      final cancellation = Completer<void>();
+      final gateway = _DelayedCancellationGateway(cancellation: cancellation);
+      final viewModel = CoreDiagnosticsViewModel(gateway: gateway);
+
+      await viewModel.checkCore();
+      final repeatedCheck = viewModel.checkCore();
+      await Future<void>.delayed(Duration.zero);
+
+      viewModel.dispose();
+      cancellation.complete();
+
+      await expectLater(repeatedCheck, completes);
+      await gateway.events.close();
+    },
+  );
 }
 
 final class _FakeGateway implements CoreDiagnosticsGateway {
   final events = StreamController<int>();
+
+  @override
+  String getCoreVersion() => '0.1.0-test';
+
+  @override
+  Stream<int> streamDemoEvents() => events.stream;
+}
+
+final class _DelayedCancellationGateway implements CoreDiagnosticsGateway {
+  _DelayedCancellationGateway({required Completer<void> cancellation})
+    : events = StreamController<int>(onCancel: () => cancellation.future);
+
+  final StreamController<int> events;
 
   @override
   String getCoreVersion() => '0.1.0-test';

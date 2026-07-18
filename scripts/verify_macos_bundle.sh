@@ -1,8 +1,8 @@
 #!/usr/bin/env sh
 set -eu
 
-bundle_path=${1:-apps/swar_desktop/build/macos/Build/Products/Release/swar_desktop.app}
-executable="$bundle_path/Contents/MacOS/swar_desktop"
+bundle_path=${1:-apps/swar_desktop/build/macos/Build/Products/Release/swar.app}
+executable="$bundle_path/Contents/MacOS/swar"
 
 if [ ! -f "$executable" ]; then
   echo "Missing macOS executable: $executable" >&2

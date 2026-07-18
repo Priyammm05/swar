@@ -89,13 +89,13 @@ BEGIN
     BEGIN
         BLOCK "040904e4"
         BEGIN
-            VALUE "CompanyName", "dev.swar" "\0"
-            VALUE "FileDescription", "swar_desktop" "\0"
+            VALUE "CompanyName", "Swar contributors" "\0"
+            VALUE "FileDescription", "Swar offline voice keyboard" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
-            VALUE "InternalName", "swar_desktop" "\0"
-            VALUE "LegalCopyright", "Copyright (C) 2026 dev.swar. All rights reserved." "\0"
-            VALUE "OriginalFilename", "swar_desktop.exe" "\0"
-            VALUE "ProductName", "swar_desktop" "\0"
+            VALUE "InternalName", "swar" "\0"
+            VALUE "LegalCopyright", "Copyright (C) 2026 Swar contributors." "\0"
+            VALUE "OriginalFilename", "swar.exe" "\0"
+            VALUE "ProductName", "swar" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END

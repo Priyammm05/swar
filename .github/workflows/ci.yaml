@@ -20,6 +20,8 @@ jobs:
       - run: flutter pub get
       - run: flutter analyze
       - run: flutter test
+      - run: ../../scripts/verify_flutter_boundaries.sh
+      - run: ../../scripts/verify_user_testing_framework.sh
 
   rust:
     runs-on: ubuntu-latest
@@ -50,8 +52,20 @@ jobs:
           toolchain: 1.88.0
           targets: aarch64-apple-darwin,x86_64-apple-darwin
       - run: flutter pub get
+      - run: flutter test integration_test/core_bridge_test.dart -d macos
+      - run: ../../scripts/run_synthetic_user_test.sh macos
       - run: flutter build macos --release
-      - run: ../../scripts/verify_macos_bundle.sh build/macos/Build/Products/Release/swar_desktop.app
+      - run: ../../scripts/verify_macos_bundle.sh build/macos/Build/Products/Release/swar.app
+      - uses: actions/upload-artifact@v4
+        with:
+          name: swar-macos-universal-release
+          path: apps/swar_desktop/build/macos/Build/Products/Release/swar.app
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: swar-macos-synthetic-user-evidence
+          path: apps/swar_desktop/build/user-testing/synthetic-user/
+          if-no-files-found: error
 
   windows-build:
     runs-on: windows-2022
@@ -70,4 +84,17 @@ jobs:
           toolchain: 1.88.0
           targets: x86_64-pc-windows-msvc
       - run: flutter pub get
+      - run: flutter test integration_test/core_bridge_test.dart -d windows
+      - run: ../../scripts/run_synthetic_user_test.sh windows
+        shell: bash
       - run: flutter build windows --release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: swar-windows-x64-release
+          path: apps/swar_desktop/build/windows/x64/runner/Release/
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: swar-windows-synthetic-user-evidence
+          path: apps/swar_desktop/build/user-testing/synthetic-user/
+          if-no-files-found: error

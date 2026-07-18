@@ -1,0 +1,5 @@
+cargo:
+  debug:
+    toolchain: '1.88.0'
+  release:
+    toolchain: '1.88.0'

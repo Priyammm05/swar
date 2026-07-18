@@ -84,3 +84,6 @@ coverage/
 *.crash
 *.ips
 /diagnostics/
+
+# Local user-testing sessions may contain personal observations or transcript excerpts.
+/.user-testing/

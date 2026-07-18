@@ -14,16 +14,28 @@ final class CoreDiagnosticsViewModel extends ChangeNotifier {
   final CoreDiagnosticsGateway _gateway;
   StreamSubscription<int>? _eventSubscription;
   CoreDiagnosticsState _state = const CoreDiagnosticsState();
+  var _operationGeneration = 0;
+  var _isDisposed = false;
 
   CoreDiagnosticsState get state => _state;
 
   Future<void> checkCore() async {
+    final operationGeneration = ++_operationGeneration;
     await _eventSubscription?.cancel();
+    if (!_isCurrent(operationGeneration)) {
+      return;
+    }
+
+    _eventSubscription = null;
     _state = const CoreDiagnosticsState(status: CoreConnectionStatus.checking);
     notifyListeners();
 
     try {
       final version = _gateway.getCoreVersion();
+      if (!_isCurrent(operationGeneration)) {
+        return;
+      }
+
       _state = _state.copyWith(
         status: CoreConnectionStatus.ready,
         version: version,
@@ -33,10 +45,16 @@ final class CoreDiagnosticsViewModel extends ChangeNotifier {
 
       _eventSubscription = _gateway.streamDemoEvents().listen(
         (event) {
+          if (!_isCurrent(operationGeneration)) {
+            return;
+          }
           _state = _state.copyWith(events: [..._state.events, event]);
           notifyListeners();
         },
         onError: (Object _) {
+          if (!_isCurrent(operationGeneration)) {
+            return;
+          }
           _state = _state.copyWith(
             status: CoreConnectionStatus.failed,
             errorMessage: 'The native event stream stopped unexpectedly.',
@@ -45,6 +63,9 @@ final class CoreDiagnosticsViewModel extends ChangeNotifier {
         },
       );
     } on Object {
+      if (!_isCurrent(operationGeneration)) {
+        return;
+      }
       _state = _state.copyWith(
         status: CoreConnectionStatus.failed,
         errorMessage: 'The native core could not be reached.',
@@ -53,9 +74,17 @@ final class CoreDiagnosticsViewModel extends ChangeNotifier {
     }
   }
 
+  bool _isCurrent(int operationGeneration) {
+    return !_isDisposed && operationGeneration == _operationGeneration;
+  }
+
   @override
   void dispose() {
-    unawaited(_eventSubscription?.cancel());
+    _isDisposed = true;
+    _operationGeneration++;
+    final eventSubscription = _eventSubscription;
+    _eventSubscription = null;
+    unawaited(eventSubscription?.cancel());
     super.dispose();
   }
 }
