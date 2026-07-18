@@ -1,0 +1,4 @@
+rust_input: crate::api
+rust_root: crates/swar_core
+dart_output: apps/swar_desktop/lib/generated_bridge
+

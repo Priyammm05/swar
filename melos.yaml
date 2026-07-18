@@ -1,0 +1,14 @@
+name: swar
+packages:
+  - apps/*
+
+scripts:
+  analyze:
+    run: flutter analyze
+    exec:
+      concurrency: 1
+  test:
+    run: flutter test
+    exec:
+      concurrency: 1
+
