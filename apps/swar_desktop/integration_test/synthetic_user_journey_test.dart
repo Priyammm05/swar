@@ -47,7 +47,7 @@ void main() {
         settingsRepository: InMemorySettingsRepository(),
       ),
     );
-    await tester.pumpAndSettle();
+    await _settle(tester);
 
     expect(find.byKey(const Key('swar-shell')), findsOneWidget);
     expect(find.text('Insights'), findsWidgets);
@@ -57,10 +57,10 @@ void main() {
     await _captureFlutterSurface(binding, tester, 'shell-001-insights');
 
     tester.view.physicalSize = const Size(1405, 760);
-    await tester.pumpAndSettle();
+    await _settle(tester);
 
     await tester.tap(find.byKey(const Key('top-dictation-nav')));
-    await tester.pumpAndSettle();
+    await _settle(tester);
     expect(find.byKey(const Key('dictation-list')), findsOneWidget);
     expect(find.byKey(const Key('dictation-record-0')), findsOneWidget);
     expect(find.byKey(const Key('dictation-record-9999')), findsNothing);
@@ -82,14 +82,14 @@ void main() {
     await tester.pump();
 
     tester.view.physicalSize = const Size(620, 700);
-    await tester.pumpAndSettle();
+    await _settle(tester);
     expect(find.byKey(const Key('compact-navigation')), findsOneWidget);
     expect(find.byKey(const Key('top-dictation-nav')), findsNothing);
     _recordCheck(binding, 'SHELL-002 compact navigation replaces the sidebar');
     await _captureFlutterSurface(binding, tester, 'shell-002-compact');
 
     await tester.tap(find.byKey(const Key('compact-insights-nav')));
-    await tester.pumpAndSettle();
+    await _settle(tester);
     expect(find.byKey(const Key('insights-grid')), findsOneWidget);
     expect(find.text('Desktop usage'), findsOneWidget);
     _recordCheck(
@@ -98,11 +98,11 @@ void main() {
     );
 
     tester.view.physicalSize = const Size(1600, 1000);
-    await tester.pumpAndSettle();
+    await _settle(tester);
     expect(find.byKey(const Key('top-navigation')), findsOneWidget);
 
     await tester.tap(find.byKey(const Key('top-settings-nav')));
-    await tester.pumpAndSettle();
+    await _settle(tester);
     expect(find.byKey(const Key('settings-dialog')), findsOneWidget);
     expect(find.byKey(const Key('general-settings-page')), findsOneWidget);
     expect(find.byKey(const Key('writing-mode-setting')), findsOneWidget);
@@ -115,10 +115,12 @@ void main() {
     await tester.scrollUntilVisible(
       testDictation,
       260,
-      scrollable: find.descendant(
-        of: find.byKey(const Key('general-settings-scroll')),
-        matching: find.byType(Scrollable),
-      ).first,
+      scrollable: find
+          .descendant(
+            of: find.byKey(const Key('general-settings-scroll')),
+            matching: find.byType(Scrollable),
+          )
+          .first,
     );
     await tester.tap(testDictation);
     await tester.pump();
@@ -132,20 +134,20 @@ void main() {
     );
 
     await tester.tap(find.byKey(const Key('settings-system-nav')));
-    await tester.pumpAndSettle();
+    await _settle(tester);
     expect(find.byKey(const Key('system-settings-page')), findsOneWidget);
     final launchAtLogin = find.byKey(const Key('launch-at-login-setting'));
     await tester.ensureVisible(launchAtLogin);
-    await tester.pumpAndSettle();
+    await _settle(tester);
     await tester.tap(launchAtLogin);
     await tester.pump();
 
     await tester.tap(find.byKey(const Key('settings-close-button')));
-    await tester.pumpAndSettle();
+    await _settle(tester);
     await tester.tap(find.byKey(const Key('top-settings-nav')));
-    await tester.pumpAndSettle();
+    await _settle(tester);
     await tester.tap(find.byKey(const Key('settings-system-nav')));
-    await tester.pumpAndSettle();
+    await _settle(tester);
     final launchSetting = tester.widget<SwitchListTile>(
       find.descendant(
         of: find.byKey(const Key('launch-at-login-setting')),
@@ -159,12 +161,14 @@ void main() {
     await tester.scrollUntilVisible(
       checkButton,
       300,
-      scrollable: find.descendant(
-        of: find.byKey(const Key('system-settings-scroll')),
-        matching: find.byType(Scrollable),
-      ).first,
+      scrollable: find
+          .descendant(
+            of: find.byKey(const Key('system-settings-scroll')),
+            matching: find.byType(Scrollable),
+          )
+          .first,
     );
-    await tester.pumpAndSettle();
+    await _settle(tester);
     final buttonSemantics = tester.getSemantics(checkButton);
     expect(buttonSemantics.label, contains('Run system check'));
     expect(buttonSemantics.flagsCollection.isButton, isTrue);
@@ -197,7 +201,7 @@ void main() {
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
     await tester.pump();
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
-    await tester.pumpAndSettle();
+    await _settle(tester);
     expect(find.text('Connected. Version 0.1.0'), findsOneWidget);
     expect(find.byKey(const Key('core-event-5')), findsOneWidget);
     _recordCheck(
@@ -327,6 +331,14 @@ Future<Duration> _pumpUntilFound(
     reason: 'The expected user-visible state did not appear within $timeout.',
   );
   return elapsed;
+}
+
+Future<void> _settle(WidgetTester tester) async {
+  await tester.pumpAndSettle(
+    const Duration(milliseconds: 100),
+    EnginePhase.sendSemanticsUpdate,
+    const Duration(seconds: 8),
+  );
 }
 
 Future<void> _pumpUntilAbsent(
