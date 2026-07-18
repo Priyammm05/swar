@@ -1,0 +1,86 @@
+# Product planning source
+# This is the only Markdown file intentionally ignored.
+/swar.md
+
+# Operating system files
+.DS_Store
+._*
+Thumbs.db
+Desktop.ini
+
+# Editors and IDEs
+.idea/
+.vscode/
+*.iml
+*.ipr
+*.iws
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.swp
+*.swo
+*~
+
+# Logs, temporary files, and test output
+*.log
+*.tmp
+*.temp
+*.pid
+coverage/
+**/coverage/
+
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+*.local
+
+# Flutter, Dart, and Pub
+**/.dart_tool/
+**/.flutter-plugins
+**/.flutter-plugins-dependencies
+**/.packages
+**/.pub/
+**/.pub-cache/
+**/build/
+**/doc/api/
+**/migrate_working_dir/
+
+# Rust and Cargo
+/target/
+**/target/
+
+# macOS, Xcode, and CocoaPods
+**/Pods/
+**/.symlinks/
+**/Flutter/ephemeral/
+**/DerivedData/
+**/xcuserdata/
+*.xcuserstate
+*.xccheckout
+
+# Windows, Visual Studio, and CMake
+**/.vs/
+**/cmake-build-*/
+**/CMakeFiles/
+**/CMakeCache.txt
+**/Debug/
+**/Release/
+**/RelWithDebInfo/
+**/MinSizeRel/
+
+# Downloaded local models and generated benchmark artifacts
+/models/downloads/
+/models/**/*.gguf
+/models/**/*.onnx
+/models/**/*.safetensors
+/models/**/*.bin
+/benchmark/audio/local/
+/benchmark/reports/generated/
+
+# Crash reports and local diagnostics
+*.dmp
+*.crash
+*.ips
+/diagnostics/
