@@ -1,0 +1,11 @@
+.github/workflows/ci.yaml
+.github/publish-groups/04-offline-dictation-core.txt
+.github/publish-groups/05-dictation-history-and-activation.txt
+.github/publish-groups/06-insights-and-visual-system.txt
+.github/publish-groups/07-native-overlay-and-settings.txt
+.github/publish-groups/08-project-evidence-and-publish-manifests.txt
+README.md
+docs/phase-0.md
+quality/user-testing/scenarios/phase-1-shell.md
+scripts/run_synthetic_user_test.sh
+swar_addition.md

@@ -4,7 +4,7 @@ This plan checks whether Swar's first product shell feels clear, private, respon
 
 ## Automation map
 
-The synthetic-user journey covers `SHELL-001`, `SHELL-002`, and the deterministic parts of `SHELL-003`. It opens the real macOS or Windows application, searches a virtualised history, resizes the window, navigates every approved page, persists a mock setting, interrupts the lifecycle, and captures screenshots. Human review still decides whether the wording, hierarchy, density, and window behaviour feel natural.
+The synthetic-user journey covers `SHELL-001`, `SHELL-002`, and the deterministic parts of `SHELL-003`. It opens the real macOS or Windows application, reviews Insights, searches a virtualised history, resizes the window, opens Settings, persists a mock setting, interrupts the lifecycle, and captures screenshots. Human review still decides whether the wording, hierarchy, density, and window behaviour feel natural.
 
 ## Preconditions
 
@@ -13,13 +13,14 @@ The synthetic-user journey covers `SHELL-001`, `SHELL-002`, and the deterministi
 - Record the operating system version, processor family, memory, display scaling, window size, and appearance mode.
 - Remember that dictations and insight totals are sample data. Do not enter private content.
 
-## Task SHELL-001: Find a recent dictation
+## Task SHELL-001: Understand activity and find a recent dictation
 
-Open Swar, understand what the first page contains, then find history related to the word `launch`.
+Open Swar, understand what the first page contains, then move to Dictation and find history related to the word `launch`.
 
 ### Success criteria
 
-- Dictation is clearly the starting page.
+- Insights is clearly the starting page and its values are identified as preview data.
+- Dictation is easy to find as the second destination.
 - The history feels responsive even though it represents 10,000 records.
 - Search changes the visible results without freezing or losing the search field.
 - The page makes local storage clear without an alarming privacy claim.
@@ -36,8 +37,8 @@ Make the window narrow, then visit Insights and Settings using the navigation th
 
 ### Success criteria
 
-- Navigation adapts without hiding an approved page.
-- Dictation, Insights, General Settings, and System Settings remain reachable.
+- Navigation adapts without hiding either product destination or Settings.
+- Insights and Dictation remain reachable, and Settings opens as a dialog with General and System sections.
 - No text, card, control, or navigation label is clipped or overlapped.
 - Insights clearly identifies its values as preview data.
 
@@ -49,7 +50,7 @@ Make the window narrow, then visit Insights and Settings using the navigation th
 
 ## Task SHELL-003: Change a setting and return after interruption
 
-Turn on launch at login in System Settings. Visit another page, return, switch to another application, and then return to Swar.
+Turn on launch at login in System Settings. Close and reopen Settings, switch to another application, and then return to Swar.
 
 ### Success criteria
 

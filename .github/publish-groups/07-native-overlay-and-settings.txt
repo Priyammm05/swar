@@ -1,0 +1,10 @@
+apps/swar_desktop/lib/dictation/data/platform_desktop_shortcut_gateway.dart
+apps/swar_desktop/lib/dictation/domain/desktop_shortcut_gateway.dart
+apps/swar_desktop/lib/settings/presentation/settings_page.dart
+apps/swar_desktop/lib/settings/presentation/settings_view_model.dart
+apps/swar_desktop/macos/Runner/Info.plist
+apps/swar_desktop/macos/Runner/MainFlutterWindow.swift
+apps/swar_desktop/windows/runner/flutter_window.cpp
+apps/swar_desktop/windows/runner/flutter_window.h
+scripts/sign_local_macos.sh
+docs/compatibility.md

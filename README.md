@@ -58,7 +58,7 @@ The initial architecture milestone is `0.1.0`. Flutter package metadata and the 
 
 See [`docs/phase-0.md`](docs/phase-0.md) for the completed architecture health-check evidence.
 
-Phase 1 is the responsive product shell with fake local data and automated user journeys. See [`docs/phase-1.md`](docs/phase-1.md) for its scope and acceptance checks.
+Phase 1 now has the responsive product shell, local SQLite history and insights, the native audio/transcription boundary, and automated user journeys. See [`docs/phase-1.md`](docs/phase-1.md) for its scope and acceptance checks.
 
 ## GitHub access on restricted laptops
 

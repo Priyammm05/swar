@@ -1,0 +1,11 @@
+apps/swar_desktop/assets/fonts/Manrope-OFL.txt
+apps/swar_desktop/assets/fonts/Manrope-VariableFont_wght.ttf
+apps/swar_desktop/lib/design_system/swar_colors.dart
+apps/swar_desktop/lib/design_system/swar_theme.dart
+apps/swar_desktop/lib/insights/data/fake_insights_repository.dart
+apps/swar_desktop/lib/insights/data/rust_insights_repository.dart
+apps/swar_desktop/lib/insights/domain/insights_repository.dart
+apps/swar_desktop/lib/insights/domain/insights_snapshot.dart
+apps/swar_desktop/lib/insights/presentation/insights_page.dart
+apps/swar_desktop/lib/insights/presentation/insights_view_model.dart
+apps/swar_desktop/pubspec.yaml

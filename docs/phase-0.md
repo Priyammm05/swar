@@ -48,4 +48,4 @@ The Windows build is produced and uploaded by GitHub Actions because the local d
 
 ## What comes next
 
-Phase 1 replaces the diagnostics-first experience with the Dictation, Insights, General Settings, and System Settings shell. The health check moves to System Settings or remains available only in development builds.
+Phase 1 replaces the diagnostics-first experience with an Insights-first shell, Dictation history, and a Settings dialog. The health check moves into the System section of Settings or remains available only in development builds.

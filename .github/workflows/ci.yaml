@@ -27,6 +27,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Install native build dependencies
+        run: sudo apt-get update && sudo apt-get install -y cmake clang libasound2-dev libxkbcommon-dev
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: 1.88.0
@@ -51,6 +53,7 @@ jobs:
         with:
           toolchain: 1.88.0
           targets: aarch64-apple-darwin,x86_64-apple-darwin
+      - run: brew install cmake
       - run: flutter pub get
       - run: flutter test integration_test/core_bridge_test.dart -d macos
       - run: ../../scripts/run_synthetic_user_test.sh macos
@@ -83,6 +86,8 @@ jobs:
         with:
           toolchain: 1.88.0
           targets: x86_64-pc-windows-msvc
+      - name: Confirm native build tools
+        run: cmake --version && clang --version
       - run: flutter pub get
       - run: flutter test integration_test/core_bridge_test.dart -d windows
       - run: ../../scripts/run_synthetic_user_test.sh windows

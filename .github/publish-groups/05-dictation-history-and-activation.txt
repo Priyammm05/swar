@@ -1,0 +1,11 @@
+apps/swar_desktop/lib/app/swar_app.dart
+apps/swar_desktop/lib/app/swar_router.dart
+apps/swar_desktop/lib/app/swar_routes.dart
+apps/swar_desktop/lib/app/swar_shell.dart
+apps/swar_desktop/lib/dictation/application/dictation_activation_controller.dart
+apps/swar_desktop/lib/dictation/data/fake_dictation_history_repository.dart
+apps/swar_desktop/lib/dictation/data/rust_dictation_history_repository.dart
+apps/swar_desktop/lib/dictation/domain/dictation_history_repository.dart
+apps/swar_desktop/lib/dictation/presentation/dictation_history_view_model.dart
+apps/swar_desktop/lib/dictation/presentation/dictation_page.dart
+apps/swar_desktop/lib/dictation/presentation/dictation_session_view_model.dart

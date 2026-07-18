@@ -25,6 +25,11 @@ case "$target" in
 esac
 
 cd "$project_root/apps/swar_desktop"
+
+# Product builds never need developer service credentials. Keep them out of
+# Xcode/MSBuild child processes and their diagnostic logs.
+unset GITHUB_TOKEN GH_TOKEN OPENAI_API_KEY ANTHROPIC_API_KEY GEMINI_API_KEY
+
 run_log=$(mktemp "${TMPDIR:-/tmp}/swar-synthetic-user.XXXXXX")
 trap 'rm -f "$run_log"' EXIT HUP INT TERM
 
