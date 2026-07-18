@@ -68,7 +68,7 @@ final class DictationSessionViewModel extends ChangeNotifier {
     try {
       final completion = await _gateway.finish(sessionId);
       _state = DictationSessionState.idle;
-      _message = completion.insertionStatus == 'pasted'
+      _message = completion.insertionStatus == 'inserted'
           ? 'Dictation pasted.'
           : 'Dictation copied to the clipboard.';
     } catch (error) {

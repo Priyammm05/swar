@@ -7,62 +7,47 @@ import 'package:swar_desktop/app/swar_shell.dart';
 import 'package:swar_desktop/diagnostics/domain/core_diagnostics_gateway.dart';
 import 'package:swar_desktop/dictation/domain/dictation_history_repository.dart';
 import 'package:swar_desktop/dictation/presentation/dictation_page.dart';
+import 'package:swar_desktop/dictation/presentation/dictation_session_view_model.dart';
 import 'package:swar_desktop/insights/presentation/insights_page.dart';
-import 'package:swar_desktop/settings/presentation/settings_page.dart';
+import 'package:swar_desktop/insights/domain/insights_repository.dart';
 import 'package:swar_desktop/settings/presentation/settings_view_model.dart';
 
 /// Router Composition. Application Layer.
 GoRouter createSwarRouter({
   required DictationHistoryRepository dictationRepository,
+  required InsightsRepository insightsRepository,
   required SettingsViewModel settingsViewModel,
   required CoreDiagnosticsGateway diagnosticsGateway,
+  required DictationSessionViewModel dictationSessionViewModel,
 }) {
   return GoRouter(
-    initialLocation: SwarRoutes.dictation,
+    initialLocation: SwarRoutes.insights,
     routes: [
       StatefulShellRoute.indexedStack(
         builder: (context, state, navigationShell) {
-          return SwarShell(navigationShell: navigationShell);
+          return SwarShell(
+            navigationShell: navigationShell,
+            settingsViewModel: settingsViewModel,
+            diagnosticsGateway: diagnosticsGateway,
+            dictationSessionViewModel: dictationSessionViewModel,
+          );
         },
         branches: [
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: SwarRoutes.insights,
+                builder: (context, state) =>
+                    InsightsPage(repository: insightsRepository),
+              ),
+            ],
+          ),
           StatefulShellBranch(
             routes: [
               GoRoute(
                 path: SwarRoutes.dictation,
                 builder: (context, state) {
                   return DictationPage(repository: dictationRepository);
-                },
-              ),
-            ],
-          ),
-          StatefulShellBranch(
-            routes: [
-              GoRoute(
-                path: SwarRoutes.insights,
-                builder: (context, state) => const InsightsPage(),
-              ),
-            ],
-          ),
-          StatefulShellBranch(
-            routes: [
-              GoRoute(
-                path: SwarRoutes.generalSettings,
-                builder: (context, state) {
-                  return SettingsPage(
-                    section: SettingsSection.general,
-                    viewModel: settingsViewModel,
-                    diagnosticsGateway: diagnosticsGateway,
-                  );
-                },
-              ),
-              GoRoute(
-                path: SwarRoutes.systemSettings,
-                builder: (context, state) {
-                  return SettingsPage(
-                    section: SettingsSection.system,
-                    viewModel: settingsViewModel,
-                    diagnosticsGateway: diagnosticsGateway,
-                  );
                 },
               ),
             ],

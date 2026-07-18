@@ -24,7 +24,16 @@ final class DictationQuery {
 /// Repository Contract. Domain Layer.
 /// Phase 2 will implement this contract through paginated Rust and SQLite APIs.
 abstract interface class DictationHistoryRepository {
-  int recordCount(DictationQuery query);
+  Future<DictationHistoryPage> loadPage(
+    DictationQuery query, {
+    required int offset,
+    required int limit,
+  });
+}
 
-  DictationRecord recordAt(int index, DictationQuery query);
+final class DictationHistoryPage {
+  const DictationHistoryPage({required this.totalCount, required this.records});
+
+  final int totalCount;
+  final List<DictationRecord> records;
 }

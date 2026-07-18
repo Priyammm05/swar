@@ -170,8 +170,8 @@ final class _DictationControl extends StatelessWidget {
         sessionViewModel.state == DictationSessionState.finalising;
     return Tooltip(
       message: recording
-          ? 'Stop and transcribe (Control + Space)'
-          : 'Start dictation (Control + Space)',
+          ? 'Stop and transcribe (Option)'
+          : 'Start dictation (Option)',
       child: FilledButton.icon(
         key: const Key('global-dictation-control'),
         onPressed: busy
@@ -212,6 +212,7 @@ final class _DictationControl extends StatelessWidget {
     return sessionViewModel.start(
       DictationEngineConfig(
         modelPath: settings.modelPath,
+        microphoneId: settings.microphoneId,
         language: settings.language.name,
         writingMode: settings.writingMode.name,
         pasteAutomatically: settings.pasteAutomatically,

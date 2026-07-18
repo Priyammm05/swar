@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import 'package:swar_desktop/app/swar_router.dart';
 import 'package:swar_desktop/design_system/swar_theme.dart';
 import 'package:swar_desktop/diagnostics/domain/core_diagnostics_gateway.dart';
+import 'package:swar_desktop/dictation/application/dictation_activation_controller.dart';
 import 'package:swar_desktop/dictation/domain/dictation_history_repository.dart';
 import 'package:swar_desktop/dictation/domain/dictation_engine_gateway.dart';
 import 'package:swar_desktop/dictation/domain/desktop_shortcut_gateway.dart';
@@ -42,7 +43,8 @@ final class _SwarAppState extends State<SwarApp> {
   late final SettingsViewModel _settingsViewModel;
   late final DictationSessionViewModel _dictationSessionViewModel;
   late final GoRouter _router;
-  StreamSubscription<void>? _shortcutSubscription;
+  late final DictationActivationController _activationController;
+  StreamSubscription<DesktopShortcutEvent>? _shortcutSubscription;
 
   @override
   void initState() {
@@ -53,10 +55,20 @@ final class _SwarAppState extends State<SwarApp> {
     _dictationSessionViewModel = DictationSessionViewModel(
       gateway: widget.dictationEngineGateway,
     );
-    _shortcutSubscription = widget.desktopShortcutGateway.activations.listen(
-      (_) => _toggleDictation(),
+    _activationController = DictationActivationController(
+      start: _startDictation,
+      finish: _dictationSessionViewModel.finish,
+      cancel: _dictationSessionViewModel.cancel,
+      modeChanged: _syncOverlay,
     );
-    unawaited(widget.desktopShortcutGateway.initialize());
+    _dictationSessionViewModel.addListener(_syncOverlay);
+    _settingsViewModel.addListener(_syncOverlay);
+    _shortcutSubscription = widget.desktopShortcutGateway.events.listen(
+      (event) => unawaited(_activationController.handle(event)),
+    );
+    unawaited(
+      widget.desktopShortcutGateway.initialize().then((_) => _syncOverlay()),
+    );
     _router = createSwarRouter(
       dictationRepository: widget.dictationRepository,
       insightsRepository: widget.insightsRepository,
@@ -69,6 +81,9 @@ final class _SwarAppState extends State<SwarApp> {
   @override
   void dispose() {
     _shortcutSubscription?.cancel();
+    _dictationSessionViewModel.removeListener(_syncOverlay);
+    _settingsViewModel.removeListener(_syncOverlay);
+    _activationController.dispose();
     unawaited(widget.desktopShortcutGateway.dispose());
     _router.dispose();
     _settingsViewModel.dispose();
@@ -76,15 +91,7 @@ final class _SwarAppState extends State<SwarApp> {
     super.dispose();
   }
 
-  Future<void> _toggleDictation() async {
-    if (_dictationSessionViewModel.isRecording) {
-      await _dictationSessionViewModel.finish();
-      return;
-    }
-    if (_dictationSessionViewModel.state == DictationSessionState.finalising ||
-        _dictationSessionViewModel.state == DictationSessionState.preparing) {
-      return;
-    }
+  Future<bool> _startDictation() async {
     final settings = _settingsViewModel.settings;
     if (settings.pasteAutomatically) {
       await widget.desktopShortcutGateway.requestInsertionPermission();
@@ -92,10 +99,35 @@ final class _SwarAppState extends State<SwarApp> {
     await _dictationSessionViewModel.start(
       DictationEngineConfig(
         modelPath: settings.modelPath,
+        microphoneId: settings.microphoneId,
         language: settings.language.name,
         writingMode: settings.writingMode.name,
         pasteAutomatically: settings.pasteAutomatically,
         restoreClipboard: settings.restoreClipboard,
+      ),
+    );
+    return _dictationSessionViewModel.state != DictationSessionState.failed;
+  }
+
+  void _syncOverlay() {
+    final overlayState = switch (_dictationSessionViewModel.state) {
+      DictationSessionState.preparing => DesktopOverlayState.preparing,
+      DictationSessionState.recording => DesktopOverlayState.recording,
+      DictationSessionState.finalising => DesktopOverlayState.finalising,
+      DictationSessionState.idle || DictationSessionState.failed =>
+        _settingsViewModel.settings.showSwarBar
+            ? DesktopOverlayState.idle
+            : null,
+    };
+    if (overlayState == null) {
+      unawaited(widget.desktopShortcutGateway.hideOverlay());
+      return;
+    }
+    unawaited(
+      widget.desktopShortcutGateway.updateOverlay(
+        state: overlayState,
+        audioLevel: _dictationSessionViewModel.audioLevel,
+        isLatched: _activationController.isLatched,
       ),
     );
   }
