@@ -1,3 +1,4 @@
 # plan-name|relative-path
 phase-0-foundation|quality/user-testing/scenarios/phase-0-foundation.md
 phase-1-shell|quality/user-testing/scenarios/phase-1-shell.md
+phase-2-dictation|quality/user-testing/scenarios/phase-2-dictation.md

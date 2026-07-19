@@ -41,6 +41,31 @@ void main() {
     expect(viewModel.hasMore, isFalse);
   });
 
+  test('shows every available row when history has fewer than fifty', () async {
+    final viewModel = DictationHistoryViewModel(
+      repository: FakeDictationHistoryRepository(totalRecordCount: 6),
+    );
+    addTearDown(viewModel.dispose);
+
+    await viewModel.load();
+
+    expect(viewModel.records, hasLength(6));
+    expect(viewModel.totalCount, 6);
+    expect(viewModel.hasMore, isFalse);
+  });
+
+  test('does not offer another page when exactly fifty rows exist', () async {
+    final viewModel = DictationHistoryViewModel(
+      repository: FakeDictationHistoryRepository(totalRecordCount: 50),
+    );
+    addTearDown(viewModel.dispose);
+
+    await viewModel.load();
+
+    expect(viewModel.records, hasLength(50));
+    expect(viewModel.hasMore, isFalse);
+  });
+
   test('a successful correction refreshes the visible history', () async {
     final viewModel = DictationHistoryViewModel(
       repository: FakeDictationHistoryRepository(totalRecordCount: 1),
