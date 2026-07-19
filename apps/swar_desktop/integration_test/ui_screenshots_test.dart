@@ -28,6 +28,9 @@ void main() {
     tester.view
       ..physicalSize = const Size(2160, 3200)
       ..devicePixelRatio = 2;
+    // Force light so the captures match the light-mode design mockups.
+    tester.platformDispatcher.platformBrightnessTestValue = ui.Brightness.light;
+    addTearDown(tester.platformDispatcher.clearPlatformBrightnessTestValue);
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
 

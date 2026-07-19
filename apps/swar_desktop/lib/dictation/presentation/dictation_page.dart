@@ -510,7 +510,7 @@ final class _EntryRowState extends State<_EntryRow> {
                   AnimatedOpacity(
                     duration: const Duration(milliseconds: 120),
                     opacity: _hover ? 0 : 1,
-                    child: _LanguageBadge(language: record.language),
+                    child: _RowBadge(record: record),
                   ),
                   AnimatedOpacity(
                     duration: const Duration(milliseconds: 120),
@@ -598,25 +598,42 @@ final class _RowActions extends StatelessWidget {
   }
 }
 
-final class _LanguageBadge extends StatelessWidget {
-  const _LanguageBadge({required this.language});
+/// The at-rest badge for a row: a "copied" status when insertion fell back to
+/// the clipboard, otherwise the detected-language chip (§6.4).
+final class _RowBadge extends StatelessWidget {
+  const _RowBadge({required this.record});
 
-  final DictationLanguage language;
+  final DictationRecord record;
 
   @override
   Widget build(BuildContext context) {
     final t = context.tokens;
-    // Only a resolved detection earns a badge: Hindi -> HI, English -> EN,
-    // genuinely code-mixed -> HI+EN. An unresolved (automatic) record shows
-    // none rather than a misleading label.
-    final badge = switch (language) {
+    if (record.wasCopiedFallback) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+        decoration: BoxDecoration(
+          color: t.saffronTint,
+          borderRadius: BorderRadius.circular(SwarRadii.pill),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.assignment_turned_in_outlined,
+              size: 12,
+              color: t.saffronInk,
+            ),
+            const SizedBox(width: 4),
+            Text('copied', style: SwarType.badge.copyWith(color: t.saffronInk)),
+          ],
+        ),
+      );
+    }
+    final (label, fg, bg) = switch (record.detectedLanguage) {
       DictationLanguage.hinglish => ('HI+EN', t.mixInk, t.mixTint),
       DictationLanguage.hindi => ('HI', t.mixInk, t.mixTint),
-      DictationLanguage.english => ('EN', t.spruce, t.spruceTint),
-      DictationLanguage.automatic => null,
+      _ => ('EN', t.spruce, t.spruceTint),
     };
-    if (badge == null) return const SizedBox.shrink();
-    final (label, fg, bg) = badge;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       decoration: BoxDecoration(

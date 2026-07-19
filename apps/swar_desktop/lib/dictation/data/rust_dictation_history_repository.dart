@@ -41,6 +41,7 @@ final class RustDictationHistoryRepository
             writingMode: _writingMode(record.writingMode),
             wordCount: record.wordCount,
             duration: Duration(milliseconds: record.audioDurationMs.toInt()),
+            insertionStatus: record.insertionStatus,
           ),
         )
         .toList(growable: false);

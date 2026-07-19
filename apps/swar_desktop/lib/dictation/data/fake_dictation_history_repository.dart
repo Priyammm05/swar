@@ -89,6 +89,7 @@ final class FakeDictationHistoryRepository
           .values[sourceIndex % DictationWritingMode.values.length],
       wordCount: text.split(' ').length,
       duration: Duration(seconds: 4 + (sourceIndex % 24)),
+      insertionStatus: sourceIndex % 6 == 5 ? 'copied' : 'inserted',
     );
   }
 }
