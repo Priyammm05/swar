@@ -22,23 +22,30 @@ make_fixture() {
 }
 
 run_case() {
-  language=$1
-  voice=$2
-  case_file=$3
-  maximum_wer=$4
-  wav_file="$fixture_dir/$language.wav"
+  case_id=$1
+  language=$2
+  voice=$3
+  case_file=$4
+  maximum_wer=$5
+  maximum_rtf=$6
+  wav_file="$fixture_dir/$case_id.wav"
   make_fixture "$voice" "$case_file" "$wav_file"
   SWAR_BENCHMARK_MAX_WER="$maximum_wer" \
-  SWAR_BENCHMARK_MAX_RTF=1.0 \
+  SWAR_BENCHMARK_MAX_RTF="$maximum_rtf" \
     cargo run --quiet -p swar_core --bin swar_asr_benchmark -- \
     "$model_path" "$wav_file" "$language" "$case_file"
 }
 
 case "$(uname -s)" in
   Darwin)
-    run_case english Aman "$repo_dir/benchmark/cases/english-01.txt" 0.35
-    run_case hindi Lekha "$repo_dir/benchmark/cases/hindi-01.txt" 0.55
-    run_case hinglish Aman "$repo_dir/benchmark/cases/hinglish-01.txt" 0.30
+    run_case english-long english Aman "$repo_dir/benchmark/cases/english-01.txt" 0.35 1.0
+    run_case hindi-long hindi Lekha "$repo_dir/benchmark/cases/hindi-01.txt" 0.55 1.0
+    run_case hinglish-long hinglish Aman "$repo_dir/benchmark/cases/hinglish-01.txt" 0.30 1.0
+    # Short speech caught a production regression where detect_language=true
+    # returned after detection without decoding any transcript segments.
+    run_case automatic-english-short automatic Aman "$repo_dir/benchmark/cases/english-short.txt" 0.35 1.8
+    run_case automatic-hindi-short automatic Lekha "$repo_dir/benchmark/cases/hindi-short.txt" 0.55 1.8
+    run_case hinglish-short hinglish Lekha "$repo_dir/benchmark/cases/hinglish-short.txt" 0.55 1.8
     ;;
   *)
     echo "Synthetic ASR fixtures currently require the macOS say and afconvert tools." >&2

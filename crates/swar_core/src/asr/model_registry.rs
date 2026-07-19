@@ -249,9 +249,15 @@ fn transcribe_with_context(
     if let Some(prompt) = decoding.initial_prompt {
         params.set_initial_prompt(prompt);
     }
-    if let Some(vad_model) = vad_model_next_to(model_path) {
-        params.set_vad_model_path(vad_model.to_str());
-        params.enable_vad(true);
+    // Final dictation has already passed Swar's conservative native energy
+    // gate and has been trimmed with edge padding. Running Silero again here
+    // can discard valid sub-two-second utterances and return no segments.
+    // Preview snapshots have not passed that final gate, so they retain VAD.
+    if uses_whisper_vad(preview) {
+        if let Some(vad_model) = vad_model_next_to(model_path) {
+            params.set_vad_model_path(vad_model.to_str());
+            params.enable_vad(true);
+        }
     }
     state
         .full(params, samples)
@@ -263,6 +269,10 @@ fn transcribe_with_context(
         .join(" ")
         .trim()
         .to_owned())
+}
+
+fn uses_whisper_vad(preview: bool) -> bool {
+    preview
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -292,14 +302,17 @@ fn language_decoding(language: &str) -> LanguageDecoding {
             initial_prompt: Some(
                 "Write Hindi and English exactly as spoken using Roman script. Kal meeting hai. Deployment ready hai kya?",
             ),
-            detect_language: true,
+            // A null language asks whisper.cpp to auto-detect and continue.
+            // Its detect_language flag is detection-only and returns before
+            // decoding any transcript segments.
+            detect_language: false,
         },
         _ => LanguageDecoding {
             whisper_language: None,
             // A vocabulary prompt can bias Whisper's language detector toward
             // English. Auto mode intentionally detects from speech alone.
             initial_prompt: None,
-            detect_language: true,
+            detect_language: false,
         },
     }
 }
@@ -362,5 +375,13 @@ mod tests {
             .initial_prompt
             .is_some_and(|prompt| prompt.contains("Roman script")));
         assert_eq!(language_decoding("automatic").whisper_language, None);
+        assert!(!hinglish.detect_language);
+        assert!(!language_decoding("automatic").detect_language);
+    }
+
+    #[test]
+    fn final_dictation_does_not_apply_a_second_vad_pass() {
+        assert!(!uses_whisper_vad(false));
+        assert!(uses_whisper_vad(true));
     }
 }

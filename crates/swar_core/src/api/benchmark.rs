@@ -3,7 +3,7 @@ use std::{fs, path::Path, time::Instant};
 use flutter_rust_bridge::frb;
 use serde::Serialize;
 
-use crate::{asr::model_registry, enhancement, text_cleanup};
+use crate::{asr::model_registry, audio::speech, enhancement, text_cleanup};
 
 #[derive(Clone, Debug, Serialize)]
 pub struct TextPipelineBenchmarkReport {
@@ -41,8 +41,12 @@ pub fn run_asr_file_benchmark(
         return Err("benchmark WAV must be mono 16 kHz PCM16".to_owned());
     }
     let audio_milliseconds = samples.len() as u64 * 1_000 / sample_rate as u64;
+    let speech = speech::retain_probable_speech(&samples, sample_rate);
+    if speech.samples.is_empty() {
+        return Err("benchmark fixture did not contain probable speech".to_owned());
+    }
     let started = Instant::now();
-    let actual_text = model_registry::transcribe(model_path, language, &samples)?;
+    let actual_text = model_registry::transcribe(model_path, language, &speech.samples)?;
     let processing_milliseconds = started.elapsed().as_millis() as u64;
     Ok(AsrFileBenchmarkReport {
         language: language.to_owned(),
