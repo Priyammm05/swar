@@ -5,6 +5,17 @@ import 'package:swar_desktop/generated_bridge/api/history.dart' as native;
 final class RustDictationHistoryRepository
     implements DictationHistoryRepository {
   @override
+  Future<bool> correctDictation({
+    required String id,
+    required String correctedText,
+    required bool learningOptedIn,
+  }) => native.correctDictation(
+    id: id,
+    correctedText: correctedText,
+    learningOptedIn: learningOptedIn,
+  );
+
+  @override
   Future<DictationHistoryPage> loadPage(
     DictationQuery query, {
     required int offset,
@@ -37,6 +48,7 @@ final class RustDictationHistoryRepository
   }
 
   DictationLanguage _language(String value) => switch (value.toLowerCase()) {
+    'automatic' => DictationLanguage.automatic,
     'hindi' => DictationLanguage.hindi,
     'hinglish' => DictationLanguage.hinglish,
     _ => DictationLanguage.english,

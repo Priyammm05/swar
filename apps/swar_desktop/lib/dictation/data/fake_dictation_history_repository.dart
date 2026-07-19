@@ -33,6 +33,13 @@ final class FakeDictationHistoryRepository
   ];
 
   @override
+  Future<bool> correctDictation({
+    required String id,
+    required String correctedText,
+    required bool learningOptedIn,
+  }) async => correctedText.trim().isNotEmpty;
+
+  @override
   Future<DictationHistoryPage> loadPage(
     DictationQuery query, {
     required int offset,

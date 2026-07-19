@@ -84,4 +84,18 @@ final class DictationHistoryViewModel extends ChangeNotifier {
       notifyListeners();
     }
   }
+
+  Future<bool> correct(
+    DictationRecord record,
+    String correctedText, {
+    required bool learningOptedIn,
+  }) async {
+    final changed = await _repository.correctDictation(
+      id: record.id,
+      correctedText: correctedText,
+      learningOptedIn: learningOptedIn,
+    );
+    if (changed) await refresh();
+    return changed;
+  }
 }

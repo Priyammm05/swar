@@ -1,6 +1,6 @@
 // apps/swar_desktop/lib/dictation/domain/dictation_record.dart
 
-enum DictationLanguage { english, hindi, hinglish }
+enum DictationLanguage { automatic, english, hindi, hinglish }
 
 enum DictationWritingMode { raw, clean, intent }
 

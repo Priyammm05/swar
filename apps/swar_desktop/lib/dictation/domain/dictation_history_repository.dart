@@ -29,6 +29,12 @@ abstract interface class DictationHistoryRepository {
     required int offset,
     required int limit,
   });
+
+  Future<bool> correctDictation({
+    required String id,
+    required String correctedText,
+    required bool learningOptedIn,
+  });
 }
 
 final class DictationHistoryPage {

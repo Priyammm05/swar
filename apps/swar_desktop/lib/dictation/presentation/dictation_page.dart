@@ -7,17 +7,20 @@ import 'package:swar_desktop/dictation/domain/dictation_history_repository.dart'
 import 'package:swar_desktop/dictation/domain/dictation_record.dart';
 import 'package:swar_desktop/dictation/presentation/dictation_history_view_model.dart';
 import 'package:swar_desktop/dictation/presentation/dictation_session_view_model.dart';
+import 'package:swar_desktop/settings/presentation/settings_view_model.dart';
 
 /// Dictation overview translated from the approved HTML. Presentation Layer.
 final class DictationPage extends StatefulWidget {
   const DictationPage({
     required this.repository,
     required this.sessionViewModel,
+    required this.settingsViewModel,
     super.key,
   });
 
   final DictationHistoryRepository repository;
   final DictationSessionViewModel sessionViewModel;
+  final SettingsViewModel settingsViewModel;
 
   @override
   State<DictationPage> createState() => _DictationPageState();
@@ -103,6 +106,8 @@ final class _DictationPageState extends State<DictationPage> {
                       final feed = _TranscriptionFeed(
                         viewModel: _viewModel,
                         dense: dense,
+                        learningOptedIn:
+                            widget.settingsViewModel.settings.learnFromEdits,
                       );
                       if (wide) {
                         return Row(
@@ -302,10 +307,15 @@ final class _StreakSegment extends StatelessWidget {
 }
 
 final class _TranscriptionFeed extends StatelessWidget {
-  const _TranscriptionFeed({required this.viewModel, required this.dense});
+  const _TranscriptionFeed({
+    required this.viewModel,
+    required this.dense,
+    required this.learningOptedIn,
+  });
 
   final DictationHistoryViewModel viewModel;
   final bool dense;
+  final bool learningOptedIn;
 
   @override
   Widget build(BuildContext context) {
@@ -321,7 +331,11 @@ final class _TranscriptionFeed extends StatelessWidget {
         children: [
           _FeedHeader(viewModel: viewModel, dense: dense),
           Expanded(
-            child: _FeedBody(viewModel: viewModel, dense: dense),
+            child: _FeedBody(
+              viewModel: viewModel,
+              dense: dense,
+              learningOptedIn: learningOptedIn,
+            ),
           ),
           if (viewModel.hasMore)
             _FeedFooter(viewModel: viewModel, dense: dense),
@@ -432,10 +446,15 @@ final class _FeedHeader extends StatelessWidget {
 }
 
 final class _FeedBody extends StatelessWidget {
-  const _FeedBody({required this.viewModel, required this.dense});
+  const _FeedBody({
+    required this.viewModel,
+    required this.dense,
+    required this.learningOptedIn,
+  });
 
   final DictationHistoryViewModel viewModel;
   final bool dense;
+  final bool learningOptedIn;
 
   @override
   Widget build(BuildContext context) {
@@ -467,16 +486,24 @@ final class _FeedBody extends StatelessWidget {
         key: Key('dictation-record-$index'),
         record: viewModel.records[index],
         dense: dense,
+        onCorrect: (record, value) =>
+            viewModel.correct(record, value, learningOptedIn: learningOptedIn),
       ),
     );
   }
 }
 
 final class _TranscriptRow extends StatelessWidget {
-  const _TranscriptRow({required this.record, required this.dense, super.key});
+  const _TranscriptRow({
+    required this.record,
+    required this.dense,
+    required this.onCorrect,
+    super.key,
+  });
 
   final DictationRecord record;
   final bool dense;
+  final Future<bool> Function(DictationRecord record, String value) onCorrect;
 
   @override
   Widget build(BuildContext context) {
@@ -516,10 +543,48 @@ final class _TranscriptRow extends StatelessWidget {
                 style: const TextStyle(fontSize: 16, height: 1.5),
               ),
             ),
+            IconButton(
+              key: Key('edit-dictation-${record.id}'),
+              tooltip: 'Correct dictation',
+              onPressed: () => _showCorrectionDialog(context),
+              icon: const Icon(Icons.edit_outlined, size: 18),
+            ),
           ],
         ),
       ),
     );
+  }
+
+  Future<void> _showCorrectionDialog(BuildContext context) async {
+    final controller = TextEditingController(text: record.finalText);
+    final corrected = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Correct dictation'),
+        content: SizedBox(
+          width: 520,
+          child: TextField(
+            key: const Key('dictation-correction-field'),
+            controller: controller,
+            autofocus: true,
+            maxLines: 6,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            key: const Key('save-dictation-correction'),
+            onPressed: () => Navigator.of(context).pop(controller.text),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (corrected != null) await onCorrect(record, corrected);
   }
 }
 
