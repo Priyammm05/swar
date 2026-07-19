@@ -57,18 +57,19 @@ void main() {
     );
     await _settle(tester);
 
+    await _waitFor(tester, find.byKey(const Key('insights-grid')));
     await _shot(tester, 'insights');
 
     await tester.tap(find.byKey(const Key('top-dictation-nav')));
-    await _settle(tester);
+    await _waitFor(tester, find.byKey(const Key('dictation-list')));
     await _shot(tester, 'activity');
 
     await tester.tap(find.byKey(const Key('top-settings-nav')));
-    await _settle(tester);
+    await _waitFor(tester, find.byKey(const Key('general-settings-page')));
     await _shot(tester, 'settings-general');
 
     await tester.tap(find.byKey(const Key('settings-system-nav')));
-    await _settle(tester);
+    await _waitFor(tester, find.byKey(const Key('system-settings-page')));
     await _shot(tester, 'settings-system');
   });
 }
@@ -77,6 +78,13 @@ Future<void> _settle(WidgetTester tester) async {
   for (var i = 0; i < 12; i++) {
     await tester.pump(const Duration(milliseconds: 80));
   }
+}
+
+Future<void> _waitFor(WidgetTester tester, Finder finder) async {
+  for (var i = 0; i < 60 && finder.evaluate().isEmpty; i++) {
+    await tester.pump(const Duration(milliseconds: 80));
+  }
+  await _settle(tester);
 }
 
 Future<void> _shot(WidgetTester tester, String name) async {
