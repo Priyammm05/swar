@@ -462,6 +462,9 @@ fn finish_capture(capture: &mut ActiveCapture) -> Result<DictationCompletion, St
         insertion_method: insertion.method,
     })
     .map_err(|_| dictation_stage_error("history"))?;
+    // Best-effort: bound local history and learning data. A retention failure
+    // must never fail a completed dictation.
+    let _ = storage::enforce_history_retention();
     record_dictation_stage("completed");
 
     Ok(DictationCompletion {

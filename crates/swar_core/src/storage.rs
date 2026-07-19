@@ -35,6 +35,16 @@ struct LearningExample {
 
 static STORE: OnceLock<Mutex<HistoryStore>> = OnceLock::new();
 
+/// Default local-history retention. History and learning data sit only on this
+/// machine, so the value stays generous (a full year) until a user-facing
+/// control surfaces 30/90/180/365-day choices. `0` would mean "keep forever".
+pub(crate) const DEFAULT_HISTORY_RETENTION_DAYS: u32 = 365;
+const MILLISECONDS_PER_DAY: i64 = 86_400_000;
+/// Upper bounds so the learning and vocabulary tables cannot grow without limit
+/// (the vocabulary is scanned on every dictation's hot path).
+const MAX_LEARNING_EXAMPLES: i64 = 5_000;
+const MAX_VOCABULARY_ENTRIES: i64 = 1_000;
+
 pub(crate) struct NewDictation<'a> {
     pub id: &'a str,
     pub created_at_ms: i64,
@@ -97,6 +107,18 @@ pub(crate) fn load_insights_snapshot() -> Result<InsightsSnapshot, String> {
         .map_err(|_| "history store lock poisoned".to_owned())?;
     guard
         .load_insights_snapshot()
+        .map_err(|error| error.to_string())
+}
+
+/// Enforces the local retention window and table caps. Best-effort: a failure
+/// here must never fail the dictation that triggered it.
+pub(crate) fn enforce_history_retention() -> Result<(), String> {
+    let store = store()?;
+    let guard = store
+        .lock()
+        .map_err(|_| "history store lock poisoned".to_owned())?;
+    guard
+        .enforce_retention(DEFAULT_HISTORY_RETENTION_DAYS)
         .map_err(|error| error.to_string())
 }
 
@@ -311,8 +333,11 @@ impl HistoryStore {
 
     fn save_dictation(&self, record: NewDictation<'_>) -> rusqlite::Result<()> {
         let word_count = record.final_text.split_whitespace().count() as u32;
+        // Plain INSERT (ids are fresh UUIDs). INSERT OR REPLACE would delete the
+        // old row during conflict resolution without firing the FTS delete
+        // trigger unless recursive_triggers is on, orphaning FTS content.
         self.connection.execute(
-            "INSERT OR REPLACE INTO dictations (
+            "INSERT INTO dictations (
                 id, created_at, updated_at, raw_text, cleaned_text, final_text,
                 language_mode, writing_mode, source_app_name, audio_duration_ms,
                 speech_duration_ms, processing_duration_ms, word_count, asr_engine,
@@ -337,6 +362,27 @@ impl HistoryStore {
                 record.insertion_status,
                 record.insertion_method,
             ],
+        )?;
+        Ok(())
+    }
+
+    /// Deletes dictations older than the retention window and trims the
+    /// learning table to its cap. The `AFTER DELETE` trigger keeps the FTS
+    /// index consistent because this is a plain DELETE, not a REPLACE.
+    fn enforce_retention(&self, retention_days: u32) -> rusqlite::Result<()> {
+        if retention_days > 0 {
+            let horizon_ms = i64::from(retention_days) * MILLISECONDS_PER_DAY;
+            self.connection.execute(
+                "DELETE FROM dictations
+                 WHERE created_at < (unixepoch('subsec') * 1000 - ?1)",
+                params![horizon_ms],
+            )?;
+        }
+        self.connection.execute(
+            "DELETE FROM learning_examples WHERE id NOT IN (
+                 SELECT id FROM learning_examples ORDER BY id DESC LIMIT ?1
+             )",
+            params![MAX_LEARNING_EXAMPLES],
         )?;
         Ok(())
     }
@@ -478,12 +524,15 @@ impl HistoryStore {
     }
 
     fn vocabulary_entries(&self) -> rusqlite::Result<Vec<StoredVocabularyEntry>> {
+        // Bounded load: the cap is enforced on write, but LIMIT also protects a
+        // pre-existing oversized table on the per-dictation hot path.
         let mut statement = self.connection.prepare(
             "SELECT spoken, written, use_count FROM custom_vocabulary
-             ORDER BY use_count DESC, spoken ASC",
+             ORDER BY use_count DESC, spoken ASC
+             LIMIT ?1",
         )?;
         let entries = statement
-            .query_map([], |row| {
+            .query_map(params![MAX_VOCABULARY_ENTRIES], |row| {
                 Ok(StoredVocabularyEntry {
                     spoken: row.get(0)?,
                     written: row.get(1)?,
@@ -503,6 +552,17 @@ impl HistoryStore {
                  use_count = custom_vocabulary.use_count + 1,
                  updated_at = excluded.updated_at",
             params![spoken.trim(), written.trim()],
+        )?;
+        // Keep the table bounded so `apply_vocabulary` cannot scan an
+        // ever-growing set on every dictation. The least-used, oldest entries
+        // are dropped first.
+        self.connection.execute(
+            "DELETE FROM custom_vocabulary WHERE spoken NOT IN (
+                 SELECT spoken FROM custom_vocabulary
+                 ORDER BY use_count DESC, updated_at DESC
+                 LIMIT ?1
+             )",
+            params![MAX_VOCABULARY_ENTRIES],
         )?;
         Ok(())
     }
@@ -719,6 +779,59 @@ mod tests {
         assert_eq!(insights.total_dictations, 2);
         assert_eq!(insights.total_words, 5);
         assert!((insights.average_words_per_minute - 150.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn enforce_retention_prunes_old_dictations_and_keeps_recent_ones() {
+        let store = HistoryStore::open_in_memory().expect("in-memory store");
+        let now: i64 = store
+            .connection
+            .query_row(
+                "SELECT CAST(unixepoch('subsec') * 1000 AS INTEGER)",
+                [],
+                |row| row.get(0),
+            )
+            .expect("clock");
+        store
+            .save_dictation(record(
+                "old",
+                "ancient note",
+                now - 400 * MILLISECONDS_PER_DAY,
+            ))
+            .expect("old record");
+        store
+            .save_dictation(record(
+                "recent",
+                "fresh note",
+                now - 10 * MILLISECONDS_PER_DAY,
+            ))
+            .expect("recent record");
+
+        store.enforce_retention(365).expect("retention");
+
+        let page = store.load_history_page("", 0, 10).expect("history page");
+        assert_eq!(page.total_count, 1);
+        assert_eq!(page.records[0].id, "recent");
+        // A search still works after pruning, proving the FTS index was updated.
+        let search = store.load_history_page("fresh", 0, 10).expect("search");
+        assert_eq!(search.total_count, 1);
+        assert!(store
+            .load_history_page("ancient", 0, 10)
+            .unwrap()
+            .records
+            .is_empty());
+    }
+
+    #[test]
+    fn vocabulary_is_capped_to_bound_the_hot_path() {
+        let store = HistoryStore::open_in_memory().expect("in-memory store");
+        for index in 0..(MAX_VOCABULARY_ENTRIES + 25) {
+            store
+                .upsert_vocabulary(&format!("spoken{index}"), &format!("written{index}"))
+                .expect("upsert");
+        }
+        let entries = store.vocabulary_entries().expect("vocabulary");
+        assert!(entries.len() as i64 <= MAX_VOCABULARY_ENTRIES);
     }
 
     #[test]
