@@ -1149,8 +1149,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   NativeSettings dco_decode_native_settings(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 21)
-      throw Exception('unexpected arr length: expect 21 but see ${arr.length}');
+    if (arr.length != 22)
+      throw Exception('unexpected arr length: expect 22 but see ${arr.length}');
     return NativeSettings(
       language: dco_decode_String(arr[0]),
       writingMode: dco_decode_String(arr[1]),
@@ -1173,6 +1173,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       enhancementProvider: dco_decode_String(arr[18]),
       providerEndpoint: dco_decode_String(arr[19]),
       providerModel: dco_decode_String(arr[20]),
+      historyRetentionDays: dco_decode_u_32(arr[21]),
     );
   }
 
@@ -1579,6 +1580,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_enhancementProvider = sse_decode_String(deserializer);
     var var_providerEndpoint = sse_decode_String(deserializer);
     var var_providerModel = sse_decode_String(deserializer);
+    var var_historyRetentionDays = sse_decode_u_32(deserializer);
     return NativeSettings(
       language: var_language,
       writingMode: var_writingMode,
@@ -1601,6 +1603,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       enhancementProvider: var_enhancementProvider,
       providerEndpoint: var_providerEndpoint,
       providerModel: var_providerModel,
+      historyRetentionDays: var_historyRetentionDays,
     );
   }
 
@@ -2010,6 +2013,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_String(self.enhancementProvider, serializer);
     sse_encode_String(self.providerEndpoint, serializer);
     sse_encode_String(self.providerModel, serializer);
+    sse_encode_u_32(self.historyRetentionDays, serializer);
   }
 
   @protected

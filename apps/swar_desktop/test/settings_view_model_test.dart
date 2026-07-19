@@ -30,4 +30,17 @@ void main() {
       );
     },
   );
+
+  test('history retention choice persists and defaults to one year', () {
+    final repository = InMemorySettingsRepository();
+    final viewModel = SettingsViewModel(repository: repository);
+    addTearDown(viewModel.dispose);
+
+    expect(viewModel.settings.historyRetentionDays, 365);
+
+    viewModel.setHistoryRetentionDays(90);
+
+    expect(viewModel.settings.historyRetentionDays, 90);
+    expect(repository.read().historyRetentionDays, 90);
+  });
 }

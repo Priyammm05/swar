@@ -48,6 +48,7 @@ final class RustSettingsRepository implements SettingsRepository {
           SwarEnhancementProvider.local,
       providerEndpoint: value.providerEndpoint,
       providerModel: value.providerModel,
+      historyRetentionDays: value.historyRetentionDays,
     );
   }
 
@@ -76,6 +77,7 @@ final class RustSettingsRepository implements SettingsRepository {
         enhancementProvider: settings.enhancementProvider.name,
         providerEndpoint: settings.providerEndpoint,
         providerModel: settings.providerModel,
+        historyRetentionDays: settings.historyRetentionDays,
       ),
     );
   }

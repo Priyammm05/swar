@@ -550,6 +550,37 @@ final class _SystemSettings extends StatelessWidget {
               },
             ),
             _SettingRow(
+              title: 'Keep history for',
+              subtitle:
+                  'Your dictation history stays on this machine. Older entries are removed automatically.',
+              trailing: SizedBox(
+                width: 180,
+                child: DropdownButtonFormField<int>(
+                  key: const Key('history-retention-setting'),
+                  isExpanded: true,
+                  initialValue: settings.historyRetentionDays,
+                  decoration: const InputDecoration(
+                    border: OutlineInputBorder(),
+                    contentPadding: EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 12,
+                    ),
+                  ),
+                  items: const [
+                    DropdownMenuItem(value: 30, child: Text('30 days')),
+                    DropdownMenuItem(value: 90, child: Text('90 days')),
+                    DropdownMenuItem(value: 180, child: Text('180 days')),
+                    DropdownMenuItem(value: 365, child: Text('1 year')),
+                  ],
+                  onChanged: (value) {
+                    if (value != null) {
+                      viewModel.setHistoryRetentionDays(value);
+                    }
+                  },
+                ),
+              ),
+            ),
+            _SettingRow(
               title: 'Private applications',
               subtitle: settings.excludedApplications.isEmpty
                   ? 'No foreground application names are excluded.'

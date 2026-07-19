@@ -6,7 +6,7 @@
 import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `settings_path`
+// These functions are ignored because they are not marked as `pub`: `configured_history_retention_days`, `normalize_retention_days`, `settings_path`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `fmt`
 
 NativeSettings loadSettings() =>
@@ -38,6 +38,10 @@ class NativeSettings {
   final String providerEndpoint;
   final String providerModel;
 
+  /// How many days of local dictation history to keep before it is pruned.
+  /// One of 30/90/180/365; other values fall back to the default.
+  final int historyRetentionDays;
+
   const NativeSettings({
     required this.language,
     required this.writingMode,
@@ -60,6 +64,7 @@ class NativeSettings {
     required this.enhancementProvider,
     required this.providerEndpoint,
     required this.providerModel,
+    required this.historyRetentionDays,
   });
 
   static Future<NativeSettings> default_() =>
@@ -87,7 +92,8 @@ class NativeSettings {
       excludedApplications.hashCode ^
       enhancementProvider.hashCode ^
       providerEndpoint.hashCode ^
-      providerModel.hashCode;
+      providerModel.hashCode ^
+      historyRetentionDays.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -114,5 +120,6 @@ class NativeSettings {
           excludedApplications == other.excludedApplications &&
           enhancementProvider == other.enhancementProvider &&
           providerEndpoint == other.providerEndpoint &&
-          providerModel == other.providerModel;
+          providerModel == other.providerModel &&
+          historyRetentionDays == other.historyRetentionDays;
 }

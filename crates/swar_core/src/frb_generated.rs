@@ -1263,6 +1263,7 @@ impl SseDecode for crate::api::settings::NativeSettings {
         let mut var_enhancementProvider = <String>::sse_decode(deserializer);
         let mut var_providerEndpoint = <String>::sse_decode(deserializer);
         let mut var_providerModel = <String>::sse_decode(deserializer);
+        let mut var_historyRetentionDays = <u32>::sse_decode(deserializer);
         return crate::api::settings::NativeSettings {
             language: var_language,
             writing_mode: var_writingMode,
@@ -1285,6 +1286,7 @@ impl SseDecode for crate::api::settings::NativeSettings {
             enhancement_provider: var_enhancementProvider,
             provider_endpoint: var_providerEndpoint,
             provider_model: var_providerModel,
+            history_retention_days: var_historyRetentionDays,
         };
     }
 }
@@ -1776,6 +1778,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::settings::NativeSettings {
             self.enhancement_provider.into_into_dart().into_dart(),
             self.provider_endpoint.into_into_dart().into_dart(),
             self.provider_model.into_into_dart().into_dart(),
+            self.history_retention_days.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -2157,6 +2160,7 @@ impl SseEncode for crate::api::settings::NativeSettings {
         <String>::sse_encode(self.enhancement_provider, serializer);
         <String>::sse_encode(self.provider_endpoint, serializer);
         <String>::sse_encode(self.provider_model, serializer);
+        <u32>::sse_encode(self.history_retention_days, serializer);
     }
 }
 

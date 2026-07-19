@@ -93,6 +93,11 @@ final class SettingsViewModel extends ChangeNotifier {
   void setProviderModel(String value) =>
       _save(_settings.copyWith(providerModel: value.trim()));
 
+  /// History and learning data stay on this machine; the user controls how long
+  /// Swar keeps it (30/90/180/365 days).
+  void setHistoryRetentionDays(int value) =>
+      _save(_settings.copyWith(historyRetentionDays: value));
+
   /// Secrets deliberately live only for the current app process.
   void setProviderApiKey(String value) {
     _providerApiKey = value.trim();

@@ -113,12 +113,13 @@ pub(crate) fn load_insights_snapshot() -> Result<InsightsSnapshot, String> {
 /// Enforces the local retention window and table caps. Best-effort: a failure
 /// here must never fail the dictation that triggered it.
 pub(crate) fn enforce_history_retention() -> Result<(), String> {
+    let retention_days = crate::api::settings::configured_history_retention_days();
     let store = store()?;
     let guard = store
         .lock()
         .map_err(|_| "history store lock poisoned".to_owned())?;
     guard
-        .enforce_retention(DEFAULT_HISTORY_RETENTION_DAYS)
+        .enforce_retention(retention_days)
         .map_err(|error| error.to_string())
 }
 

@@ -33,6 +33,7 @@ final class SwarSettings {
     this.enhancementProvider = SwarEnhancementProvider.local,
     this.providerEndpoint = '',
     this.providerModel = '',
+    this.historyRetentionDays = 365,
   });
 
   final SwarLanguagePreference language;
@@ -56,6 +57,7 @@ final class SwarSettings {
   final SwarEnhancementProvider enhancementProvider;
   final String providerEndpoint;
   final String providerModel;
+  final int historyRetentionDays;
 
   SwarSettings copyWith({
     SwarLanguagePreference? language,
@@ -79,6 +81,7 @@ final class SwarSettings {
     SwarEnhancementProvider? enhancementProvider,
     String? providerEndpoint,
     String? providerModel,
+    int? historyRetentionDays,
   }) {
     return SwarSettings(
       language: language ?? this.language,
@@ -102,6 +105,7 @@ final class SwarSettings {
       enhancementProvider: enhancementProvider ?? this.enhancementProvider,
       providerEndpoint: providerEndpoint ?? this.providerEndpoint,
       providerModel: providerModel ?? this.providerModel,
+      historyRetentionDays: historyRetentionDays ?? this.historyRetentionDays,
     );
   }
 }

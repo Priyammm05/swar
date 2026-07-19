@@ -28,6 +28,30 @@ pub struct NativeSettings {
     pub enhancement_provider: String,
     pub provider_endpoint: String,
     pub provider_model: String,
+    /// How many days of local dictation history to keep before it is pruned.
+    /// One of 30/90/180/365; other values fall back to the default.
+    pub history_retention_days: u32,
+}
+
+/// Retention choices offered in Settings. History and learning data stay on this
+/// machine, so the user controls how long it is kept.
+pub(crate) const RETENTION_DAY_CHOICES: [u32; 4] = [30, 90, 180, 365];
+
+fn normalize_retention_days(value: u32) -> u32 {
+    if RETENTION_DAY_CHOICES.contains(&value) {
+        value
+    } else {
+        crate::storage::DEFAULT_HISTORY_RETENTION_DAYS
+    }
+}
+
+/// The configured retention window, loaded from disk and validated, used by the
+/// storage layer to prune old history. Falls back to the default when settings
+/// are missing or hold an unexpected value.
+pub(crate) fn configured_history_retention_days() -> u32 {
+    load_settings()
+        .map(|settings| normalize_retention_days(settings.history_retention_days))
+        .unwrap_or(crate::storage::DEFAULT_HISTORY_RETENTION_DAYS)
 }
 
 impl Default for NativeSettings {
@@ -54,6 +78,7 @@ impl Default for NativeSettings {
             enhancement_provider: "local".to_owned(),
             provider_endpoint: String::new(),
             provider_model: String::new(),
+            history_retention_days: crate::storage::DEFAULT_HISTORY_RETENTION_DAYS,
         }
     }
 }
@@ -98,5 +123,24 @@ mod tests {
         assert!(settings.restore_clipboard);
         assert_eq!(settings.writing_mode, "clean");
         assert_eq!(settings.enhancement_provider, "local");
+        assert_eq!(
+            settings.history_retention_days,
+            crate::storage::DEFAULT_HISTORY_RETENTION_DAYS
+        );
+    }
+
+    #[test]
+    fn retention_days_falls_back_when_out_of_range() {
+        for valid in RETENTION_DAY_CHOICES {
+            assert_eq!(normalize_retention_days(valid), valid);
+        }
+        assert_eq!(
+            normalize_retention_days(7),
+            crate::storage::DEFAULT_HISTORY_RETENTION_DAYS
+        );
+        assert_eq!(
+            normalize_retention_days(0),
+            crate::storage::DEFAULT_HISTORY_RETENTION_DAYS
+        );
     }
 }
