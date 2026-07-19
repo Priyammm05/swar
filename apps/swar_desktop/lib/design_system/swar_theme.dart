@@ -1,92 +1,58 @@
 // apps/swar_desktop/lib/design_system/swar_theme.dart
 
 import 'package:flutter/material.dart';
-import 'package:swar_desktop/design_system/swar_colors.dart';
+import 'package:swar_desktop/design_system/swar_tokens.dart';
+import 'package:swar_desktop/design_system/swar_typography.dart';
 
+/// App theme — wires the [SwarTokens] design system into Material.
+///
+/// Light is the primary theme (spec); dark applies the §12 neutral remap. Both
+/// register the matching [SwarTokens] extension so `context.tokens` resolves,
+/// and both default text to Manrope at weights 400/500 only.
 abstract final class SwarTheme {
-  static ThemeData light() {
-    final colorScheme = ColorScheme.fromSeed(
-      seedColor: SwarColors.leaf,
-      brightness: Brightness.light,
-      surface: SwarColors.surface,
-    );
+  static ThemeData light() => _build(SwarTokens.light);
+  static ThemeData dark() => _build(SwarTokens.dark);
+
+  static ThemeData _build(SwarTokens t) {
+    final isDark = t.isDark;
+    final colorScheme =
+        (isDark ? const ColorScheme.dark() : const ColorScheme.light())
+            .copyWith(
+              primary: t.spruce,
+              onPrimary: t.spruceInk,
+              surface: t.surfaceCard,
+              onSurface: t.ink,
+              secondary: t.saffron,
+              error: const Color(0xFFC24A4A),
+            );
+
+    final baseText = SwarType.body.copyWith(color: t.ink);
 
     return ThemeData(
       useMaterial3: true,
+      brightness: t.brightness,
       colorScheme: colorScheme,
-      scaffoldBackgroundColor: SwarColors.canvas,
+      scaffoldBackgroundColor: t.bgPage,
       fontFamily: 'Manrope',
-      fontFamilyFallback: const ['Segoe UI', '.AppleSystemUIFont', 'Arial'],
-      textTheme: const TextTheme(
-        displaySmall: TextStyle(
-          color: SwarColors.ink,
-          fontSize: 32,
-          height: 1.25,
-          fontWeight: FontWeight.w700,
-          letterSpacing: -0.64,
-        ),
-        headlineMedium: TextStyle(
-          color: SwarColors.ink,
-          fontSize: 24,
-          height: 1.33,
-          fontWeight: FontWeight.w600,
-          letterSpacing: -0.24,
-        ),
-        titleMedium: TextStyle(
-          color: SwarColors.ink,
-          fontSize: 16,
-          fontWeight: FontWeight.w600,
-        ),
-        bodyLarge: TextStyle(color: SwarColors.ink, fontSize: 16, height: 1.5),
-        bodyMedium: TextStyle(
-          color: SwarColors.ink,
-          fontSize: 14,
-          height: 1.43,
-        ),
-        bodySmall: TextStyle(color: SwarColors.ink, fontSize: 12, height: 1.33),
-        labelLarge: TextStyle(
-          color: SwarColors.ink,
-          fontSize: 14,
-          fontWeight: FontWeight.w600,
-        ),
-      ),
-      cardTheme: const CardThemeData(
-        color: SwarColors.panel,
-        elevation: 0,
-        shape: RoundedRectangleBorder(
-          side: BorderSide(color: SwarColors.border),
-          borderRadius: BorderRadius.all(Radius.circular(14)),
-        ),
-      ),
-      dividerColor: SwarColors.border,
-      dialogTheme: const DialogThemeData(
-        backgroundColor: SwarColors.surface,
+      fontFamilyFallback: const ['.AppleSystemUIFont', 'Segoe UI', 'Arial'],
+      extensions: [t],
+      textTheme: TextTheme(
+        displaySmall: SwarType.serifTitle.copyWith(color: t.ink),
+        headlineMedium: SwarType.greeting.copyWith(color: t.ink),
+        titleLarge: SwarType.cardHeading.copyWith(color: t.ink),
+        titleMedium: SwarType.rowTitle.copyWith(color: t.ink),
+        bodyLarge: baseText,
+        bodyMedium: baseText,
+        bodySmall: SwarType.caption.copyWith(color: t.inkSecondary),
+        labelLarge: SwarType.nav.copyWith(color: t.ink),
+      ).apply(bodyColor: t.ink, displayColor: t.ink),
+      dividerColor: t.border,
+      splashFactory: NoSplash.splashFactory,
+      dialogTheme: DialogThemeData(
+        backgroundColor: t.surfaceCard,
         elevation: 18,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.all(Radius.circular(26)),
-        ),
-      ),
-      switchTheme: SwitchThemeData(
-        thumbColor: WidgetStateProperty.resolveWith(
-          (states) => states.contains(WidgetState.selected)
-              ? Colors.white
-              : SwarColors.surface,
-        ),
-        trackColor: WidgetStateProperty.resolveWith(
-          (states) => states.contains(WidgetState.selected)
-              ? SwarColors.leaf
-              : const Color(0xFFC9C6BD),
-        ),
-        trackOutlineColor: const WidgetStatePropertyAll(Colors.transparent),
-      ),
-      filledButtonTheme: FilledButtonThemeData(
-        style: FilledButton.styleFrom(
-          backgroundColor: SwarColors.leaf,
-          foregroundColor: Colors.white,
-          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
-          ),
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.all(Radius.circular(20)),
         ),
       ),
     );

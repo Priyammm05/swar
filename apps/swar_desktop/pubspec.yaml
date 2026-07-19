@@ -35,6 +35,7 @@ dependencies:
     path: rust_builder
   flutter_rust_bridge: 2.12.0
   go_router: 17.2.3
+  flutter_svg: 2.3.0
 
 dev_dependencies:
   flutter_test:
@@ -60,10 +61,16 @@ flutter:
   # the material Icons class.
   uses-material-design: true
 
+  assets:
+    - assets/logo/
+
   fonts:
     - family: Manrope
       fonts:
         - asset: assets/fonts/Manrope-VariableFont_wght.ttf
+    - family: Newsreader
+      fonts:
+        - asset: assets/fonts/Newsreader.ttf
 
   # To add assets to your application, add an assets section, like this:
   # assets:
