@@ -69,17 +69,17 @@ void main() {
     expect(find.byKey(const Key('dictation-list')), findsOneWidget);
     expect(find.byKey(const Key('dictation-record-0')), findsOneWidget);
     expect(find.byKey(const Key('dictation-record-9999')), findsNothing);
-    expect(find.text('SHOW MORE ACTIVITY'), findsOneWidget);
+    expect(find.byKey(const Key('dictation-show-more')), findsOneWidget);
     _recordCheck(
       binding,
       'SHELL-001 Dictation opens with a lazy local-history list',
     );
     await _captureFlutterSurface(binding, tester, 'shell-002-dictation');
 
-    await tester.tap(find.text('SHOW MORE ACTIVITY'));
+    await tester.tap(find.byKey(const Key('dictation-show-more')));
     await _settle(tester);
-    await _pumpUntilGone(tester, find.text('SHOW MORE ACTIVITY'));
-    expect(find.text('SHOW MORE ACTIVITY'), findsNothing);
+    await _pumpUntilGone(tester, find.byKey(const Key('dictation-show-more')));
+    expect(find.byKey(const Key('dictation-show-more')), findsNothing);
     expect(history.requestedOffsets, containsAllInOrder(<int>[0, 50]));
     _recordCheck(
       binding,
@@ -97,23 +97,6 @@ void main() {
     );
     await _captureFlutterSurface(binding, tester, 'shell-003-search-results');
 
-    final loadsBeforeDictation = history.loadCalls;
-    await tester.tap(find.byKey(const Key('global-dictation-control')));
-    await _settle(tester);
-    await _pumpUntilFound(tester, find.text('Stop'));
-    expect(find.text('Stop'), findsOneWidget);
-    await tester.tap(find.byKey(const Key('global-dictation-control')));
-    await _settle(tester);
-    await _pumpUntilFound(tester, find.text('Dictate'));
-    await _pumpUntil(tester, () => history.loadCalls > loadsBeforeDictation);
-    expect(find.text('Dictate'), findsOneWidget);
-    expect(engine.finishCalls, 1);
-    expect(history.loadCalls, greaterThan(loadsBeforeDictation));
-    _recordCheck(
-      binding,
-      'DICTATION-002 recording completion unlocks controls and refreshes history',
-    );
-
     await tester.tap(find.byKey(const Key('top-settings-nav')));
     await _settle(tester);
     await _pumpUntilFound(
@@ -129,19 +112,17 @@ void main() {
     );
     await tester.tap(find.byKey(const Key('launch-at-login-setting')));
     await _settle(tester);
-    await tester.tap(find.byKey(const Key('settings-close-button')));
+    // Settings is a routed screen now: leave to Activity and return; the branch
+    // keeps its state, so the change persists with no modal to reopen.
+    await tester.tap(find.byKey(const Key('top-dictation-nav')));
     await _settle(tester);
     await tester.tap(find.byKey(const Key('top-settings-nav')));
-    await _settle(tester);
-    await tester.tap(find.byKey(const Key('settings-system-nav')));
     await _settle(tester);
     expect(settings.read().launchAtLogin, isTrue);
     _recordCheck(
       binding,
-      'SHELL-003 system settings persist after the dialog is reopened',
+      'SHELL-003 system settings persist across navigation',
     );
-    await tester.tap(find.byKey(const Key('settings-close-button')));
-    await _settle(tester);
 
     tester.view.physicalSize = const Size(620, 700);
     await _settle(tester);

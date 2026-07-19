@@ -1,15 +1,19 @@
+// apps/swar_desktop/lib/dictation/presentation/dictation_page.dart
+
 import 'dart:async';
-import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
-import 'package:swar_desktop/design_system/swar_colors.dart';
+import 'package:flutter/services.dart';
+import 'package:swar_desktop/design_system/swar_components.dart';
+import 'package:swar_desktop/design_system/swar_tokens.dart';
+import 'package:swar_desktop/design_system/swar_typography.dart';
 import 'package:swar_desktop/dictation/domain/dictation_history_repository.dart';
 import 'package:swar_desktop/dictation/domain/dictation_record.dart';
 import 'package:swar_desktop/dictation/presentation/dictation_history_view_model.dart';
 import 'package:swar_desktop/dictation/presentation/dictation_session_view_model.dart';
 import 'package:swar_desktop/settings/presentation/settings_view_model.dart';
 
-/// Dictation overview translated from the approved HTML. Presentation Layer.
+/// Activity — the local dictation history (spec §6). Presentation Layer.
 final class DictationPage extends StatefulWidget {
   const DictationPage({
     required this.repository,
@@ -66,400 +70,141 @@ final class _DictationPageState extends State<DictationPage> {
   Widget build(BuildContext context) {
     return ListenableBuilder(
       listenable: _viewModel,
-      builder: (context, _) => LayoutBuilder(
-        builder: (context, constraints) {
-          final compact = constraints.maxWidth < 720;
-          final dense = !compact && constraints.maxHeight < 860;
-          final outerPadding = compact ? 16.0 : (dense ? 20.0 : 32.0);
-          final canvasPadding = compact ? 20.0 : (dense ? 24.0 : 40.0);
-          return SingleChildScrollView(
-            padding: EdgeInsets.symmetric(
-              horizontal: outerPadding,
-              vertical: compact ? 20 : (dense ? 16 : 32),
-            ),
-            child: Center(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 1200),
-                child: Container(
-                  constraints: BoxConstraints(
-                    minHeight: math.max(0, constraints.maxHeight - 80),
-                  ),
-                  padding: EdgeInsets.all(canvasPadding),
-                  decoration: BoxDecoration(
-                    color: SwarColors.surface,
-                    borderRadius: BorderRadius.circular(32),
-                    boxShadow: const [
-                      BoxShadow(
-                        color: Color(0x08000000),
-                        blurRadius: 8,
-                        offset: Offset(0, 1),
-                      ),
-                    ],
-                  ),
-                  child: LayoutBuilder(
-                    builder: (context, innerConstraints) {
-                      final wide = innerConstraints.maxWidth >= 980;
-                      final summary = _OverviewSummary(
-                        totalDictations: _viewModel.totalCount,
-                        dense: dense,
-                      );
-                      final feed = _TranscriptionFeed(
-                        viewModel: _viewModel,
-                        dense: dense,
-                        learningOptedIn:
-                            widget.settingsViewModel.settings.learnFromEdits,
-                      );
-                      if (wide) {
-                        return Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Expanded(flex: 3, child: summary),
-                            SizedBox(width: dense ? 24 : 32),
-                            Expanded(flex: 9, child: feed),
-                          ],
-                        );
-                      }
-                      return Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [summary, const SizedBox(height: 32), feed],
-                      );
-                    },
-                  ),
-                ),
+      builder: (context, _) => Align(
+        alignment: Alignment.topCenter,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 1008),
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(32, 8, 32, 48),
+            children: [
+              _Greeting(total: _viewModel.totalCount),
+              const SizedBox(height: 18),
+              _Toolbar(viewModel: _viewModel),
+              const SizedBox(height: 16),
+              _Feed(
+                viewModel: _viewModel,
+                learningOptedIn:
+                    widget.settingsViewModel.settings.learnFromEdits,
               ),
-            ),
-          );
-        },
+            ],
+          ),
+        ),
       ),
     );
   }
 }
 
-final class _OverviewSummary extends StatelessWidget {
-  const _OverviewSummary({required this.totalDictations, required this.dense});
+final class _Greeting extends StatelessWidget {
+  const _Greeting({required this.total});
 
-  final int totalDictations;
-  final bool dense;
+  final int total;
 
   @override
   Widget build(BuildContext context) {
+    final t = context.tokens;
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          'Welcome back, Priyam',
-          style: TextStyle(
-            fontSize: 24,
-            height: 1.33,
-            fontWeight: FontWeight.w600,
-            letterSpacing: -0.24,
-          ),
-        ),
+        Text('Welcome back', style: SwarType.greeting.copyWith(color: t.ink)),
         const SizedBox(height: 4),
-        const Text(
-          'Here is your dictation overview.',
-          style: TextStyle(
-            color: SwarColors.mutedInk,
-            fontSize: 14,
-            height: 1.43,
-          ),
-        ),
-        SizedBox(height: dense ? 20 : 32),
-        _SummaryCard(
-          label: 'LOCAL DICTATIONS',
-          value: '$totalDictations',
-          trailing: const Icon(
-            Icons.trending_up_rounded,
-            color: SwarColors.leaf,
-            size: 20,
-          ),
-        ),
-        SizedBox(height: dense ? 14 : 24),
-        const _SummaryCard(label: 'STORAGE', value: 'Local', suffix: 'only'),
-        SizedBox(height: dense ? 14 : 24),
-        const _SummaryCard(
-          label: 'ACTIVE STREAK',
-          value: '3',
-          suffix: 'days',
-          showStreak: true,
+        Text(
+          '$total ${total == 1 ? 'dictation' : 'dictations'}, all on this device.',
+          style: SwarType.description.copyWith(color: t.inkMuted),
         ),
       ],
     );
   }
 }
 
-final class _SummaryCard extends StatelessWidget {
-  const _SummaryCard({
-    required this.label,
-    required this.value,
-    this.suffix,
-    this.trailing,
-    this.showStreak = false,
-  });
+final class _Toolbar extends StatelessWidget {
+  const _Toolbar({required this.viewModel});
 
-  final String label;
-  final String value;
-  final String? suffix;
-  final Widget? trailing;
-  final bool showStreak;
+  final DictationHistoryViewModel viewModel;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: SwarColors.panel,
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label,
-            style: const TextStyle(
-              color: SwarColors.mutedInk,
-              fontSize: 12,
-              height: 1.33,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 0.6,
-            ),
+    final t = context.tokens;
+    return Row(
+      children: [
+        Text(
+          'TODAY',
+          style: SwarType.uppercaseLabel.copyWith(
+            color: t.inkSecondary,
+            letterSpacing: 0.72,
           ),
-          const SizedBox(height: 4),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Flexible(
-                child: FittedBox(
-                  fit: BoxFit.scaleDown,
-                  alignment: Alignment.bottomLeft,
-                  child: Text(
-                    value,
-                    maxLines: 1,
-                    style: const TextStyle(
-                      fontSize: 36,
-                      height: 1.12,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: -1,
-                    ),
-                  ),
-                ),
-              ),
-              if (suffix != null) ...[
-                const SizedBox(width: 8),
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 4),
-                  child: Text(
-                    suffix!,
-                    style: const TextStyle(
-                      color: SwarColors.mutedInk,
-                      fontSize: 16,
-                    ),
-                  ),
-                ),
-              ],
-              if (trailing != null) ...[
-                const SizedBox(width: 8),
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 6),
-                  child: trailing!,
-                ),
-              ],
-            ],
-          ),
-          if (showStreak) ...[
-            const SizedBox(height: 16),
-            const Row(
-              children: [
-                _StreakSegment(active: true),
-                _StreakSegment(active: true),
-                _StreakSegment(active: true),
-                _StreakSegment(),
-                _StreakSegment(),
-                _StreakSegment(),
-                _StreakSegment(),
-              ],
-            ),
-          ],
-        ],
-      ),
+        ),
+        const SizedBox(width: 10),
+        SwarCountPill(
+          label:
+              '${viewModel.totalCount} '
+              '${viewModel.totalCount == 1 ? 'entry' : 'entries'}',
+        ),
+        const SizedBox(width: 14),
+        Expanded(child: _SearchField(viewModel: viewModel)),
+        const SizedBox(width: 14),
+        SwarIconButton(
+          icon: Icons.tune_rounded,
+          iconSize: 17,
+          size: 38,
+          round: true,
+          semanticLabel: 'Filter',
+          onPressed: () {},
+        ),
+      ],
     );
   }
 }
 
-final class _StreakSegment extends StatelessWidget {
-  const _StreakSegment({this.active = false});
+final class _SearchField extends StatelessWidget {
+  const _SearchField({required this.viewModel});
 
-  final bool active;
+  final DictationHistoryViewModel viewModel;
 
   @override
   Widget build(BuildContext context) {
-    return Expanded(
-      child: Container(
-        height: 8,
-        margin: const EdgeInsets.only(right: 6),
-        decoration: BoxDecoration(
-          color: active ? SwarColors.leaf : SwarColors.surfaceVariant,
-          borderRadius: BorderRadius.circular(999),
+    final t = context.tokens;
+    return SizedBox(
+      height: 38,
+      child: TextField(
+        key: const Key('dictation-search'),
+        onChanged: viewModel.search,
+        style: SwarType.searchInput.copyWith(color: t.ink),
+        decoration: InputDecoration(
+          isDense: true,
+          hintText: 'Search transcripts',
+          hintStyle: SwarType.searchInput.copyWith(color: t.inkMuted),
+          prefixIcon: Icon(Icons.search_rounded, size: 16, color: t.inkMuted),
+          prefixIconConstraints: const BoxConstraints(minWidth: 40),
+          filled: true,
+          fillColor: t.surfaceSunken,
+          contentPadding: const EdgeInsets.symmetric(vertical: 10),
+          border: _border(t.border),
+          enabledBorder: _border(t.border),
+          focusedBorder: _border(t.spruceBorder),
         ),
       ),
     );
   }
+
+  OutlineInputBorder _border(Color color) => OutlineInputBorder(
+    borderRadius: BorderRadius.circular(SwarRadii.pill),
+    borderSide: BorderSide(color: color, width: 0.5),
+  );
 }
 
-final class _TranscriptionFeed extends StatelessWidget {
-  const _TranscriptionFeed({
-    required this.viewModel,
-    required this.dense,
-    required this.learningOptedIn,
-  });
+final class _Feed extends StatelessWidget {
+  const _Feed({required this.viewModel, required this.learningOptedIn});
 
   final DictationHistoryViewModel viewModel;
-  final bool dense;
-  final bool learningOptedIn;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      height: dense ? 382 : 464,
-      clipBehavior: Clip.antiAlias,
-      decoration: BoxDecoration(
-        color: SwarColors.panel,
-        border: Border.all(color: SwarColors.border),
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Column(
-        children: [
-          _FeedHeader(viewModel: viewModel, dense: dense),
-          Expanded(
-            child: _FeedBody(
-              viewModel: viewModel,
-              dense: dense,
-              learningOptedIn: learningOptedIn,
-            ),
-          ),
-          if (viewModel.hasMore)
-            _FeedFooter(viewModel: viewModel, dense: dense),
-        ],
-      ),
-    );
-  }
-}
-
-final class _FeedHeader extends StatelessWidget {
-  const _FeedHeader({required this.viewModel, required this.dense});
-
-  final DictationHistoryViewModel viewModel;
-  final bool dense;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      height: dense ? 64 : 80,
-      padding: const EdgeInsets.symmetric(horizontal: 32),
-      decoration: const BoxDecoration(
-        border: Border(bottom: BorderSide(color: SwarColors.border)),
-      ),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final showLabel = constraints.maxWidth >= 600;
-          return Row(
-            children: [
-              if (showLabel) ...[
-                const Text(
-                  "TODAY'S ACTIVITY",
-                  style: TextStyle(
-                    color: SwarColors.mutedInk,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 1.2,
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 3,
-                  ),
-                  decoration: BoxDecoration(
-                    color: SwarColors.surfaceVariant,
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: Text(
-                    '${viewModel.totalCount} ENTRIES',
-                    style: TextStyle(
-                      color: SwarColors.leaf,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-                const Spacer(),
-              ],
-              SizedBox(
-                width: showLabel
-                    ? 256
-                    : math.max(150, constraints.maxWidth - 48),
-                height: 40,
-                child: TextField(
-                  key: const Key('dictation-search'),
-                  onChanged: viewModel.search,
-                  style: const TextStyle(fontSize: 14),
-                  decoration: InputDecoration(
-                    hintText: 'Search transcripts...',
-                    hintStyle: const TextStyle(color: Color(0x806B7280)),
-                    prefixIcon: const Icon(
-                      Icons.search_rounded,
-                      size: 20,
-                      color: SwarColors.mutedInk,
-                    ),
-                    filled: true,
-                    fillColor: SwarColors.surfaceVariant,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(999),
-                      borderSide: BorderSide.none,
-                    ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(999),
-                      borderSide: BorderSide.none,
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(999),
-                      borderSide: const BorderSide(color: Color(0x33145350)),
-                    ),
-                    contentPadding: const EdgeInsets.symmetric(vertical: 10),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              const Icon(
-                Icons.filter_list_rounded,
-                key: Key('dictation-language-filter'),
-                size: 24,
-                color: SwarColors.mutedInk,
-              ),
-            ],
-          );
-        },
-      ),
-    );
-  }
-}
-
-final class _FeedBody extends StatelessWidget {
-  const _FeedBody({
-    required this.viewModel,
-    required this.dense,
-    required this.learningOptedIn,
-  });
-
-  final DictationHistoryViewModel viewModel;
-  final bool dense;
   final bool learningOptedIn;
 
   @override
   Widget build(BuildContext context) {
     if (viewModel.isLoading) {
-      return const Center(child: CircularProgressIndicator());
+      return const Padding(
+        padding: EdgeInsets.only(top: 80),
+        child: Center(child: CircularProgressIndicator()),
+      );
     }
     if (viewModel.errorMessage != null) {
       return _EmptyState(
@@ -478,76 +223,308 @@ final class _FeedBody extends StatelessWidget {
               title: 'No matching dictations',
             );
     }
-    return ListView.separated(
+
+    final groups = _groupByDay(viewModel.records);
+    final sections = <Widget>[];
+    for (var g = 0; g < groups.length; g++) {
+      final group = groups[g];
+      if (g > 0) {
+        sections.add(
+          _SectionLabel(label: group.label, count: group.entries.length),
+        );
+      }
+      sections.add(
+        _DayCard(
+          isFirst: g == 0,
+          entries: group.entries,
+          learningOptedIn: learningOptedIn,
+          // Pagination is global; the control lives inside the first (Today) card.
+          showMore: g == 0 && viewModel.hasMore,
+          remaining: viewModel.totalCount - viewModel.records.length,
+          loadingMore: viewModel.isLoadingMore,
+          onLoadMore: viewModel.loadMore,
+          onCorrect: (record, value) => viewModel.correct(
+            record,
+            value,
+            learningOptedIn: learningOptedIn,
+          ),
+        ),
+      );
+    }
+
+    // The whole feed is one keyed list so widget tests can target it.
+    return KeyedSubtree(
       key: const Key('dictation-list'),
-      itemCount: viewModel.records.length,
-      separatorBuilder: (context, index) => const Divider(height: 1),
-      itemBuilder: (context, index) => _TranscriptRow(
-        key: Key('dictation-record-$index'),
-        record: viewModel.records[index],
-        dense: dense,
-        onCorrect: (record, value) =>
-            viewModel.correct(record, value, learningOptedIn: learningOptedIn),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: sections,
       ),
     );
   }
 }
 
-final class _TranscriptRow extends StatelessWidget {
-  const _TranscriptRow({
-    required this.record,
-    required this.dense,
+@immutable
+final class _DayGroup {
+  const _DayGroup({required this.label, required this.entries});
+  final String label;
+  final List<_IndexedRecord> entries;
+}
+
+@immutable
+final class _IndexedRecord {
+  const _IndexedRecord(this.index, this.record);
+  final int index;
+  final DictationRecord record;
+}
+
+List<_DayGroup> _groupByDay(List<DictationRecord> records) {
+  final now = DateTime.now();
+  final today = DateTime(now.year, now.month, now.day);
+  final groups = <String, List<_IndexedRecord>>{};
+  final order = <String>[];
+  for (var i = 0; i < records.length; i++) {
+    final record = records[i];
+    final created = record.createdAt.toLocal();
+    final day = DateTime(created.year, created.month, created.day);
+    final diff = today.difference(day).inDays;
+    final label = switch (diff) {
+      0 => 'Today',
+      1 => 'Yesterday',
+      _ => _formatDay(day),
+    };
+    (groups[label] ??= (
+      order..add(label),
+      <_IndexedRecord>[],
+    ).$2).add(_IndexedRecord(i, record));
+  }
+  return [
+    for (final label in order) _DayGroup(label: label, entries: groups[label]!),
+  ];
+}
+
+String _formatDay(DateTime day) {
+  const months = [
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
+  ];
+  return '${months[day.month - 1]} ${day.day}';
+}
+
+final class _SectionLabel extends StatelessWidget {
+  const _SectionLabel({required this.label, required this.count});
+
+  final String label;
+  final int count;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = context.tokens;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(2, 20, 2, 12),
+      child: Row(
+        children: [
+          Text(
+            label.toUpperCase(),
+            style: SwarType.uppercaseLabel.copyWith(
+              color: t.inkSecondary,
+              letterSpacing: 0.72,
+            ),
+          ),
+          const SizedBox(width: 10),
+          Text(
+            '$count ${count == 1 ? 'entry' : 'entries'}',
+            style: SwarType.caption.copyWith(color: t.inkMuted),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+final class _DayCard extends StatelessWidget {
+  const _DayCard({
+    required this.isFirst,
+    required this.entries,
+    required this.learningOptedIn,
+    required this.showMore,
+    required this.remaining,
+    required this.loadingMore,
+    required this.onLoadMore,
     required this.onCorrect,
-    super.key,
   });
 
-  final DictationRecord record;
-  final bool dense;
+  final bool isFirst;
+  final List<_IndexedRecord> entries;
+  final bool learningOptedIn;
+  final bool showMore;
+  final int remaining;
+  final bool loadingMore;
+  final VoidCallback onLoadMore;
   final Future<bool> Function(DictationRecord record, String value) onCorrect;
 
   @override
   Widget build(BuildContext context) {
-    final time = MaterialLocalizations.of(context)
-        .formatTimeOfDay(
-          TimeOfDay.fromDateTime(record.createdAt),
-          alwaysUse24HourFormat: false,
-        )
-        .toLowerCase();
-    return SizedBox(
-      height: dense ? 76 : 98,
-      child: Padding(
-        padding: EdgeInsets.symmetric(
-          horizontal: dense ? 24 : 32,
-          vertical: dense ? 18 : 28,
+    return SwarCard(
+      radius: SwarRadii.cardLarge,
+      clip: true,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (var i = 0; i < entries.length; i++) ...[
+            _EntryRow(
+              key: Key('dictation-record-${entries[i].index}'),
+              record: entries[i].record,
+              onCorrect: onCorrect,
+            ),
+            if (i != entries.length - 1) const SwarInsetDivider(),
+          ],
+          if (showMore)
+            _ShowMore(
+              remaining: remaining,
+              loading: loadingMore,
+              onPressed: onLoadMore,
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+final class _ShowMore extends StatelessWidget {
+  const _ShowMore({
+    required this.remaining,
+    required this.loading,
+    required this.onPressed,
+  });
+
+  final int remaining;
+  final bool loading;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = context.tokens;
+    return Column(
+      children: [
+        Container(height: 0.5, color: t.border),
+        InkWell(
+          key: const Key('dictation-show-more'),
+          onTap: loading ? null : onPressed,
+          child: SizedBox(
+            height: 36,
+            child: Center(
+              child: loading
+                  ? const SizedBox.square(
+                      dimension: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          'Show $remaining more from today',
+                          style: SwarType.nav.copyWith(color: t.inkSecondary),
+                        ),
+                        const SizedBox(width: 4),
+                        Icon(
+                          Icons.keyboard_arrow_down_rounded,
+                          size: 15,
+                          color: t.inkSecondary,
+                        ),
+                      ],
+                    ),
+            ),
+          ),
         ),
+      ],
+    );
+  }
+}
+
+final class _EntryRow extends StatefulWidget {
+  const _EntryRow({required this.record, required this.onCorrect, super.key});
+
+  final DictationRecord record;
+  final Future<bool> Function(DictationRecord record, String value) onCorrect;
+
+  @override
+  State<_EntryRow> createState() => _EntryRowState();
+}
+
+final class _EntryRowState extends State<_EntryRow> {
+  bool _hover = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = context.tokens;
+    final record = widget.record;
+    final time = TimeOfDay.fromDateTime(record.createdAt.toLocal());
+    final label = MaterialLocalizations.of(
+      context,
+    ).formatTimeOfDay(time, alwaysUse24HourFormat: false).toLowerCase();
+
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hover = true),
+      onExit: (_) => setState(() => _hover = false),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 120),
+        color: _hover ? t.surfaceSunken : t.surfaceCard,
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 15),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             SizedBox(
-              width: 80,
-              child: Text(
-                time,
-                style: const TextStyle(
-                  color: Color(0x996B7280),
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
+              width: 62,
+              child: Padding(
+                padding: const EdgeInsets.only(top: 2),
+                child: Text(
+                  label,
+                  style: SwarType.timestamp.copyWith(color: t.inkMuted),
                 ),
               ),
             ),
-            const SizedBox(width: 24),
+            const SizedBox(width: 16),
             Expanded(
               child: Text(
                 record.finalText,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 16, height: 1.5),
+                style: SwarType.body.copyWith(color: t.ink),
               ),
             ),
-            IconButton(
-              key: Key('edit-dictation-${record.id}'),
-              tooltip: 'Correct dictation',
-              onPressed: () => _showCorrectionDialog(context),
-              icon: const Icon(Icons.edit_outlined, size: 18),
+            const SizedBox(width: 12),
+            // Badge and actions occupy the same slot; hover crossfades them.
+            Padding(
+              padding: const EdgeInsets.only(top: 1),
+              child: Stack(
+                alignment: Alignment.centerRight,
+                children: [
+                  AnimatedOpacity(
+                    duration: const Duration(milliseconds: 120),
+                    opacity: _hover ? 0 : 1,
+                    child: _LanguageBadge(language: record.language),
+                  ),
+                  AnimatedOpacity(
+                    duration: const Duration(milliseconds: 120),
+                    opacity: _hover ? 1 : 0,
+                    child: IgnorePointer(
+                      ignoring: !_hover,
+                      child: _RowActions(
+                        text: record.finalText,
+                        onEdit: () => _showCorrectionDialog(context),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ],
         ),
@@ -556,7 +533,7 @@ final class _TranscriptRow extends StatelessWidget {
   }
 
   Future<void> _showCorrectionDialog(BuildContext context) async {
-    final controller = TextEditingController(text: record.finalText);
+    final controller = TextEditingController(text: widget.record.finalText);
     final corrected = await showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
@@ -584,48 +561,69 @@ final class _TranscriptRow extends StatelessWidget {
       ),
     );
     controller.dispose();
-    if (corrected != null) await onCorrect(record, corrected);
+    if (corrected != null) await widget.onCorrect(widget.record, corrected);
   }
 }
 
-final class _FeedFooter extends StatelessWidget {
-  const _FeedFooter({required this.viewModel, required this.dense});
+final class _RowActions extends StatelessWidget {
+  const _RowActions({required this.text, required this.onEdit});
 
-  final DictationHistoryViewModel viewModel;
-  final bool dense;
+  final String text;
+  final VoidCallback onEdit;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      height: dense ? 58 : 88,
-      alignment: Alignment.center,
-      decoration: const BoxDecoration(
-        border: Border(top: BorderSide(color: SwarColors.border)),
-      ),
-      child: OutlinedButton(
-        onPressed: viewModel.isLoadingMore ? null : viewModel.loadMore,
-        style: OutlinedButton.styleFrom(
-          disabledForegroundColor: SwarColors.mutedInk,
-          side: const BorderSide(color: SwarColors.border),
-          padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(999),
-          ),
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        SwarIconButton(
+          icon: Icons.content_copy_rounded,
+          semanticLabel: 'Copy',
+          onPressed: () => Clipboard.setData(ClipboardData(text: text)),
         ),
-        child: viewModel.isLoadingMore
-            ? const SizedBox.square(
-                dimension: 16,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              )
-            : const Text(
-                'SHOW MORE ACTIVITY',
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 1.2,
-                ),
-              ),
+        const SizedBox(width: 2),
+        SwarIconButton(
+          icon: Icons.keyboard_return_rounded,
+          semanticLabel: 'Reinsert',
+          onPressed: () => Clipboard.setData(ClipboardData(text: text)),
+        ),
+        const SizedBox(width: 2),
+        SwarIconButton(
+          icon: Icons.more_horiz_rounded,
+          semanticLabel: 'More',
+          onPressed: onEdit,
+        ),
+      ],
+    );
+  }
+}
+
+final class _LanguageBadge extends StatelessWidget {
+  const _LanguageBadge({required this.language});
+
+  final DictationLanguage language;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = context.tokens;
+    // Only a resolved detection earns a badge: Hindi -> HI, English -> EN,
+    // genuinely code-mixed -> HI+EN. An unresolved (automatic) record shows
+    // none rather than a misleading label.
+    final badge = switch (language) {
+      DictationLanguage.hinglish => ('HI+EN', t.mixInk, t.mixTint),
+      DictationLanguage.hindi => ('HI', t.mixInk, t.mixTint),
+      DictationLanguage.english => ('EN', t.spruce, t.spruceTint),
+      DictationLanguage.automatic => null,
+    };
+    if (badge == null) return const SizedBox.shrink();
+    final (label, fg, bg) = badge;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(SwarRadii.pill),
       ),
+      child: Text(label, style: SwarType.badge.copyWith(color: fg)),
     );
   }
 }
@@ -638,14 +636,18 @@ final class _EmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, color: SwarColors.leaf, size: 30),
-          const SizedBox(height: 12),
-          Text(title, style: Theme.of(context).textTheme.titleMedium),
-        ],
+    final t = context.tokens;
+    return Padding(
+      padding: const EdgeInsets.only(top: 72),
+      child: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, color: t.spruce, size: 30),
+            const SizedBox(height: 12),
+            Text(title, style: SwarType.rowTitle.copyWith(color: t.ink)),
+          ],
+        ),
       ),
     );
   }
