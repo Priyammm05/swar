@@ -11,7 +11,7 @@ void main() {
     );
     final released = machine.advance(
       ShortcutGestureInput.released,
-      nowMilliseconds: 300,
+      nowMilliseconds: 450,
     );
 
     expect(released.actions, contains(ShortcutGestureAction.finish));

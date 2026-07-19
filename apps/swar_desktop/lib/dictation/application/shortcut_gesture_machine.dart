@@ -28,7 +28,11 @@ final class ShortcutGestureTransition {
 /// Pure reducer for hold-to-talk, double-tap lock, and explicit toggle input.
 final class ShortcutGestureMachine {
   ShortcutGestureMachine({
-    this.holdThreshold = const Duration(milliseconds: 260),
+    // A first press shorter than this counts as a tap (a candidate for the
+    // double-tap lock); longer is a deliberate press-and-hold. Kept generous so
+    // a slightly-held first tap of a double-press is not misread as a hold and
+    // finished on release.
+    this.holdThreshold = const Duration(milliseconds: 350),
   });
 
   final Duration holdThreshold;
