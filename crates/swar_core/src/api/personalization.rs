@@ -87,8 +87,9 @@ fn apply_entries(value: &str, entries: &[storage::StoredVocabularyEntry]) -> Str
                 .find(|character: char| !character.is_ascii_punctuation())
                 .unwrap_or(token.len());
             let end = token
-                .rfind(|character: char| !character.is_ascii_punctuation())
-                .map(|index| index + 1)
+                .char_indices()
+                .rfind(|(_, character)| !character.is_ascii_punctuation())
+                .map(|(index, character)| index + character.len_utf8())
                 .unwrap_or(start);
             let word = &token[start..end];
             let replacement = entries
@@ -126,6 +127,24 @@ mod tests {
         assert_eq!(
             apply_entries("hello sewer, welcome", &entries),
             "hello Swar, welcome"
+        );
+    }
+
+    #[test]
+    fn preserves_hindi_and_hinglish_tokens_at_utf8_boundaries() {
+        let entries = vec![storage::StoredVocabularyEntry {
+            spoken: "sewer".to_owned(),
+            written: "Swar".to_owned(),
+            use_count: 3,
+        }];
+
+        assert_eq!(
+            apply_entries("नमस्ते, मैं Swar बोल रहा हूँ।", &entries),
+            "नमस्ते, मैं Swar बोल रहा हूँ।"
+        );
+        assert_eq!(
+            apply_entries("नमस्ते sewer, test kar raha hoon", &entries),
+            "नमस्ते Swar, test kar raha hoon"
         );
     }
 
