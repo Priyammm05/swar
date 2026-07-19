@@ -16,11 +16,16 @@ final class DictationRecord {
     required this.writingMode,
     required this.wordCount,
     required this.duration,
+    this.rawText = '',
     this.insertionStatus = '',
   });
 
   final String id;
   final String finalText;
+
+  /// The transcript in its original script (Devanagari for Hindi), before any
+  /// transliteration to Roman. Used to detect the spoken language for the badge.
+  final String rawText;
   final DateTime createdAt;
   final String sourceApplication;
 
@@ -42,13 +47,16 @@ final class DictationRecord {
         status.contains('fallback');
   }
 
-  /// Language inferred from the transcript's script (Devanagari vs Latin), so a
-  /// badge reflects what was actually spoken rather than the capture mode. Mixed
-  /// scripts read as Hinglish; romanized Hindi with no Devanagari reads English.
+  /// Language inferred from the ORIGINAL script (Devanagari vs Latin), so the
+  /// badge reflects what was actually spoken even after Hindi has been
+  /// transliterated to Roman in [finalText]. Falls back to [finalText] for
+  /// older rows saved before raw text was carried. Mixed scripts read as
+  /// Hinglish; pure Latin reads English.
   DictationLanguage get detectedLanguage {
+    final source = rawText.isNotEmpty ? rawText : finalText;
     var devanagari = 0;
     var latin = 0;
-    for (final rune in finalText.runes) {
+    for (final rune in source.runes) {
       if (rune >= 0x0900 && rune <= 0x097F) {
         devanagari++;
       } else if ((rune >= 0x41 && rune <= 0x5A) ||

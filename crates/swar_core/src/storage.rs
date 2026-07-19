@@ -508,7 +508,11 @@ impl HistoryStore {
             |row| row.get(0),
         )?;
         let mut statement = self.connection.prepare(
-            "SELECT final_text, source_app_name, word_count, was_user_edited,
+            // Classify by the ORIGINAL script (raw_text): Hinglish/Auto output is
+            // transliterated to Roman in final_text, so classifying that would
+            // count every Hindi dictation as English. raw_text keeps the spoken
+            // script (Devanagari), so the split stays true to what was said.
+            "SELECT raw_text, source_app_name, word_count, was_user_edited,
                     CAST(julianday(date(
                         created_at / 1000, 'unixepoch', 'localtime'
                     )) AS INTEGER)

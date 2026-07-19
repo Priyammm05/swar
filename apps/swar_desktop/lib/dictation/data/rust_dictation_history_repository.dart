@@ -35,6 +35,7 @@ final class RustDictationHistoryRepository
           (record) => DictationRecord(
             id: record.id,
             finalText: record.finalText,
+            rawText: record.rawText,
             createdAt: DateTime.fromMillisecondsSinceEpoch(record.createdAtMs),
             sourceApplication: record.sourceApplication,
             language: _language(record.language),
