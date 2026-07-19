@@ -1,6 +1,7 @@
 use std::{sync::Mutex, thread, time::Duration};
 
 use arboard::Clipboard;
+#[cfg(not(target_os = "macos"))]
 use enigo::{
     Direction::{Click, Press, Release},
     Enigo, Key, Keyboard, Settings,
@@ -110,7 +111,8 @@ pub(crate) fn insert_with_clipboard(
         &mut SystemDirectInsertion,
         &mut SystemPaste,
         &CLIPBOARD_OWNERSHIP,
-        Duration::from_millis(120),
+        Duration::from_millis(60),
+        Duration::from_millis(350),
     )
 }
 
@@ -124,6 +126,7 @@ fn insert_with_adapters<C: ClipboardAdapter, D: DirectInsertionAdapter, P: Paste
     direct: &mut D,
     paste: &mut P,
     ownership: &Mutex<ClipboardOwnership>,
+    pasteboard_settle_delay: Duration,
     restoration_delay: Duration,
 ) -> Result<InsertionOutcome, String> {
     if paste_automatically && direct.insert(text).is_ok() {
@@ -153,6 +156,12 @@ fn insert_with_adapters<C: ClipboardAdapter, D: DirectInsertionAdapter, P: Paste
         });
     }
 
+    // macOS and Electron-backed text fields may observe the pasteboard on a
+    // later run-loop turn. Give the new owner a brief moment to publish before
+    // dispatching Command+V.
+    if !pasteboard_settle_delay.is_zero() {
+        thread::sleep(pasteboard_settle_delay);
+    }
     if paste.paste().is_err() {
         return Ok(InsertionOutcome {
             status: "copied_fallback",
@@ -305,15 +314,70 @@ fn automatic_paste_is_available() -> bool {
     true
 }
 
+#[cfg(target_os = "macos")]
+fn paste_shortcut() -> Result<(), String> {
+    use std::ffi::c_void;
+
+    type CFTypeRef = *const c_void;
+    type CGEventSourceRef = *const c_void;
+    type CGEventRef = *const c_void;
+
+    #[link(name = "ApplicationServices", kind = "framework")]
+    unsafe extern "C" {
+        fn CGEventSourceCreate(state_id: i32) -> CGEventSourceRef;
+        fn CGEventCreateKeyboardEvent(
+            source: CGEventSourceRef,
+            virtual_key: u16,
+            key_down: bool,
+        ) -> CGEventRef;
+        fn CGEventSetFlags(event: CGEventRef, flags: u64);
+        fn CGEventPost(tap: u32, event: CGEventRef);
+    }
+    #[link(name = "CoreFoundation", kind = "framework")]
+    unsafe extern "C" {
+        fn CFRelease(value: CFTypeRef);
+    }
+
+    const PRIVATE_EVENT_SOURCE: i32 = -1;
+    const HID_EVENT_TAP: u32 = 0;
+    const V_KEY_CODE: u16 = 9;
+    const COMMAND_FLAG: u64 = 1 << 20;
+
+    // A private event source prevents a physically held Option shortcut from
+    // leaking into the synthetic paste chord as Command+Option+V.
+    unsafe {
+        let source = CGEventSourceCreate(PRIVATE_EVENT_SOURCE);
+        if source.is_null() {
+            return Err("the macOS keyboard event source is unavailable".to_owned());
+        }
+        let key_down = CGEventCreateKeyboardEvent(source, V_KEY_CODE, true);
+        let key_up = CGEventCreateKeyboardEvent(source, V_KEY_CODE, false);
+        if key_down.is_null() || key_up.is_null() {
+            if !key_down.is_null() {
+                CFRelease(key_down);
+            }
+            if !key_up.is_null() {
+                CFRelease(key_up);
+            }
+            CFRelease(source);
+            return Err("the macOS paste events could not be created".to_owned());
+        }
+        CGEventSetFlags(key_down, COMMAND_FLAG);
+        CGEventSetFlags(key_up, COMMAND_FLAG);
+        CGEventPost(HID_EVENT_TAP, key_down);
+        thread::sleep(Duration::from_millis(12));
+        CGEventPost(HID_EVENT_TAP, key_up);
+        CFRelease(key_down);
+        CFRelease(key_up);
+        CFRelease(source);
+    }
+    Ok(())
+}
+
+#[cfg(not(target_os = "macos"))]
 fn paste_shortcut() -> Result<(), String> {
     let mut enigo = Enigo::new(&Settings::default()).map_err(|error| error.to_string())?;
-    #[cfg(target_os = "macos")]
-    let modifier = Key::Meta;
-    #[cfg(not(target_os = "macos"))]
     let modifier = Key::Control;
-    #[cfg(target_os = "macos")]
-    let paste_key = Key::Other(9);
-    #[cfg(not(target_os = "macos"))]
     let paste_key = Key::Unicode('v');
 
     enigo
@@ -397,6 +461,7 @@ mod tests {
             &mut paste,
             &ownership(),
             Duration::ZERO,
+            Duration::ZERO,
         )
         .expect("insertion succeeds");
 
@@ -426,6 +491,7 @@ mod tests {
             &mut paste,
             &ownership(),
             Duration::ZERO,
+            Duration::ZERO,
         )
         .expect("insertion succeeds");
 
@@ -453,6 +519,7 @@ mod tests {
             &mut FakeDirectInsertion(Err("unavailable".to_owned())),
             &mut paste,
             &ownership(),
+            Duration::ZERO,
             Duration::ZERO,
         )
         .expect("fallback succeeds");
@@ -482,6 +549,7 @@ mod tests {
             &mut FakeDirectInsertion(Ok(())),
             &mut paste,
             &ownership(),
+            Duration::ZERO,
             Duration::ZERO,
         )
         .expect("direct insertion succeeds");
