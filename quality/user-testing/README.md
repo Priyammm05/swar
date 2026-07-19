@@ -37,15 +37,21 @@ After implementation:
 
 ## Session workflow
 
-Run the automated synthetic user first:
+Run the complete automated framework first:
+
+```sh
+./scripts/run_test_framework.sh full
+```
+
+This runs Rust unit tests, architecture checks, Dart unit and widget tests, the local pipeline benchmark, the real Flutter-to-Rust desktop bridge, and the synthetic-user journey. Use `fast` instead of `full` while iterating when native desktop launch evidence is not required.
+
+The synthetic user can also be run independently:
 
 ```sh
 ./scripts/run_synthetic_user_test.sh
 ```
 
 It writes a JSON report and screenshots under `apps/swar_desktop/build/user-testing/synthetic-user`. CI runs the same journey on macOS and Windows and uploads the evidence.
-
-Then create a private human report:
 
 Create a private report:
 

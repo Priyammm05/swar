@@ -1,0 +1,9 @@
+crates/swar_core/src/api/dictation.rs
+crates/swar_core/src/asr/mod.rs
+crates/swar_core/src/asr/model_registry.rs
+crates/swar_core/src/audio/capture_engine.rs
+crates/swar_core/src/audio/mod.rs
+crates/swar_core/src/dictation/coordinator.rs
+crates/swar_core/src/dictation/mod.rs
+crates/swar_core/src/dictation/state_machine.rs
+crates/swar_core/src/lib.rs

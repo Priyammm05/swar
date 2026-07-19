@@ -1,0 +1,6 @@
+crates/swar_core/src/api/mod.rs
+crates/swar_core/src/api/personalization.rs
+crates/swar_core/src/api/settings.rs
+crates/swar_core/src/enhancement.rs
+crates/swar_core/src/insertion.rs
+crates/swar_core/src/storage.rs

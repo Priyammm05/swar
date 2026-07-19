@@ -1,11 +1,31 @@
-# Swar versus Wispr Flow benchmark
+# Swar benchmark framework
+
+## 1. Local pipeline latency
+
+Run deterministic cleanup, routing, and protected-token validation without a
+microphone:
+
+```sh
+./scripts/run_pipeline_microbenchmark.sh 10000
+```
+
+The JSON report contains p50, p95, maximum latency, and throughput. This is a
+stable regression signal; it is intentionally separate from ASR performance.
+The full test framework runs this benchmark automatically:
+
+```sh
+./scripts/run_test_framework.sh full
+```
+
+## 2. Swar versus Wispr Flow
 
 This benchmark measures transcription accuracy from the same reading passage. It does not send audio or transcripts anywhere.
 
-1. Open a plain text editor and dictate `cases/english-01.txt` with Swar. Save only the inserted text as `benchmark/audio/local/swar.txt`.
-2. Read the same passage in the same room and microphone with Wispr Flow. Save its inserted text as `benchmark/audio/local/wispr.txt`.
-3. Record the time from stopping speech until text appears for each product.
-4. Run:
+1. Choose `cases/english-01.txt`, `cases/hinglish-01.txt`, or `cases/protected-01.txt`.
+2. Dictate it with Swar and save only the inserted text as `benchmark/audio/local/swar.txt`.
+3. Dictate the same passage with Wispr Flow in the same room and save it as `benchmark/audio/local/wispr.txt`.
+4. Record the time from stopping speech until text appears for each product.
+5. Run:
 
 ```sh
 ./scripts/run_dictation_benchmark.sh \
@@ -19,3 +39,6 @@ This benchmark measures transcription accuracy from the same reading passage. It
 The last two values are completion latency in milliseconds. Reports are written under `benchmark/reports/generated/`, which is intentionally ignored because transcripts may be personal.
 
 For a fair result, use Raw mode first. Clean and Intent modes intentionally rewrite speech, so word error rate alone is not a useful quality measure for them.
+
+Run at least five alternating rounds per product. Compare median completion
+latency, use the same built-in microphone, and do not reuse an audio take.

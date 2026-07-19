@@ -1,0 +1,16 @@
+.github/publish-groups/09-native-dictation-pipeline.txt
+.github/publish-groups/10-local-enhancement-and-personalization.txt
+.github/publish-groups/11-coordinator-driven-desktop.txt
+.github/publish-groups/12-dictation-regression-tests.txt
+.github/publish-groups/13-benchmark-and-quality-framework.txt
+benchmark/README.md
+benchmark/cases/hinglish-01.txt
+benchmark/cases/protected-01.txt
+crates/swar_core/src/api/benchmark.rs
+crates/swar_core/src/bin/swar_text_benchmark.rs
+docs/architecture.md
+quality/user-testing/README.md
+scripts/run_pipeline_microbenchmark.sh
+scripts/run_synthetic_user_test.sh
+scripts/run_test_framework.sh
+scripts/toolchain_shims/rustup

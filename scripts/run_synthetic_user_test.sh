@@ -26,6 +26,11 @@ esac
 
 cd "$project_root/apps/swar_desktop"
 
+if ! command -v rustup >/dev/null 2>&1; then
+  PATH=$project_root/scripts/toolchain_shims:$PATH
+  export PATH
+fi
+
 # Product builds never need developer service credentials. Keep them out of
 # Xcode/MSBuild child processes and their diagnostic logs.
 unset GITHUB_TOKEN GH_TOKEN OPENAI_API_KEY ANTHROPIC_API_KEY GEMINI_API_KEY

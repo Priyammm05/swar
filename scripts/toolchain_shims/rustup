@@ -1,0 +1,112 @@
+#!/usr/bin/env sh
+set -eu
+
+rustup_root=${RUSTUP_HOME:-"$HOME/.rustup"}
+toolchains_dir="$rustup_root/toolchains"
+
+resolve_toolchain() {
+  requested=$1
+  for candidate in "$toolchains_dir/$requested" "$toolchains_dir/$requested-"*; do
+    if [ -d "$candidate" ]; then
+      echo "$candidate"
+      return 0
+    fi
+  done
+  return 1
+}
+
+command_name=${1:-}
+if [ -z "$command_name" ]; then
+  echo "repository rustup shim: missing command" >&2
+  exit 2
+fi
+shift
+
+case "$command_name" in
+  toolchain)
+    subcommand=${1:-}
+    if [ "$subcommand" = list ]; then
+      for toolchain in "$toolchains_dir"/*; do
+        [ -d "$toolchain" ] && basename "$toolchain"
+      done
+    elif [ "$subcommand" = install ]; then
+      requested=${2:-}
+      resolve_toolchain "$requested" >/dev/null || {
+        echo "toolchain $requested is not already installed" >&2
+        exit 1
+      }
+    else
+      echo "repository rustup shim cannot mutate toolchains" >&2
+      exit 1
+    fi
+    ;;
+  target)
+    subcommand=${1:-}
+    shift || true
+    if [ "$subcommand" = add ]; then
+      target=${1:-}
+      requested=stable
+      shift || true
+      while [ "$#" -gt 0 ]; do
+        if [ "$1" = --toolchain ]; then
+          requested=$2
+          shift 2
+        else
+          shift
+        fi
+      done
+      toolchain=$(resolve_toolchain "$requested") || exit 1
+      [ -d "$toolchain/lib/rustlib/$target" ] || {
+        echo "target $target is not already installed" >&2
+        exit 1
+      }
+      exit 0
+    fi
+    if [ "$subcommand" != list ]; then
+      echo "repository rustup shim cannot mutate targets" >&2
+      exit 1
+    fi
+    requested=stable
+    while [ "$#" -gt 0 ]; do
+      if [ "$1" = --toolchain ]; then
+        requested=$2
+        shift 2
+      else
+        shift
+      fi
+    done
+    toolchain=$(resolve_toolchain "$requested") || exit 1
+    for target in "$toolchain/lib/rustlib"/*; do
+      [ -d "$target" ] || continue
+      [ -f "$target/lib/libstd.rlib" ] || [ -d "$target/lib" ] || continue
+      basename "$target"
+    done
+    ;;
+  which)
+    requested=stable
+    executable=
+    while [ "$#" -gt 0 ]; do
+      if [ "$1" = --toolchain ]; then
+        requested=$2
+        shift 2
+      else
+        executable=$1
+        shift
+      fi
+    done
+    toolchain=$(resolve_toolchain "$requested") || exit 1
+    [ -x "$toolchain/bin/$executable" ] || exit 1
+    echo "$toolchain/bin/$executable"
+    ;;
+  run)
+    requested=${1:-stable}
+    executable=${2:-}
+    shift 2
+    toolchain=$(resolve_toolchain "$requested") || exit 1
+    exec "$toolchain/bin/$executable" "$@"
+    ;;
+  *)
+    echo "repository rustup shim does not support: $command_name" >&2
+    exit 2
+    ;;
+esac

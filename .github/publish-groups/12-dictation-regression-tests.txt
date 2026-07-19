@@ -1,0 +1,4 @@
+apps/swar_desktop/test/dictation/application/shortcut_gesture_machine_test.dart
+apps/swar_desktop/test/dictation_history_view_model_test.dart
+apps/swar_desktop/test/dictation_session_view_model_test.dart
+apps/swar_desktop/test/swar_shell_test.dart
