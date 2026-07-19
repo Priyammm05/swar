@@ -11,7 +11,7 @@ use std::{
 use crate::{
     api::personalization,
     asr::model_registry,
-    audio::capture_engine,
+    audio::{capture_engine, resample, speech},
     dictation::{
         coordinator::DictationCoordinator,
         state_machine::{DictationState, DictationStateMachine, DictationTransition},
@@ -104,6 +104,10 @@ pub struct DictationSessionConfig {
     pub restore_clipboard: bool,
     pub maximum_seconds: u32,
     pub enable_live_preview: bool,
+    pub enhancement_provider: String,
+    pub provider_endpoint: String,
+    pub provider_model: String,
+    pub provider_api_key: String,
 }
 
 #[derive(Clone, Debug)]
@@ -131,6 +135,7 @@ struct ActiveCapture {
     sample_rate: u32,
     started_at: Instant,
     dropped_samples_at_start: u64,
+    stream_errors_at_start: u64,
     preview_running: Arc<AtomicBool>,
     preview_worker: Option<thread::JoinHandle<()>>,
     sink: StreamSink<DictationEvent>,
@@ -177,7 +182,7 @@ pub fn start_dictation_session(
     if config.model_path.trim().is_empty() || !Path::new(&config.model_path).is_file() {
         return Err("model_not_installed: choose an offline Whisper model in Settings".to_owned());
     }
-    model_registry::prepare(&config.model_path)?;
+    model_registry::prepare_for_language(&config.model_path, &config.language)?;
 
     let session_id = Uuid::new_v4().to_string();
     COORDINATOR
@@ -252,6 +257,7 @@ pub fn start_dictation_session(
         sample_rate: capture_start.sample_rate,
         started_at: Instant::now(),
         dropped_samples_at_start: capture_start.dropped_samples_at_start,
+        stream_errors_at_start: capture_start.stream_errors_at_start,
         preview_running,
         preview_worker,
         sink,
@@ -290,13 +296,21 @@ pub fn finish_dictation_session(session_id: String) -> Result<DictationCompletio
 
 fn finish_capture(capture: &mut ActiveCapture) -> Result<DictationCompletion, String> {
     stop_preview(capture);
-    let captured = capture_engine::finish_capture(&capture.id, capture.dropped_samples_at_start)?;
+    let captured = capture_engine::finish_capture(
+        &capture.id,
+        capture.dropped_samples_at_start,
+        capture.stream_errors_at_start,
+    )?;
     if captured.is_empty() {
         return Err("no microphone audio was captured".to_owned());
     }
 
     let processing_started = Instant::now();
-    let mono_16khz = resample_linear(&captured, capture.sample_rate, 16_000);
+    let mono_16khz = resample::to_sample_rate(&captured, capture.sample_rate, 16_000);
+    let speech = speech::retain_probable_speech(&mono_16khz, 16_000);
+    if speech.samples.is_empty() {
+        return Err("speech was not detected".to_owned());
+    }
     transition_capture(
         capture,
         DictationState::Transcribing,
@@ -305,7 +319,7 @@ fn finish_capture(capture: &mut ActiveCapture) -> Result<DictationCompletion, St
     let raw_text = model_registry::transcribe(
         &capture.config.model_path,
         &capture.config.language,
-        &mono_16khz,
+        &speech.samples,
     )?;
     if !transcript_contains_speech(&raw_text) {
         return Err("speech was not detected".to_owned());
@@ -321,6 +335,13 @@ fn finish_capture(capture: &mut ActiveCapture) -> Result<DictationCompletion, St
         &personalized_raw,
         &clean_text,
         &capture.config.writing_mode,
+        &capture.config.source_application,
+        enhancement::EnhancementProviderConfig {
+            provider: &capture.config.enhancement_provider,
+            endpoint: &capture.config.provider_endpoint,
+            model: &capture.config.provider_model,
+            api_key: &capture.config.provider_api_key,
+        },
     );
     if enhancement.routed {
         transition_capture(
@@ -365,9 +386,10 @@ fn finish_capture(capture: &mut ActiveCapture) -> Result<DictationCompletion, St
         final_text: &final_text,
         language: &capture.config.language,
         writing_mode: &capture.config.writing_mode,
-        source_application: &capture.config.source_application,
+        // Foreground app context is ephemeral and is never persisted.
+        source_application: "Desktop",
         audio_duration_ms,
-        speech_duration_ms: audio_duration_ms,
+        speech_duration_ms: speech.speech_duration_ms,
         processing_duration_ms,
         asr_engine: "whisper.cpp",
         asr_model_id: Path::new(&capture.config.model_path)
@@ -411,6 +433,18 @@ pub fn offline_model_is_ready(model_path: String) -> bool {
 /// Loads the selected model on the dedicated ASR worker before the first dictation.
 pub fn prepare_dictation_engine(model_path: String) -> Result<bool, String> {
     model_registry::prepare(&model_path).map(|status| status.already_loaded)
+}
+
+/// Starts CoreAudio/WASAPI before the first shortcut so native pre-roll is
+/// available from the first dictation without moving PCM into Dart.
+pub fn prepare_audio_capture(microphone_id: String) -> Result<u32, String> {
+    let host = cpal::default_host();
+    let device = select_input_device(&host, &microphone_id)?;
+    let device_id = device
+        .id()
+        .map(|id| id.to_string())
+        .unwrap_or_else(|_| device.to_string());
+    capture_engine::prepare(&device, device_id)
 }
 
 /// Releases the warm model without stopping the dedicated ASR worker.
@@ -458,7 +492,7 @@ fn spawn_preview_worker(
                 if samples.len() < sample_rate as usize * 4 / 5 {
                     continue;
                 }
-                let mono_16khz = resample_linear(&samples, sample_rate, 16_000);
+                let mono_16khz = resample::to_sample_rate(&samples, sample_rate, 16_000);
                 let Ok(partial) =
                     model_registry::transcribe_preview(&model_path, &language, &mono_16khz)
                 else {
@@ -572,26 +606,6 @@ fn monotonic_timestamp_ms() -> u64 {
     ORIGIN.get_or_init(Instant::now).elapsed().as_millis() as u64
 }
 
-fn resample_linear(input: &[f32], source_rate: u32, target_rate: u32) -> Vec<f32> {
-    if input.is_empty() || source_rate == 0 || target_rate == 0 {
-        return Vec::new();
-    }
-    if source_rate == target_rate {
-        return input.to_vec();
-    }
-    let output_len = input.len() * target_rate as usize / source_rate as usize;
-    let ratio = source_rate as f64 / target_rate as f64;
-    (0..output_len)
-        .map(|index| {
-            let position = index as f64 * ratio;
-            let lower = position.floor() as usize;
-            let upper = (lower + 1).min(input.len() - 1);
-            let fraction = (position - lower as f64) as f32;
-            input[lower] * (1.0 - fraction) + input[upper] * fraction
-        })
-        .collect()
-}
-
 fn transcript_contains_speech(value: &str) -> bool {
     let normalized = value
         .trim()
@@ -649,12 +663,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn resamples_to_the_asr_boundary_rate() {
-        let input = vec![0.5_f32; 48_000];
-        let output = resample_linear(&input, 48_000, 16_000);
-        assert_eq!(output.len(), 16_000);
-        assert!(output
-            .iter()
-            .all(|sample| (*sample - 0.5).abs() < f32::EPSILON));
+    fn speech_markers_filter_known_blank_tokens() {
+        assert!(!transcript_contains_speech("[BLANK_AUDIO]"));
+        assert!(transcript_contains_speech("hello"));
     }
 }

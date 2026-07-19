@@ -2,9 +2,9 @@ use std::collections::HashSet;
 
 /// Coordinates recording ownership independently from post-processing work.
 ///
-/// Only one session may capture audio. Once that session enters finalisation,
-/// its recording slot is released so a fast user may begin another recording
-/// while the previous session completes transcription and insertion.
+/// Only one session may own the dictation pipeline. The slot remains reserved
+/// through transcription, cleanup, insertion, and the history transaction so
+/// a shortcut press can never overlap or reorder user-visible output.
 #[derive(Default)]
 pub struct DictationCoordinator {
     recording_session: Option<String>,
@@ -24,7 +24,6 @@ impl DictationCoordinator {
         if self.recording_session.as_deref() != Some(session_id) {
             return Err("the requested dictation session is not recording".to_owned());
         }
-        self.recording_session = None;
         self.post_processing_sessions.insert(session_id.to_owned());
         Ok(())
     }
@@ -39,6 +38,9 @@ impl DictationCoordinator {
 
     pub fn complete(&mut self, session_id: &str) -> Result<(), String> {
         if self.post_processing_sessions.remove(session_id) {
+            if self.recording_session.as_deref() == Some(session_id) {
+                self.recording_session = None;
+            }
             Ok(())
         } else {
             Err("the requested dictation session is not being processed".to_owned())
@@ -56,17 +58,18 @@ mod tests {
     use super::*;
 
     #[test]
-    fn releases_the_recording_slot_during_post_processing() {
+    fn blocks_a_new_recording_until_post_processing_completes() {
         let mut coordinator = DictationCoordinator::default();
         coordinator.reserve_recording("one").expect("first capture");
         coordinator
             .begin_post_processing("one")
             .expect("first finalisation");
+        assert!(coordinator.reserve_recording("two").is_err());
+        assert_eq!(coordinator.active_recording(), Some("one"));
+        coordinator.complete("one").expect("first completion");
         coordinator
             .reserve_recording("two")
-            .expect("pipelined capture");
-        assert_eq!(coordinator.active_recording(), Some("two"));
-        coordinator.complete("one").expect("first completion");
+            .expect("next capture after completed insertion");
     }
 
     #[test]

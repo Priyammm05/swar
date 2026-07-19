@@ -15,6 +15,7 @@ use cpal::{
 use rtrb::{Consumer, Producer, RingBuffer};
 
 const PRE_ROLL_MILLISECONDS: usize = 350;
+const POST_ROLL_MILLISECONDS: u64 = 250;
 const LEVEL_WINDOWS_PER_SECOND: u32 = 20;
 
 type LevelCallback = Arc<dyn Fn(f64) + Send + Sync>;
@@ -24,6 +25,7 @@ static AUDIO_ENGINE: Mutex<Option<PersistentAudioEngine>> = Mutex::new(None);
 pub(crate) struct CaptureStart {
     pub sample_rate: u32,
     pub dropped_samples_at_start: u64,
+    pub stream_errors_at_start: u64,
 }
 
 struct ActiveBuffer {
@@ -133,6 +135,7 @@ struct PersistentAudioEngine {
     sample_rate: u32,
     accumulator: Arc<Mutex<CaptureAccumulator>>,
     dropped_samples: Arc<AtomicU64>,
+    stream_errors: Arc<AtomicU64>,
     running: Arc<AtomicBool>,
     stream: Option<Stream>,
     worker: Option<thread::JoinHandle<()>>,
@@ -151,6 +154,7 @@ impl PersistentAudioEngine {
         let (producer, consumer) = RingBuffer::<f32>::new(ring_capacity);
         let accumulator = Arc::new(Mutex::new(CaptureAccumulator::new(sample_rate)));
         let dropped_samples = Arc::new(AtomicU64::new(0));
+        let stream_errors = Arc::new(AtomicU64::new(0));
         let running = Arc::new(AtomicBool::new(true));
         let worker = spawn_worker(consumer, accumulator.clone(), running.clone());
         let stream = build_input_stream(
@@ -160,6 +164,7 @@ impl PersistentAudioEngine {
             channels,
             producer,
             dropped_samples.clone(),
+            stream_errors.clone(),
         )?;
         stream.play().map_err(|error| error.to_string())?;
         Ok(Self {
@@ -167,6 +172,7 @@ impl PersistentAudioEngine {
             sample_rate,
             accumulator,
             dropped_samples,
+            stream_errors,
             running,
             stream: Some(stream),
             worker: Some(worker),
@@ -190,6 +196,7 @@ impl PersistentAudioEngine {
         Ok(CaptureStart {
             sample_rate: self.sample_rate,
             dropped_samples_at_start: self.dropped_samples.load(Ordering::Acquire),
+            stream_errors_at_start: self.stream_errors.load(Ordering::Acquire),
         })
     }
 }
@@ -226,10 +233,32 @@ pub(crate) fn begin_capture(
         .begin(session_id, maximum_seconds, level_callback)
 }
 
+/// Starts the persistent native stream before the first shortcut activation so
+/// the first dictation receives the same pre-roll as every later dictation.
+pub(crate) fn prepare(device: &Device, device_id: String) -> Result<u32, String> {
+    let mut engine = AUDIO_ENGINE
+        .lock()
+        .map_err(|_| "audio engine lock poisoned".to_owned())?;
+    if engine
+        .as_ref()
+        .is_none_or(|current| current.device_id != device_id)
+    {
+        *engine = Some(PersistentAudioEngine::start(device, device_id)?);
+    }
+    engine
+        .as_ref()
+        .map(|value| value.sample_rate)
+        .ok_or_else(|| "audio engine did not start".to_owned())
+}
+
 pub(crate) fn finish_capture(
     session_id: &str,
     dropped_samples_at_start: u64,
+    stream_errors_at_start: u64,
 ) -> Result<Vec<f32>, String> {
+    // Key-up marks the end of intent, not necessarily the end of the final
+    // phoneme. Keep a short post-roll while capture remains Rust-owned.
+    thread::sleep(Duration::from_millis(POST_ROLL_MILLISECONDS));
     let engine = AUDIO_ENGINE
         .lock()
         .map_err(|_| "audio engine lock poisoned".to_owned())?;
@@ -238,6 +267,9 @@ pub(crate) fn finish_capture(
         .ok_or_else(|| "audio engine is unavailable".to_owned())?;
     if engine.dropped_samples.load(Ordering::Acquire) > dropped_samples_at_start {
         return Err("audio buffer overflowed; shorten the dictation and try again".to_owned());
+    }
+    if engine.stream_errors.load(Ordering::Acquire) > stream_errors_at_start {
+        return Err("the microphone stream reported an input error".to_owned());
     }
     let result = engine
         .accumulator
@@ -319,21 +351,36 @@ fn build_input_stream(
     channels: usize,
     producer: Producer<f32>,
     dropped: Arc<AtomicU64>,
+    stream_errors: Arc<AtomicU64>,
 ) -> Result<Stream, String> {
     match format {
-        SampleFormat::F32 => {
-            build_typed_stream(device, config, channels, producer, dropped, |x: f32| x)
-        }
-        SampleFormat::I16 => {
-            build_typed_stream(device, config, channels, producer, dropped, |x: i16| {
-                f32::from(x) / 32_768.0
-            })
-        }
-        SampleFormat::U16 => {
-            build_typed_stream(device, config, channels, producer, dropped, |x: u16| {
-                (f32::from(x) - 32_768.0) / 32_768.0
-            })
-        }
+        SampleFormat::F32 => build_typed_stream(
+            device,
+            config,
+            channels,
+            producer,
+            dropped,
+            stream_errors,
+            |x: f32| x,
+        ),
+        SampleFormat::I16 => build_typed_stream(
+            device,
+            config,
+            channels,
+            producer,
+            dropped,
+            stream_errors,
+            |x: i16| f32::from(x) / 32_768.0,
+        ),
+        SampleFormat::U16 => build_typed_stream(
+            device,
+            config,
+            channels,
+            producer,
+            dropped,
+            stream_errors,
+            |x: u16| (f32::from(x) - 32_768.0) / 32_768.0,
+        ),
         _ => Err(format!("unsupported microphone sample format: {format:?}")),
     }
 }
@@ -344,6 +391,7 @@ fn build_typed_stream<T, F>(
     channels: usize,
     mut producer: Producer<f32>,
     dropped: Arc<AtomicU64>,
+    stream_errors: Arc<AtomicU64>,
     convert: F,
 ) -> Result<Stream, String>
 where
@@ -361,7 +409,9 @@ where
                     }
                 }
             },
-            move |_error| {},
+            move |_error| {
+                stream_errors.fetch_add(1, Ordering::Relaxed);
+            },
             None,
         )
         .map_err(|error| error.to_string())
