@@ -225,6 +225,45 @@ void main() {
     await tester.pump();
     expect(find.text('No matching dictations'), findsOneWidget);
   });
+
+  testWidgets(
+    'dictation stays locked until transcription and insertion finish',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(1200, 800));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final engine = _BlockingFinishEngineGateway();
+      await tester.pumpWidget(
+        SwarApp(
+          diagnosticsGateway: const _SilentDiagnosticsGateway(),
+          dictationRepository: FakeDictationHistoryRepository(),
+          insightsRepository: const FakeInsightsRepository(),
+          dictationEngineGateway: engine,
+          settingsRepository: InMemorySettingsRepository(
+            initial: const SwarSettings(modelPath: '/test/model.bin'),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      await tester.tap(find.byKey(const Key('global-dictation-control')));
+      await tester.pump();
+      expect(find.text('Stop'), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('global-dictation-control')));
+      await tester.pump();
+      expect(find.text('Working'), findsOneWidget);
+      final workingButton = tester.widget<FilledButton>(
+        find.byKey(const Key('global-dictation-control')),
+      );
+      expect(workingButton.onPressed, isNull);
+      expect(engine.finishCalls, 1);
+
+      engine.complete();
+      await tester.pump();
+      expect(find.text('Dictate'), findsOneWidget);
+      expect(engine.finishCalls, 1);
+    },
+  );
 }
 
 Widget _buildApp({FakeDictationHistoryRepository? dictations}) {
@@ -383,4 +422,66 @@ final class _RecordingDesktopShortcutGateway implements DesktopShortcutGateway {
     required bool isLatched,
     required String shortcutKey,
   }) async => lastState = state;
+}
+
+final class _BlockingFinishEngineGateway implements DictationEngineGateway {
+  final Completer<DictationEngineCompletion> _completion =
+      Completer<DictationEngineCompletion>();
+  int finishCalls = 0;
+
+  void complete() => _completion.complete(
+    const DictationEngineCompletion(
+      finalText: 'Completed locally',
+      insertionStatus: 'inserted',
+    ),
+  );
+
+  @override
+  Future<void> cancel(String sessionId) async {}
+
+  @override
+  Future<DictationEngineCompletion> finish(String sessionId) {
+    finishCalls += 1;
+    return _completion.future;
+  }
+
+  @override
+  Future<OfflineModelInstallation> installRecommendedModel() async =>
+      recommendedModelStatus();
+
+  @override
+  Future<List<SwarMicrophone>> listMicrophones() async => const [];
+
+  @override
+  bool modelIsReady(String modelPath) => modelPath.isNotEmpty;
+
+  @override
+  Future<bool> prepare(String modelPath) async => true;
+
+  @override
+  Future<void> prepareAudio(String microphoneId) async {}
+
+  @override
+  OfflineModelInstallation recommendedModelStatus() =>
+      const OfflineModelInstallation(
+        path: '/test/model.bin',
+        installed: true,
+        sizeBytes: 1,
+      );
+
+  @override
+  Future<void> release() async {}
+
+  @override
+  Stream<DictationEngineEvent> start(DictationEngineConfig config) =>
+      Stream<DictationEngineEvent>.value(
+        const DictationEngineEvent(
+          sessionId: 'blocking-session',
+          kind: DictationEngineEventKind.recording,
+          previousState: DictationLifecycleState.preparing,
+          currentState: DictationLifecycleState.recording,
+          timestampMilliseconds: 1,
+          reason: 'microphone ready',
+        ),
+      );
 }
