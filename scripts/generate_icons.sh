@@ -3,7 +3,8 @@
 set -eu
 
 project_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-app_icon_source="$project_root/apps/logo/svar_logo_large_green_centered.svg"
+# Dock / app icon: white background with the spruce brand mark centered.
+app_icon_source="$project_root/apps/logo/svar_dock_white_green.svg"
 menu_icon_source="$project_root/apps/logo/svar_logo_mark_black_centered.svg"
 mac_app_icon_dir="$project_root/apps/swar_desktop/macos/Runner/Assets.xcassets/AppIcon.appiconset"
 mac_menu_icon_dir="$project_root/apps/swar_desktop/macos/Runner/Assets.xcassets/MenuBarIcon.imageset"

@@ -1,0 +1,17 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1024" height="1024" fill="#FFFFFF"/>
+  <g transform="translate(179 179) scale(0.727)">
+    <circle cx="457.87" cy="457.87" r="317.5" transform="rotate(-50 457.87 457.87)" stroke="#2F5547" stroke-width="15"/>
+    <path d="M374.725 197.168L233.278 365.737" stroke="#2F5547" stroke-width="25" stroke-linecap="round"/>
+    <line x1="228.434" y1="438.161" x2="374.846" y2="263.673" stroke="#2F5547" stroke-width="25" stroke-linecap="round"/>
+    <line x1="236.191" y1="494.756" x2="383.329" y2="319.403" stroke="#2F5547" stroke-width="25" stroke-linecap="round"/>
+    <line x1="12.5" y1="-12.5" x2="190.628" y2="-12.5" transform="matrix(0.638686 -0.769467 0.769745 0.638351 270.982 540.267)" stroke="#2F5547" stroke-width="25" stroke-linecap="round"/>
+    <line x1="316.686" y1="537.256" x2="426.105" y2="406.856" stroke="#2F5547" stroke-width="25" stroke-linecap="round"/>
+    <line x1="377.289" y1="529.183" x2="539.66" y2="335.677" stroke="#2F5547" stroke-width="25" stroke-linecap="round"/>
+    <line x1="490.436" y1="463.555" x2="607.108" y2="324.51" stroke="#2F5547" stroke-width="25" stroke-linecap="round"/>
+    <line x1="12.5" y1="-12.5" x2="191.756" y2="-12.5" transform="matrix(0.638709 -0.769449 0.769725 0.638376 534.763 499.391)" stroke="#2F5547" stroke-width="25" stroke-linecap="round"/>
+    <line x1="535.07" y1="543.729" x2="680.032" y2="370.97" stroke="#2F5547" stroke-width="25" stroke-linecap="round"/>
+    <line x1="543.658" y1="601.021" x2="690.071" y2="426.533" stroke="#2F5547" stroke-width="25" stroke-linecap="round"/>
+    <line x1="543.542" y1="668.687" x2="681.976" y2="503.708" stroke="#2F5547" stroke-width="25" stroke-linecap="round"/>
+  </g>
+</svg>
