@@ -2,7 +2,7 @@ use std::{
     fs,
     path::Path,
     sync::{
-        atomic::{AtomicBool, Ordering},
+        atomic::{AtomicBool, AtomicU64, Ordering},
         Arc, LazyLock, Mutex,
     },
     thread,
@@ -30,6 +30,10 @@ use cpal::{
 use directories::ProjectDirs;
 use flutter_rust_bridge::frb;
 use uuid::Uuid;
+
+/// Minimum spacing between audio-meter events (~25 Hz, within the <=30 Hz UI
+/// budget). Bounds the Rust->Dart stream regardless of the capture level rate.
+const MINIMUM_LEVEL_INTERVAL_MS: u64 = 40;
 
 static ACTIVE_CAPTURE: Mutex<Option<ActiveCapture>> = Mutex::new(None);
 static COORDINATOR: LazyLock<Mutex<DictationCoordinator>> =
@@ -245,18 +249,28 @@ pub fn start_dictation_session(
         .unwrap_or_else(|_| device.to_string());
     let level_sink = sink.clone();
     let level_session_id = session_id.clone();
+    // Throttle audio-meter events to <=30 Hz at the emission point, so the
+    // Rust->Dart stream cannot accumulate an unbounded backlog if the UI
+    // isolate falls behind during a long recording (spec: AudioLevel <=30 Hz).
+    let last_level_ms = Arc::new(AtomicU64::new(0));
     let capture_start = match capture_engine::begin_capture(
         &device,
         device_id,
         session_id.clone(),
         config.maximum_seconds,
         Arc::new(move |rms| {
+            let now = monotonic_timestamp_ms();
+            if now.saturating_sub(last_level_ms.load(Ordering::Relaxed)) < MINIMUM_LEVEL_INTERVAL_MS
+            {
+                return;
+            }
+            last_level_ms.store(now, Ordering::Relaxed);
             let _ = level_sink.add(DictationEvent {
                 session_id: level_session_id.clone(),
                 kind: DictationEventKind::AudioLevel,
                 audio_level: Some(rms),
                 message: None,
-                timestamp_ms: monotonic_timestamp_ms(),
+                timestamp_ms: now,
                 previous_state: DictationState::Recording.into(),
                 current_state: DictationState::Recording.into(),
                 reason: "audio meter".to_owned(),
