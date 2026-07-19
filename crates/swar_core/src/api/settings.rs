@@ -20,6 +20,7 @@ pub struct NativeSettings {
     pub milestones: bool,
     pub paste_automatically: bool,
     pub restore_clipboard: bool,
+    pub learn_from_edits: bool,
     pub model_path: String,
     pub microphone_id: String,
 }
@@ -40,6 +41,7 @@ impl Default for NativeSettings {
             milestones: true,
             paste_automatically: true,
             restore_clipboard: true,
+            learn_from_edits: false,
             model_path: String::new(),
             microphone_id: String::new(),
         }

@@ -5,9 +5,24 @@ use std::{
 };
 
 use directories::ProjectDirs;
-use rusqlite::{Connection, params};
+use rusqlite::{params, Connection};
 
 use crate::api::history::{HistoryPage, InsightsSnapshot, StoredDictation};
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct StoredVocabularyEntry {
+    pub spoken: String,
+    pub written: String,
+    pub use_count: u32,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct StoredVoiceProfile {
+    pub sample_count: u32,
+    pub average_sentence_words: f64,
+    pub contraction_ratio: f64,
+    pub lowercase_start_ratio: f64,
+}
 
 static STORE: OnceLock<Mutex<HistoryStore>> = OnceLock::new();
 
@@ -82,6 +97,49 @@ pub(crate) fn clear_history() -> Result<(), String> {
         .lock()
         .map_err(|_| "history store lock poisoned".to_owned())?;
     guard.clear().map_err(|error| error.to_string())
+}
+
+pub(crate) fn vocabulary_entries() -> Result<Vec<StoredVocabularyEntry>, String> {
+    let guard = store()?
+        .lock()
+        .map_err(|_| "history store lock poisoned".to_owned())?;
+    guard
+        .vocabulary_entries()
+        .map_err(|error| error.to_string())
+}
+
+pub(crate) fn upsert_vocabulary(spoken: &str, written: &str) -> Result<(), String> {
+    let guard = store()?
+        .lock()
+        .map_err(|_| "history store lock poisoned".to_owned())?;
+    guard
+        .upsert_vocabulary(spoken, written)
+        .map_err(|error| error.to_string())
+}
+
+pub(crate) fn remove_vocabulary(spoken: &str) -> Result<(), String> {
+    let guard = store()?
+        .lock()
+        .map_err(|_| "history store lock poisoned".to_owned())?;
+    guard
+        .remove_vocabulary(spoken)
+        .map_err(|error| error.to_string())
+}
+
+pub(crate) fn record_user_edit(original: &str, corrected: &str) -> Result<(), String> {
+    let guard = store()?
+        .lock()
+        .map_err(|_| "history store lock poisoned".to_owned())?;
+    guard
+        .record_user_edit(original, corrected)
+        .map_err(|error| error.to_string())
+}
+
+pub(crate) fn voice_profile() -> Result<StoredVoiceProfile, String> {
+    let guard = store()?
+        .lock()
+        .map_err(|_| "history store lock poisoned".to_owned())?;
+    guard.voice_profile().map_err(|error| error.to_string())
 }
 
 fn store() -> Result<&'static Mutex<HistoryStore>, String> {
@@ -173,7 +231,24 @@ impl HistoryStore {
                  VALUES (new.rowid, new.final_text, new.raw_text, new.source_app_name);
              END;
              CREATE INDEX IF NOT EXISTS dictations_created_at_idx
-                 ON dictations(created_at DESC);",
+                 ON dictations(created_at DESC);
+             CREATE TABLE IF NOT EXISTS custom_vocabulary (
+                 spoken TEXT PRIMARY KEY COLLATE NOCASE,
+                 written TEXT NOT NULL,
+                 use_count INTEGER NOT NULL DEFAULT 1,
+                 updated_at INTEGER NOT NULL
+             );
+             CREATE TABLE IF NOT EXISTS voice_style_profile (
+                 id INTEGER PRIMARY KEY CHECK (id = 1),
+                 sample_count INTEGER NOT NULL,
+                 average_sentence_words REAL NOT NULL,
+                 contraction_ratio REAL NOT NULL,
+                 lowercase_start_ratio REAL NOT NULL
+             );
+             INSERT OR IGNORE INTO voice_style_profile (
+                 id, sample_count, average_sentence_words,
+                 contraction_ratio, lowercase_start_ratio
+             ) VALUES (1, 0, 0, 0, 0);",
         )?;
         Ok(())
     }
@@ -345,6 +420,112 @@ impl HistoryStore {
         self.connection.execute("DELETE FROM dictations", [])?;
         Ok(())
     }
+
+    fn vocabulary_entries(&self) -> rusqlite::Result<Vec<StoredVocabularyEntry>> {
+        let mut statement = self.connection.prepare(
+            "SELECT spoken, written, use_count FROM custom_vocabulary
+             ORDER BY use_count DESC, spoken ASC",
+        )?;
+        let entries = statement
+            .query_map([], |row| {
+                Ok(StoredVocabularyEntry {
+                    spoken: row.get(0)?,
+                    written: row.get(1)?,
+                    use_count: row.get(2)?,
+                })
+            })?
+            .collect();
+        entries
+    }
+
+    fn upsert_vocabulary(&self, spoken: &str, written: &str) -> rusqlite::Result<()> {
+        self.connection.execute(
+            "INSERT INTO custom_vocabulary (spoken, written, use_count, updated_at)
+             VALUES (?1, ?2, 1, unixepoch('subsec') * 1000)
+             ON CONFLICT(spoken) DO UPDATE SET
+                 written = excluded.written,
+                 use_count = custom_vocabulary.use_count + 1,
+                 updated_at = excluded.updated_at",
+            params![spoken.trim(), written.trim()],
+        )?;
+        Ok(())
+    }
+
+    fn remove_vocabulary(&self, spoken: &str) -> rusqlite::Result<()> {
+        self.connection.execute(
+            "DELETE FROM custom_vocabulary WHERE spoken = ?1 COLLATE NOCASE",
+            [spoken.trim()],
+        )?;
+        Ok(())
+    }
+
+    fn record_user_edit(&self, original: &str, corrected: &str) -> rusqlite::Result<()> {
+        for (spoken, written) in infer_token_replacements(original, corrected) {
+            self.upsert_vocabulary(&spoken, &written)?;
+        }
+        let words = corrected.split_whitespace().count() as f64;
+        let tokens = corrected.split_whitespace().collect::<Vec<_>>();
+        let contractions = tokens.iter().filter(|token| token.contains('\'')).count() as f64;
+        let contraction_ratio = if tokens.is_empty() {
+            0.0
+        } else {
+            contractions / tokens.len() as f64
+        };
+        let lowercase_start = corrected
+            .trim_start()
+            .chars()
+            .next()
+            .is_some_and(|character| character.is_lowercase()) as u8
+            as f64;
+        self.connection.execute(
+            "UPDATE voice_style_profile SET
+                 average_sentence_words =
+                     ((average_sentence_words * sample_count) + ?1) / (sample_count + 1),
+                 contraction_ratio =
+                     ((contraction_ratio * sample_count) + ?2) / (sample_count + 1),
+                 lowercase_start_ratio =
+                     ((lowercase_start_ratio * sample_count) + ?3) / (sample_count + 1),
+                 sample_count = sample_count + 1
+             WHERE id = 1",
+            params![words, contraction_ratio, lowercase_start],
+        )?;
+        Ok(())
+    }
+
+    fn voice_profile(&self) -> rusqlite::Result<StoredVoiceProfile> {
+        self.connection.query_row(
+            "SELECT sample_count, average_sentence_words,
+                    contraction_ratio, lowercase_start_ratio
+             FROM voice_style_profile WHERE id = 1",
+            [],
+            |row| {
+                Ok(StoredVoiceProfile {
+                    sample_count: row.get(0)?,
+                    average_sentence_words: row.get(1)?,
+                    contraction_ratio: row.get(2)?,
+                    lowercase_start_ratio: row.get(3)?,
+                })
+            },
+        )
+    }
+}
+
+fn infer_token_replacements(original: &str, corrected: &str) -> Vec<(String, String)> {
+    let original = original.split_whitespace().collect::<Vec<_>>();
+    let corrected = corrected.split_whitespace().collect::<Vec<_>>();
+    if original.len() != corrected.len() || original.len() > 64 {
+        return Vec::new();
+    }
+    original
+        .into_iter()
+        .zip(corrected)
+        .filter_map(|(spoken, written)| {
+            let spoken = spoken.trim_matches(|character: char| character.is_ascii_punctuation());
+            let written = written.trim_matches(|character: char| character.is_ascii_punctuation());
+            (!spoken.is_empty() && !written.is_empty() && !spoken.eq_ignore_ascii_case(written))
+                .then(|| (spoken.to_owned(), written.to_owned()))
+        })
+        .collect()
 }
 
 fn map_stored_dictation(row: &rusqlite::Row<'_>) -> rusqlite::Result<StoredDictation> {
@@ -414,5 +595,21 @@ mod tests {
         assert_eq!(insights.total_dictations, 2);
         assert_eq!(insights.total_words, 5);
         assert!((insights.average_words_per_minute - 150.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn learns_spelling_pairs_and_voice_metrics_from_an_opted_in_edit() {
+        let store = HistoryStore::open_in_memory().expect("in-memory store");
+        store
+            .record_user_edit("hello sewer team", "hello Swar team")
+            .expect("edit learned");
+
+        let entries = store.vocabulary_entries().expect("vocabulary");
+        assert_eq!(entries[0].spoken, "sewer");
+        assert_eq!(entries[0].written, "Swar");
+        let profile = store.voice_profile().expect("profile");
+        assert_eq!(profile.sample_count, 1);
+        assert_eq!(profile.average_sentence_words, 3.0);
+        assert_eq!(profile.lowercase_start_ratio, 1.0);
     }
 }
