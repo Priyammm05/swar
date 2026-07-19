@@ -52,7 +52,6 @@ final class _SwarAppState extends State<SwarApp> {
   late final PersonalizationViewModel _personalizationViewModel;
   StreamSubscription<DesktopShortcutEvent>? _shortcutSubscription;
   String? _configuredShortcut;
-  String? _preparedMicrophone;
 
   @override
   void initState() {
@@ -79,7 +78,9 @@ final class _SwarAppState extends State<SwarApp> {
     unawaited(
       _dictationSessionViewModel.prepare(_settingsViewModel.settings.modelPath),
     );
-    unawaited(_prepareAudioIfNeeded());
+    // The microphone is opened only while dictating (lazily, on the first
+    // capture) and released when it ends, so it is never held open at rest and
+    // the OS recording indicator stays off until you actually dictate.
     _shortcutSubscription = widget.desktopShortcutGateway.events.listen(
       (event) => unawaited(_activationController.handle(event)),
     );
@@ -146,7 +147,6 @@ final class _SwarAppState extends State<SwarApp> {
 
   void _settingsChanged() {
     unawaited(_configureShortcutIfNeeded());
-    unawaited(_prepareAudioIfNeeded());
     _syncOverlay();
   }
 
@@ -155,18 +155,6 @@ final class _SwarAppState extends State<SwarApp> {
     if (_configuredShortcut == value) return;
     if (await widget.desktopShortcutGateway.configureShortcut(value)) {
       _configuredShortcut = value;
-    }
-  }
-
-  Future<void> _prepareAudioIfNeeded() async {
-    final value = _settingsViewModel.settings.microphoneId;
-    if (_preparedMicrophone == value) return;
-    try {
-      await widget.dictationEngineGateway.prepareAudio(value);
-      _preparedMicrophone = value;
-    } catch (_) {
-      // Permission denial and disconnected devices are surfaced when the user
-      // starts dictation; startup must remain usable so Settings can fix it.
     }
   }
 

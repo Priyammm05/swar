@@ -369,12 +369,16 @@ pub fn finish_dictation_session(session_id: String) -> Result<DictationCompletio
 fn finish_capture(capture: &mut ActiveCapture) -> Result<DictationCompletion, String> {
     record_dictation_stage("capture");
     stop_preview(capture);
-    let mut captured = capture_engine::finish_capture(
+    let captured_result = capture_engine::finish_capture(
         &capture.id,
         capture.dropped_samples_at_start,
         capture.stream_errors_at_start,
-    )
-    .map_err(|_| dictation_stage_error("capture"))?;
+    );
+    // The audio buffer is now owned, so close the microphone immediately — the
+    // OS recording indicator clears while transcription and insertion run. The
+    // mic is opened again only for the next dictation (lazily, in begin_capture).
+    let _ = capture_engine::release();
+    let mut captured = captured_result.map_err(|_| dictation_stage_error("capture"))?;
     if captured.is_empty() {
         return Err(dictation_stage_error("capture_empty"));
     }
@@ -527,6 +531,8 @@ pub fn cancel_dictation_session(session_id: String) -> Result<(), String> {
     transition_capture(&mut capture, DictationState::Cancelled, "user cancelled")?;
     stop_preview(&mut capture);
     capture_engine::cancel_capture(&session_id)?;
+    // Close the microphone on cancel too, so the OS indicator never lingers.
+    let _ = capture_engine::release();
     transition_capture(&mut capture, DictationState::Idle, "session released")?;
     Ok(())
 }
