@@ -171,7 +171,11 @@ private final class DictationOverlayController {
   func update(state: String, audioLevel: Double, isLatched: Bool, shortcutKey: String) {
     let idle = state == "idle"
     if idle { commandOverlay.hide() }
-    panel.ignoresMouseEvents = false
+    // At rest the capsule is a passive status indicator: ignore mouse so
+    // hovering near it never expands to "Dictate" and a stray click can't start
+    // dictation. It only accepts clicks while active (cancel/stop). Dictation is
+    // started with the global shortcut key.
+    panel.ignoresMouseEvents = idle
     content.update(
       state: state,
       audioLevel: audioLevel,
@@ -465,12 +469,14 @@ private final class DictationOverlayView: NSView {
 
   private func drawIdlePill(opacity: CGFloat) {
     guard opacity > 0.001 else { return }
-    let pill = NSRect(x: bounds.midX - 22, y: 0, width: 44, height: 7)
+    // Spec state 1: one empty dark capsule, clearly visible at rest (not a
+    // hairline). It morphs in place into every other state.
+    let pill = NSRect(x: bounds.midX - 34, y: 3, width: 68, height: 22)
       .insetBy(dx: 0.5, dy: 0.5)
-    OverlayPalette.pillBg.withAlphaComponent(0.92 * opacity).setFill()
-    NSBezierPath(roundedRect: pill, xRadius: 6, yRadius: 6).fill()
-    NSColor(calibratedWhite: 1, alpha: 0.28 * opacity).setStroke()
-    let border = NSBezierPath(roundedRect: pill, xRadius: 6, yRadius: 6)
+    OverlayPalette.pillBg.withAlphaComponent(0.95 * opacity).setFill()
+    NSBezierPath(roundedRect: pill, xRadius: 11, yRadius: 11).fill()
+    NSColor(calibratedWhite: 1, alpha: 0.22 * opacity).setStroke()
+    let border = NSBezierPath(roundedRect: pill, xRadius: 11, yRadius: 11)
     border.lineWidth = 0.75
     border.stroke()
   }
