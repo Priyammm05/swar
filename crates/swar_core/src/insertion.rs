@@ -25,6 +25,7 @@ trait PasteAdapter {
     fn paste(&mut self) -> Result<(), String>;
 }
 
+#[cfg_attr(target_os = "macos", allow(dead_code))]
 trait DirectInsertionAdapter {
     fn insert(&mut self, text: &str) -> Result<(), String>;
 }
@@ -111,8 +112,8 @@ pub(crate) fn insert_with_clipboard(
         &mut SystemDirectInsertion,
         &mut SystemPaste,
         &CLIPBOARD_OWNERSHIP,
-        Duration::from_millis(60),
-        Duration::from_millis(350),
+        Duration::from_millis(100),
+        Duration::from_millis(120),
     )
 }
 
@@ -129,13 +130,27 @@ fn insert_with_adapters<C: ClipboardAdapter, D: DirectInsertionAdapter, P: Paste
     pasteboard_settle_delay: Duration,
     restoration_delay: Duration,
 ) -> Result<InsertionOutcome, String> {
+    // The Accessibility AXSelectedText path can return success for Electron
+    // controls without changing their contents. The previously proven macOS
+    // path is clipboard plus Command+V, so direct insertion remains a Windows
+    // optimization only.
+    #[cfg(not(target_os = "macos"))]
     if paste_automatically && direct.insert(text).is_ok() {
         return Ok(InsertionOutcome {
             status: "inserted",
             method: "native_direct",
         });
     }
-    let previous_text = restore_clipboard.then(|| clipboard.read_text()).flatten();
+    #[cfg(target_os = "macos")]
+    let _ = direct;
+    // Until macOS paste delivery can be acknowledged by the focused control,
+    // retaining the dictated text is the only reliable clipboard fallback.
+    // Restoring it speculatively can erase the fallback before Electron and
+    // other asynchronous controls consume Command+V.
+    let restore_after_insertion = restore_clipboard && !cfg!(target_os = "macos");
+    let previous_text = restore_after_insertion
+        .then(|| clipboard.read_text())
+        .flatten();
     clipboard.write_text(text)?;
     ownership
         .lock()
@@ -169,7 +184,7 @@ fn insert_with_adapters<C: ClipboardAdapter, D: DirectInsertionAdapter, P: Paste
         });
     }
 
-    if restore_clipboard {
+    if restore_after_insertion {
         if !restoration_delay.is_zero() {
             thread::sleep(restoration_delay);
         }
@@ -180,7 +195,9 @@ fn insert_with_adapters<C: ClipboardAdapter, D: DirectInsertionAdapter, P: Paste
             .still_owns(session_id, current_text.as_deref());
         if still_owned {
             if let Some(previous_text) = previous_text {
-                clipboard.write_text(&previous_text)?;
+                // Restoration is best-effort and must never turn a completed
+                // paste into a failed dictation transaction.
+                let _ = clipboard.write_text(&previous_text);
             }
             ownership
                 .lock()
@@ -195,106 +212,14 @@ fn insert_with_adapters<C: ClipboardAdapter, D: DirectInsertionAdapter, P: Paste
     })
 }
 
-#[cfg(target_os = "macos")]
-fn direct_insert(text: &str) -> Result<(), String> {
-    use std::{ffi::c_void, ptr};
-
-    type AXUIElementRef = *const c_void;
-    type CFTypeRef = *const c_void;
-    type CFStringRef = *const c_void;
-    #[link(name = "ApplicationServices", kind = "framework")]
-    unsafe extern "C" {
-        fn AXIsProcessTrusted() -> bool;
-        fn AXUIElementCreateSystemWide() -> AXUIElementRef;
-        fn AXUIElementCopyAttributeValue(
-            element: AXUIElementRef,
-            attribute: CFStringRef,
-            value: *mut CFTypeRef,
-        ) -> i32;
-        fn AXUIElementSetAttributeValue(
-            element: AXUIElementRef,
-            attribute: CFStringRef,
-            value: CFTypeRef,
-        ) -> i32;
-    }
-    #[link(name = "CoreFoundation", kind = "framework")]
-    unsafe extern "C" {
-        fn CFStringCreateWithBytes(
-            allocator: *const c_void,
-            bytes: *const u8,
-            count: isize,
-            encoding: u32,
-            external_representation: bool,
-        ) -> CFStringRef;
-        fn CFRelease(value: CFTypeRef);
-    }
-
-    const UTF8: u32 = 0x0800_0100;
-    // SAFETY: every CoreFoundation object created or copied here is released on
-    // all paths after use, and the UTF-8 byte slice remains valid for the call.
-    unsafe {
-        if !AXIsProcessTrusted() {
-            return Err("accessibility insertion is unavailable".to_owned());
-        }
-        let system = AXUIElementCreateSystemWide();
-        if system.is_null() {
-            return Err("the system accessibility element is unavailable".to_owned());
-        }
-        let focused_attribute =
-            CFStringCreateWithBytes(ptr::null(), b"AXFocusedUIElement".as_ptr(), 18, UTF8, false);
-        let selected_text_attribute =
-            CFStringCreateWithBytes(ptr::null(), b"AXSelectedText".as_ptr(), 14, UTF8, false);
-        if focused_attribute.is_null() || selected_text_attribute.is_null() {
-            if !focused_attribute.is_null() {
-                CFRelease(focused_attribute);
-            }
-            if !selected_text_attribute.is_null() {
-                CFRelease(selected_text_attribute);
-            }
-            CFRelease(system);
-            return Err("accessibility attributes are unavailable".to_owned());
-        }
-        let mut focused: CFTypeRef = ptr::null();
-        let focused_result = AXUIElementCopyAttributeValue(system, focused_attribute, &mut focused);
-        if focused_result != 0 || focused.is_null() {
-            CFRelease(focused_attribute);
-            CFRelease(selected_text_attribute);
-            CFRelease(system);
-            return Err("the focused text control is unavailable".to_owned());
-        }
-        let value = CFStringCreateWithBytes(
-            ptr::null(),
-            text.as_bytes().as_ptr(),
-            text.len() as isize,
-            UTF8,
-            false,
-        );
-        if value.is_null() {
-            CFRelease(focused_attribute);
-            CFRelease(selected_text_attribute);
-            CFRelease(focused);
-            CFRelease(system);
-            return Err("the dictated text could not be encoded".to_owned());
-        }
-        let result = AXUIElementSetAttributeValue(focused, selected_text_attribute, value);
-        CFRelease(value);
-        CFRelease(focused_attribute);
-        CFRelease(selected_text_attribute);
-        CFRelease(focused);
-        CFRelease(system);
-        (result == 0)
-            .then_some(())
-            .ok_or_else(|| "the focused control rejected direct insertion".to_owned())
-    }
-}
-
 #[cfg(target_os = "windows")]
 fn direct_insert(text: &str) -> Result<(), String> {
     let mut enigo = Enigo::new(&Settings::default()).map_err(|error| error.to_string())?;
     enigo.text(text).map_err(|error| error.to_string())
 }
 
-#[cfg(not(any(target_os = "macos", target_os = "windows")))]
+#[cfg(not(target_os = "windows"))]
+#[allow(dead_code)]
 fn direct_insert(_text: &str) -> Result<(), String> {
     Err("native direct insertion is unavailable".to_owned())
 }
@@ -340,38 +265,42 @@ fn paste_shortcut() -> Result<(), String> {
 
     const PRIVATE_EVENT_SOURCE: i32 = -1;
     const HID_EVENT_TAP: u32 = 0;
-    const V_KEY_CODE: u16 = 9;
-    const COMMAND_FLAG: u64 = 1 << 20;
 
-    // A private event source prevents a physically held Option shortcut from
-    // leaking into the synthetic paste chord as Command+Option+V.
+    // Raw virtual key codes avoid Enigo's layout lookup, which calls macOS
+    // Text Input Services and traps when invoked from the Rust worker queue.
+    // CGEvent creation and posting are safe from this background worker.
     unsafe {
         let source = CGEventSourceCreate(PRIVATE_EVENT_SOURCE);
         if source.is_null() {
             return Err("the macOS keyboard event source is unavailable".to_owned());
         }
-        let key_down = CGEventCreateKeyboardEvent(source, V_KEY_CODE, true);
-        let key_up = CGEventCreateKeyboardEvent(source, V_KEY_CODE, false);
-        if key_down.is_null() || key_up.is_null() {
-            if !key_down.is_null() {
-                CFRelease(key_down);
+        for (key_code, key_down, flags) in macos_paste_sequence() {
+            let event = CGEventCreateKeyboardEvent(source, key_code, key_down);
+            if event.is_null() {
+                CFRelease(source);
+                return Err("the macOS paste events could not be created".to_owned());
             }
-            if !key_up.is_null() {
-                CFRelease(key_up);
-            }
-            CFRelease(source);
-            return Err("the macOS paste events could not be created".to_owned());
+            CGEventSetFlags(event, flags);
+            CGEventPost(HID_EVENT_TAP, event);
+            CFRelease(event);
+            thread::sleep(Duration::from_millis(6));
         }
-        CGEventSetFlags(key_down, COMMAND_FLAG);
-        CGEventSetFlags(key_up, COMMAND_FLAG);
-        CGEventPost(HID_EVENT_TAP, key_down);
-        thread::sleep(Duration::from_millis(12));
-        CGEventPost(HID_EVENT_TAP, key_up);
-        CFRelease(key_down);
-        CFRelease(key_up);
         CFRelease(source);
     }
     Ok(())
+}
+
+#[cfg(target_os = "macos")]
+fn macos_paste_sequence() -> [(u16, bool, u64); 4] {
+    const COMMAND_KEY_CODE: u16 = 55;
+    const V_KEY_CODE: u16 = 9;
+    const COMMAND_FLAG: u64 = 1 << 20;
+    [
+        (COMMAND_KEY_CODE, true, COMMAND_FLAG),
+        (V_KEY_CODE, true, COMMAND_FLAG),
+        (V_KEY_CODE, false, COMMAND_FLAG),
+        (COMMAND_KEY_CODE, false, 0),
+    ]
 }
 
 #[cfg(not(target_os = "macos"))]
@@ -417,6 +346,7 @@ mod tests {
         change_clipboard_to: Option<(Arc<SharedMutex<Option<String>>>, String)>,
     }
 
+    #[allow(dead_code)]
     struct FakeDirectInsertion(Result<(), String>);
 
     impl DirectInsertionAdapter for FakeDirectInsertion {
@@ -442,6 +372,7 @@ mod tests {
         Mutex::new(ClipboardOwnership::empty())
     }
 
+    #[cfg(not(target_os = "macos"))]
     #[test]
     fn restores_the_previous_clipboard_only_while_the_session_owns_it() {
         let shared = Arc::new(SharedMutex::new(Some("before".to_owned())));
@@ -469,6 +400,52 @@ mod tests {
         assert_eq!(
             shared.lock().expect("fake clipboard lock").as_deref(),
             Some("before")
+        );
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn macos_paste_uses_layout_independent_command_and_v_key_codes() {
+        const COMMAND_FLAG: u64 = 1 << 20;
+        assert_eq!(
+            macos_paste_sequence(),
+            [
+                (55, true, COMMAND_FLAG),
+                (9, true, COMMAND_FLAG),
+                (9, false, COMMAND_FLAG),
+                (55, false, 0),
+            ]
+        );
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn macos_keeps_dictated_text_as_the_reliable_clipboard_fallback() {
+        let shared = Arc::new(SharedMutex::new(Some("before".to_owned())));
+        let mut clipboard = FakeClipboard(shared.clone());
+        let mut paste = FakePaste {
+            available: true,
+            result: Ok(()),
+            change_clipboard_to: None,
+        };
+        let outcome = insert_with_adapters(
+            "one",
+            "dictated",
+            true,
+            true,
+            &mut clipboard,
+            &mut FakeDirectInsertion(Err("unavailable".to_owned())),
+            &mut paste,
+            &ownership(),
+            Duration::ZERO,
+            Duration::ZERO,
+        )
+        .expect("insertion succeeds");
+
+        assert_eq!(outcome.status, "inserted");
+        assert_eq!(
+            shared.lock().expect("fake clipboard lock").as_deref(),
+            Some("dictated")
         );
     }
 
@@ -531,6 +508,7 @@ mod tests {
         );
     }
 
+    #[cfg(not(target_os = "macos"))]
     #[test]
     fn direct_insertion_does_not_touch_the_clipboard() {
         let shared = Arc::new(SharedMutex::new(Some("before".to_owned())));
