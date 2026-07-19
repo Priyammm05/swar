@@ -20,6 +20,10 @@ const LEVEL_WINDOWS_PER_SECOND: u32 = 20;
 /// How long teardown waits for the audio worker to exit before detaching it, so
 /// a blocked level callback can never hang `Drop` (and the global audio lock).
 const WORKER_JOIN_TIMEOUT: Duration = Duration::from_secs(2);
+/// How long `finish_capture` waits for the worker to drain the ring buffer, so
+/// the final tail is not left stranded in the worker's in-flight batch when the
+/// active buffer is taken.
+const DRAIN_BARRIER_TIMEOUT: Duration = Duration::from_millis(50);
 
 type LevelCallback = Arc<dyn Fn(f64) + Send + Sync>;
 
@@ -160,6 +164,7 @@ struct PersistentAudioEngine {
     stream_errors: Arc<AtomicU64>,
     running: Arc<AtomicBool>,
     worker_exited: Arc<AtomicBool>,
+    worker_idle: Arc<AtomicBool>,
     stream: Option<Stream>,
     worker: Option<thread::JoinHandle<()>>,
 }
@@ -180,11 +185,13 @@ impl PersistentAudioEngine {
         let stream_errors = Arc::new(AtomicU64::new(0));
         let running = Arc::new(AtomicBool::new(true));
         let worker_exited = Arc::new(AtomicBool::new(false));
+        let worker_idle = Arc::new(AtomicBool::new(true));
         let worker = spawn_worker(
             consumer,
             accumulator.clone(),
             running.clone(),
             worker_exited.clone(),
+            worker_idle.clone(),
         )?;
         let stream = build_input_stream(
             device,
@@ -204,6 +211,7 @@ impl PersistentAudioEngine {
             stream_errors,
             running,
             worker_exited,
+            worker_idle,
             stream: Some(stream),
             worker: Some(worker),
         })
@@ -317,6 +325,14 @@ pub(crate) fn finish_capture(
     if engine.stream_errors.load(Ordering::Acquire) > stream_errors_at_start {
         return Err("the microphone stream reported an input error".to_owned());
     }
+    // Drain barrier: wait for the worker to report the ring empty (everything
+    // popped is now in the accumulator) before taking the buffer, so a tail
+    // sitting in the worker's in-flight batch is not truncated. Bounded so a
+    // continuously busy worker can never block completion.
+    let drain_deadline = Instant::now() + DRAIN_BARRIER_TIMEOUT;
+    while !engine.worker_idle.load(Ordering::Acquire) && Instant::now() < drain_deadline {
+        thread::sleep(Duration::from_millis(2));
+    }
     let result = engine
         .accumulator
         .lock()
@@ -366,6 +382,7 @@ fn spawn_worker(
     accumulator: Arc<Mutex<CaptureAccumulator>>,
     running: Arc<AtomicBool>,
     exited: Arc<AtomicBool>,
+    idle: Arc<AtomicBool>,
 ) -> Result<thread::JoinHandle<()>, String> {
     thread::Builder::new()
         .name("swar-audio-worker".to_owned())
@@ -380,6 +397,8 @@ fn spawn_worker(
                 }
                 let drained = !batch.is_empty();
                 if drained {
+                    // Not idle: samples popped but not yet in the accumulator.
+                    idle.store(false, Ordering::Release);
                     // Take the accumulator lock once per drain pass instead of
                     // once per sample (~16k locks/sec while capturing).
                     if let Ok(mut accumulator) = accumulator.lock() {
@@ -398,6 +417,9 @@ fn spawn_worker(
                     break;
                 }
                 if !drained {
+                    // The ring is empty and everything popped is now in the
+                    // accumulator, so a reader can safely take the buffer.
+                    idle.store(true, Ordering::Release);
                     thread::sleep(Duration::from_millis(4));
                 }
             }
