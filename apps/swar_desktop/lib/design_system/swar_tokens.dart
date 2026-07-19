@@ -79,10 +79,8 @@ final class SwarTokens extends ThemeExtension<SwarTokens> {
   /// Heatmap ramp least -> most (§2). Length 4.
   final List<Color> streakRamp;
 
-  /// Brand logo stroke color for the current theme.
+  /// Brand logo stroke color.
   final Color logo;
-
-  bool get isDark => brightness == Brightness.dark;
 
   static const light = SwarTokens(
     brightness: Brightness.light,
@@ -116,41 +114,6 @@ final class SwarTokens extends ThemeExtension<SwarTokens> {
       SwarColors.streakL4,
     ],
     logo: SwarColors.spruce,
-  );
-
-  static const dark = SwarTokens(
-    brightness: Brightness.dark,
-    bgPage: SwarColors.darkBgPage,
-    surfaceCard: SwarColors.darkSurfaceCard,
-    surfaceSunken: SwarColors.darkSurfaceSunken,
-    surfaceSunken2: SwarColors.darkSurfaceSunken2,
-    ink: SwarColors.darkInk,
-    inkSecondary: SwarColors.darkInkSecondary,
-    inkMuted: SwarColors.darkInkMuted,
-    border: SwarColors.darkBorder,
-    borderStrong: SwarColors.darkBorderStrong,
-    spruce: SwarColors.spruce,
-    spruceMid: SwarColors.spruceMid,
-    spruceSoft: SwarColors.spruceSoft,
-    spruceInk: SwarColors.spruceInk,
-    spruceBorder: SwarColors.spruceBorder,
-    spruceTint: SwarColors.darkSpruceTint,
-    spruceTint2: SwarColors.darkSpruceTint2,
-    saffron: SwarColors.saffron,
-    saffronInk:
-        SwarColors.saffron, // on dark tints, saffron text lightens to saffron
-    saffronTint: SwarColors.darkSaffronTint,
-    mixInk: Color(0xFFE7B8E7), // light magenta on dark (§12)
-    mixTint: SwarColors.darkMixTint,
-    streakEmpty: SwarColors.darkStreakEmpty,
-    toggleOff: SwarColors.darkToggleOff,
-    streakRamp: [
-      SwarColors.darkStreakEmpty,
-      SwarColors.streakL2,
-      SwarColors.streakL3,
-      SwarColors.streakL4,
-    ],
-    logo: SwarColors.spruceSoft,
   );
 
   /// The active token set for [context]. Falls back to [light] if the extension

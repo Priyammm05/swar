@@ -6,25 +6,21 @@ import 'package:swar_desktop/design_system/swar_typography.dart';
 
 /// App theme — wires the [SwarTokens] design system into Material.
 ///
-/// Light is the primary theme (spec); dark applies the §12 neutral remap. Both
-/// register the matching [SwarTokens] extension so `context.tokens` resolves,
-/// and both default text to Manrope at weights 400/500 only.
+/// Swar is light-only (spec §2): a single light theme registers the [SwarTokens]
+/// extension so `context.tokens` resolves, and defaults text to Manrope at
+/// weights 400/500 only.
 abstract final class SwarTheme {
   static ThemeData light() => _build(SwarTokens.light);
-  static ThemeData dark() => _build(SwarTokens.dark);
 
   static ThemeData _build(SwarTokens t) {
-    final isDark = t.isDark;
-    final colorScheme =
-        (isDark ? const ColorScheme.dark() : const ColorScheme.light())
-            .copyWith(
-              primary: t.spruce,
-              onPrimary: t.spruceInk,
-              surface: t.surfaceCard,
-              onSurface: t.ink,
-              secondary: t.saffron,
-              error: const Color(0xFFC24A4A),
-            );
+    final colorScheme = const ColorScheme.light().copyWith(
+      primary: t.spruce,
+      onPrimary: t.spruceInk,
+      surface: t.surfaceCard,
+      onSurface: t.ink,
+      secondary: t.saffron,
+      error: const Color(0xFFC24A4A),
+    );
 
     final baseText = SwarType.body.copyWith(color: t.ink);
 

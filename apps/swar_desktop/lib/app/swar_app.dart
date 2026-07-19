@@ -207,9 +207,10 @@ final class _SwarAppState extends State<SwarApp> {
     return MaterialApp.router(
       debugShowCheckedModeBanner: false,
       title: 'swar',
+      // Swar is a light-only product (spec §2). No dark theme is registered, so
+      // the app never follows the system into dark mode.
       theme: SwarTheme.light(),
-      darkTheme: SwarTheme.dark(),
-      themeMode: ThemeMode.system,
+      themeMode: ThemeMode.light,
       routerConfig: _router,
       builder: (context, child) => RepaintBoundary(
         key: const Key('swar-app-capture-boundary'),
