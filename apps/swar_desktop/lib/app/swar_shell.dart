@@ -76,7 +76,10 @@ final class _TopNav extends StatelessWidget {
         child: Row(
           children: [
             const Expanded(
-              child: Align(alignment: Alignment.centerLeft, child: SwarLogo()),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: SwarLogo(showWordmark: false, markSize: 52),
+              ),
             ),
             _NavPill(selectedIndex: selectedIndex, onSelected: onSelected),
             const Expanded(child: SizedBox()),
@@ -120,7 +123,7 @@ final class _NavPill extends StatelessWidget {
             selected: selectedIndex == _activityBranch,
             onPressed: () => onSelected(_activityBranch),
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 4),
           _NavItem(
             key: const Key('top-insights-nav'),
             label: 'Insights',
@@ -128,7 +131,7 @@ final class _NavPill extends StatelessWidget {
             selected: selectedIndex == _insightsBranch,
             onPressed: () => onSelected(_insightsBranch),
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 4),
           _NavItem(
             key: const Key('top-settings-nav'),
             label: 'Settings',
@@ -160,28 +163,25 @@ final class _NavItem extends StatelessWidget {
   Widget build(BuildContext context) {
     final t = context.tokens;
     final color = selected ? t.spruceInk : t.inkSecondary;
-    // Icon-only nav (no text labels); the label is carried as a tooltip and
-    // accessibility name so the control stays discoverable and screen-readable.
-    return Tooltip(
-      message: label,
-      child: Semantics(
-        button: true,
-        selected: selected,
-        label: label,
-        child: GestureDetector(
-          onTap: onPressed,
-          behavior: HitTestBehavior.opaque,
-          child: MouseRegion(
-            cursor: SystemMouseCursors.click,
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 150),
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: selected ? t.spruce : Colors.transparent,
-                borderRadius: BorderRadius.circular(SwarRadii.pill),
-              ),
-              child: Icon(icon, size: 18, color: color),
-            ),
+    return GestureDetector(
+      onTap: onPressed,
+      behavior: HitTestBehavior.opaque,
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 8),
+          decoration: BoxDecoration(
+            color: selected ? t.spruce : Colors.transparent,
+            borderRadius: BorderRadius.circular(SwarRadii.pill),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 15, color: color),
+              const SizedBox(width: 7),
+              Text(label, style: SwarType.nav.copyWith(color: color)),
+            ],
           ),
         ),
       ),
