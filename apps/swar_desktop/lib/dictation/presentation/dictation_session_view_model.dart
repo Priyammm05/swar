@@ -137,6 +137,30 @@ final class DictationSessionViewModel extends ChangeNotifier {
     if (value.toLowerCase().contains('permission')) {
       return 'Microphone access is required for dictation.';
     }
+    if (value.contains('dictation_stage:capture_empty')) {
+      return 'Swar did not receive microphone audio.';
+    }
+    if (value.contains('dictation_stage:capture')) {
+      return 'Swar could not finish the microphone recording.';
+    }
+    if (value.contains('dictation_stage:speech_detection')) {
+      return 'Swar could not detect speech in this recording.';
+    }
+    if (value.contains('dictation_stage:transcription_empty')) {
+      return 'The local model did not return spoken text.';
+    }
+    if (value.contains('dictation_stage:transcription')) {
+      return 'The local transcription model stopped unexpectedly.';
+    }
+    if (value.contains('dictation_stage:cleanup_empty')) {
+      return 'Swar could not prepare the recognised text.';
+    }
+    if (value.contains('dictation_stage:insertion')) {
+      return 'Swar recognised the speech but could not copy it.';
+    }
+    if (value.contains('dictation_stage:history')) {
+      return 'Swar pasted the text but could not update local history.';
+    }
     return 'Swar could not complete this dictation.';
   }
 

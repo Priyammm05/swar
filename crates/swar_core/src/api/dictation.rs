@@ -1,4 +1,5 @@
 use std::{
+    fs,
     path::Path,
     sync::{
         atomic::{AtomicBool, Ordering},
@@ -26,6 +27,7 @@ use cpal::{
     traits::{DeviceTrait, HostTrait},
     Device,
 };
+use directories::ProjectDirs;
 use flutter_rust_bridge::frb;
 use uuid::Uuid;
 
@@ -295,41 +297,47 @@ pub fn finish_dictation_session(session_id: String) -> Result<DictationCompletio
 }
 
 fn finish_capture(capture: &mut ActiveCapture) -> Result<DictationCompletion, String> {
+    record_dictation_stage("capture");
     stop_preview(capture);
     let captured = capture_engine::finish_capture(
         &capture.id,
         capture.dropped_samples_at_start,
         capture.stream_errors_at_start,
-    )?;
+    )
+    .map_err(|_| dictation_stage_error("capture"))?;
     if captured.is_empty() {
-        return Err("no microphone audio was captured".to_owned());
+        return Err(dictation_stage_error("capture_empty"));
     }
 
     let processing_started = Instant::now();
     let mono_16khz = resample::to_sample_rate(&captured, capture.sample_rate, 16_000);
+    record_dictation_stage("speech_detection");
     let speech = speech::retain_probable_speech(&mono_16khz, 16_000);
     if speech.samples.is_empty() {
-        return Err("speech was not detected".to_owned());
+        return Err(dictation_stage_error("speech_detection"));
     }
     transition_capture(
         capture,
         DictationState::Transcribing,
         "audio drained and resampled",
     )?;
+    record_dictation_stage("transcription");
     let raw_text = model_registry::transcribe(
         &capture.config.model_path,
         &capture.config.language,
         &speech.samples,
-    )?;
+    )
+    .map_err(|_| dictation_stage_error("transcription"))?;
     if !transcript_contains_speech(&raw_text) {
-        return Err("speech was not detected".to_owned());
+        return Err(dictation_stage_error("transcription_empty"));
     }
+    record_dictation_stage("cleanup");
     transition_capture(capture, DictationState::Cleaning, "final transcript ready")?;
     let personalized_raw = personalization::apply_vocabulary(&raw_text);
     let clean_text =
         text_cleanup::clean_transcript(&personalized_raw, &capture.config.writing_mode);
     if clean_text.trim().is_empty() {
-        return Err("speech was not detected".to_owned());
+        return Err(dictation_stage_error("cleanup_empty"));
     }
     let enhancement = enhancement::enhance_transcript(
         &personalized_raw,
@@ -357,13 +365,15 @@ fn finish_capture(capture: &mut ActiveCapture) -> Result<DictationCompletion, St
         )?;
     }
     let final_text = enhancement.text;
+    record_dictation_stage("insertion");
     transition_capture(capture, DictationState::Inserting, "cleanup completed")?;
     let insertion = insertion::insert_with_clipboard(
         &capture.id,
         &final_text,
         capture.config.paste_automatically,
         capture.config.restore_clipboard,
-    )?;
+    )
+    .map_err(|_| dictation_stage_error("insertion"))?;
     if insertion.status != "inserted" && capture.config.paste_automatically {
         transition_capture(
             capture,
@@ -375,9 +385,10 @@ fn finish_capture(capture: &mut ActiveCapture) -> Result<DictationCompletion, St
     let audio_duration_ms = capture.started_at.elapsed().as_millis() as u64;
     let created_at_ms = SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .map_err(|error| error.to_string())?
+        .map_err(|_| dictation_stage_error("clock"))?
         .as_millis() as i64;
 
+    record_dictation_stage("history");
     storage::save_dictation(NewDictation {
         id: &capture.id,
         created_at_ms,
@@ -398,7 +409,9 @@ fn finish_capture(capture: &mut ActiveCapture) -> Result<DictationCompletion, St
             .unwrap_or("whisper-model"),
         insertion_status: insertion.status,
         insertion_method: insertion.method,
-    })?;
+    })
+    .map_err(|_| dictation_stage_error("history"))?;
+    record_dictation_stage("completed");
 
     Ok(DictationCompletion {
         session_id: capture.id.clone(),
@@ -409,6 +422,23 @@ fn finish_capture(capture: &mut ActiveCapture) -> Result<DictationCompletion, St
         insertion_status: insertion.status.to_owned(),
         insertion_method: insertion.method.to_owned(),
     })
+}
+
+/// Returns a privacy-safe failure code. The stage is a hard-coded internal
+/// label, never dictated text, clipboard contents, audio, or a provider error.
+fn dictation_stage_error(stage: &'static str) -> String {
+    record_dictation_stage(stage);
+    format!("dictation_stage:{stage}")
+}
+
+/// Persists only a static pipeline stage for local troubleshooting. This file
+/// never contains recognised text, clipboard contents, audio, or error text.
+fn record_dictation_stage(stage: &'static str) {
+    let Some(directories) = ProjectDirs::from("dev", "Swar", "Swar") else {
+        return;
+    };
+    let path = directories.data_local_dir().join("last_dictation_stage");
+    let _ = fs::write(path, stage.as_bytes());
 }
 
 /// Cancels the active capture and discards all PCM without writing history.

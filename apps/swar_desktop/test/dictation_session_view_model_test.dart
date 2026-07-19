@@ -94,13 +94,43 @@ void main() {
       expect(viewModel.completionRevision, 0);
     },
   );
+
+  test(
+    'surfaces an empty local transcript as a transcription failure',
+    () async {
+      final gateway = _EngineGateway(
+        modelReady: true,
+        finishError: 'dictation_stage:transcription_empty',
+      );
+      final viewModel = DictationSessionViewModel(gateway: gateway);
+      addTearDown(viewModel.dispose);
+
+      await viewModel.start(
+        const DictationEngineConfig(
+          modelPath: '/test/model.bin',
+          microphoneId: 'built-in',
+          language: 'automatic',
+          writingMode: 'clean',
+          pasteAutomatically: true,
+          restoreClipboard: true,
+        ),
+      );
+      await Future<void>.delayed(Duration.zero);
+      await viewModel.finish();
+
+      expect(viewModel.state, DictationLifecycleState.failed);
+      expect(viewModel.message, 'The local model did not return spoken text.');
+      expect(viewModel.completionRevision, 0);
+    },
+  );
 }
 
 final class _EngineGateway implements DictationEngineGateway {
-  _EngineGateway({required this.modelReady, this.events});
+  _EngineGateway({required this.modelReady, this.events, this.finishError});
 
   final bool modelReady;
   final List<DictationEngineEvent>? events;
+  final Object? finishError;
   int startCalls = 0;
 
   @override
@@ -116,11 +146,14 @@ final class _EngineGateway implements DictationEngineGateway {
   Future<void> release() async {}
 
   @override
-  Future<DictationEngineCompletion> finish(String sessionId) async =>
-      const DictationEngineCompletion(
-        finalText: 'Hello',
-        insertionStatus: 'copied',
-      );
+  Future<DictationEngineCompletion> finish(String sessionId) async {
+    final error = finishError;
+    if (error != null) throw error;
+    return const DictationEngineCompletion(
+      finalText: 'Hello',
+      insertionStatus: 'copied',
+    );
+  }
 
   @override
   Future<List<SwarMicrophone>> listMicrophones() async => const [];
