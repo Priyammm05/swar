@@ -5,7 +5,7 @@ use std::{
         Arc, Mutex,
     },
     thread,
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use cpal::{
@@ -17,6 +17,9 @@ use rtrb::{Consumer, Producer, RingBuffer};
 const PRE_ROLL_MILLISECONDS: usize = 350;
 const POST_ROLL_MILLISECONDS: u64 = 250;
 const LEVEL_WINDOWS_PER_SECOND: u32 = 20;
+/// How long teardown waits for the audio worker to exit before detaching it, so
+/// a blocked level callback can never hang `Drop` (and the global audio lock).
+const WORKER_JOIN_TIMEOUT: Duration = Duration::from_secs(2);
 
 type LevelCallback = Arc<dyn Fn(f64) + Send + Sync>;
 
@@ -156,6 +159,7 @@ struct PersistentAudioEngine {
     dropped_samples: Arc<AtomicU64>,
     stream_errors: Arc<AtomicU64>,
     running: Arc<AtomicBool>,
+    worker_exited: Arc<AtomicBool>,
     stream: Option<Stream>,
     worker: Option<thread::JoinHandle<()>>,
 }
@@ -175,7 +179,13 @@ impl PersistentAudioEngine {
         let dropped_samples = Arc::new(AtomicU64::new(0));
         let stream_errors = Arc::new(AtomicU64::new(0));
         let running = Arc::new(AtomicBool::new(true));
-        let worker = spawn_worker(consumer, accumulator.clone(), running.clone())?;
+        let worker_exited = Arc::new(AtomicBool::new(false));
+        let worker = spawn_worker(
+            consumer,
+            accumulator.clone(),
+            running.clone(),
+            worker_exited.clone(),
+        )?;
         let stream = build_input_stream(
             device,
             &config,
@@ -193,6 +203,7 @@ impl PersistentAudioEngine {
             dropped_samples,
             stream_errors,
             running,
+            worker_exited,
             stream: Some(stream),
             worker: Some(worker),
         })
@@ -223,9 +234,20 @@ impl PersistentAudioEngine {
 impl Drop for PersistentAudioEngine {
     fn drop(&mut self) {
         self.running.store(false, Ordering::Release);
+        // Dropping the stream disconnects the ring buffer, so the worker's next
+        // `pop` fails and it exits promptly — unless it is stuck inside a level
+        // callback. Wait a bounded time for a clean exit, then detach rather
+        // than block `Drop` (which runs under the global audio lock) forever.
         drop(self.stream.take());
         if let Some(worker) = self.worker.take() {
-            let _ = worker.join();
+            let deadline = Instant::now() + WORKER_JOIN_TIMEOUT;
+            while !self.worker_exited.load(Ordering::Acquire) && Instant::now() < deadline {
+                thread::sleep(Duration::from_millis(5));
+            }
+            if self.worker_exited.load(Ordering::Acquire) {
+                let _ = worker.join();
+            }
+            // Otherwise leave the handle to detach; joining could hang forever.
         }
     }
 }
@@ -284,7 +306,12 @@ pub(crate) fn finish_capture(
     let engine = engine
         .as_ref()
         .ok_or_else(|| "audio engine is unavailable".to_owned())?;
-    if engine.dropped_samples.load(Ordering::Acquire) > dropped_samples_at_start {
+    // Tolerate a brief glitch (~100 ms of dropped samples) rather than discard
+    // an entire utterance over a single dropped sample; only a sustained
+    // overflow (worker starved for long enough to lose ~100 ms) fails.
+    let overrun_tolerance = u64::from(engine.sample_rate) / 10;
+    if engine.dropped_samples.load(Ordering::Acquire) > dropped_samples_at_start + overrun_tolerance
+    {
         return Err("audio buffer overflowed; shorten the dictation and try again".to_owned());
     }
     if engine.stream_errors.load(Ordering::Acquire) > stream_errors_at_start {
@@ -338,27 +365,43 @@ fn spawn_worker(
     mut consumer: Consumer<f32>,
     accumulator: Arc<Mutex<CaptureAccumulator>>,
     running: Arc<AtomicBool>,
+    exited: Arc<AtomicBool>,
 ) -> Result<thread::JoinHandle<()>, String> {
     thread::Builder::new()
         .name("swar-audio-worker".to_owned())
-        .spawn(move || loop {
-            let mut drained = false;
-            while let Ok(sample) = consumer.pop() {
-                drained = true;
-                let level = accumulator
-                    .lock()
-                    .ok()
-                    .and_then(|mut value| value.push(sample));
-                if let Some((callback, rms)) = level {
-                    callback(rms);
+        .spawn(move || {
+            // Reused across passes so the worker does not allocate in its hot loop.
+            let mut batch: Vec<f32> = Vec::new();
+            let mut levels: Vec<(LevelCallback, f64)> = Vec::new();
+            loop {
+                batch.clear();
+                while let Ok(sample) = consumer.pop() {
+                    batch.push(sample);
+                }
+                let drained = !batch.is_empty();
+                if drained {
+                    // Take the accumulator lock once per drain pass instead of
+                    // once per sample (~16k locks/sec while capturing).
+                    if let Ok(mut accumulator) = accumulator.lock() {
+                        for sample in batch.drain(..) {
+                            if let Some(level) = accumulator.push(sample) {
+                                levels.push(level);
+                            }
+                        }
+                    }
+                    // Run level callbacks after releasing the lock.
+                    for (callback, rms) in levels.drain(..) {
+                        callback(rms);
+                    }
+                }
+                if !running.load(Ordering::Acquire) && !drained {
+                    break;
+                }
+                if !drained {
+                    thread::sleep(Duration::from_millis(4));
                 }
             }
-            if !running.load(Ordering::Acquire) && !drained {
-                break;
-            }
-            if !drained {
-                thread::sleep(Duration::from_millis(4));
-            }
+            exited.store(true, Ordering::Release);
         })
         .map_err(|error| error.to_string())
 }

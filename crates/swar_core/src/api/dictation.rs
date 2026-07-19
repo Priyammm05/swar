@@ -35,6 +35,11 @@ use uuid::Uuid;
 /// budget). Bounds the Rust->Dart stream regardless of the capture level rate.
 const MINIMUM_LEVEL_INTERVAL_MS: u64 = 40;
 
+/// How long finish/cancel waits for the preview worker to exit before detaching
+/// it, so a preview decode in flight cannot block completion (the decode itself
+/// is separately bounded by the ASR preview watchdog).
+const PREVIEW_JOIN_TIMEOUT: Duration = Duration::from_secs(2);
+
 static ACTIVE_CAPTURE: Mutex<Option<ActiveCapture>> = Mutex::new(None);
 static COORDINATOR: LazyLock<Mutex<DictationCoordinator>> =
     LazyLock::new(|| Mutex::new(DictationCoordinator::default()));
@@ -173,6 +178,7 @@ struct ActiveCapture {
     dropped_samples_at_start: u64,
     stream_errors_at_start: u64,
     preview_running: Arc<AtomicBool>,
+    preview_exited: Arc<AtomicBool>,
     preview_worker: Option<thread::JoinHandle<()>>,
     sink: StreamSink<DictationEvent>,
     lifecycle: DictationStateMachine,
@@ -289,6 +295,7 @@ pub fn start_dictation_session(
         .map_err(|error| error.to_string())?;
     emit_transition(&sink, &session_id, recording, None);
     let preview_running = Arc::new(AtomicBool::new(config.enable_live_preview));
+    let preview_exited = Arc::new(AtomicBool::new(false));
     let preview_worker = if config.enable_live_preview {
         match spawn_preview_worker(
             session_id.clone(),
@@ -296,6 +303,7 @@ pub fn start_dictation_session(
             config.language.clone(),
             sink.clone(),
             preview_running.clone(),
+            preview_exited.clone(),
         ) {
             Ok(handle) => Some(handle),
             Err(_) => {
@@ -318,6 +326,7 @@ pub fn start_dictation_session(
         dropped_samples_at_start: capture_start.dropped_samples_at_start,
         stream_errors_at_start: capture_start.stream_errors_at_start,
         preview_running,
+        preview_exited,
         preview_worker,
         sink,
         lifecycle,
@@ -570,6 +579,7 @@ fn spawn_preview_worker(
     language: String,
     sink: StreamSink<DictationEvent>,
     running: Arc<AtomicBool>,
+    exited: Arc<AtomicBool>,
 ) -> Result<thread::JoinHandle<()>, String> {
     thread::Builder::new()
         .name(format!("swar-preview-{session_id}"))
@@ -614,6 +624,7 @@ fn spawn_preview_worker(
                     partial_text: Some(partial),
                 });
             }
+            exited.store(true, Ordering::Release);
         })
         .map_err(|error| error.to_string())
 }
@@ -621,7 +632,16 @@ fn spawn_preview_worker(
 fn stop_preview(capture: &mut ActiveCapture) {
     capture.preview_running.store(false, Ordering::Release);
     if let Some(worker) = capture.preview_worker.take() {
-        let _ = worker.join();
+        // The preview worker may be mid-decode. Its decode is already bounded by
+        // the ASR preview watchdog, so wait briefly for a clean exit and then
+        // detach rather than block finish/cancel (and the coordinator) on it.
+        let deadline = Instant::now() + PREVIEW_JOIN_TIMEOUT;
+        while !capture.preview_exited.load(Ordering::Acquire) && Instant::now() < deadline {
+            thread::sleep(Duration::from_millis(5));
+        }
+        if capture.preview_exited.load(Ordering::Acquire) {
+            let _ = worker.join();
+        }
     }
 }
 
