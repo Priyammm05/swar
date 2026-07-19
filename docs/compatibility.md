@@ -69,6 +69,10 @@ Never describe a configured or cross-compiled target as runtime-tested.
 | macOS x86_64 | Yes | Yes | Pending physical Intel run | Pending | Universal 2 executable and `swar_core.framework` both contain x86_64 |
 | Windows 10/11 x64 | Yes | Pending Windows CI | Pending Windows CI/VM | Pending | Windows 2022 CI lane builds and runs the same native synthetic user |
 
+The current machine has run the automated English, Hindi, and Hinglish model
+suite. That is ASR regression evidence only. It is not a substitute for the
+physical Intel Mac, Catalina, or Windows rows above.
+
 The verified macOS release bundle contains `arm64` and `x86_64` slices in both the executable and Rust framework, declares macOS 10.15 as its minimum, and includes the microphone usage description. This proves packaging, not execution on Catalina or Intel hardware.
 
 ## Native interaction checklist

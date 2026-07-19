@@ -10,12 +10,12 @@
 
 These were the four open conflicts between the two source documents. They are now resolved. Do not reopen them without a benchmark result or a product review.
 
-## D1. Language scope: English + Hinglish (Roman script) only
+## D1. Language scope: English + Hindi + Hinglish
 
-- V1 ships **English** and **Hinglish** (Latin-script Hindi mixed with English) only.
-- **Devanagari output is deferred to V1.1.** It adds script-selection UI, a separate golden-test suite, and Unicode insertion edge cases in legacy Win32 controls — none of which sharpen the core loop.
+- V1 ships **English**, **Hindi in Devanagari**, and **Hinglish** (Latin-script Hindi mixed with English). This is the approved product scope as of 2026-07-19.
+- Hindi has its own model route, golden benchmark, and Unicode insertion coverage. It is not silently mapped to English or Hinglish.
 - The moat is Hinglish-in-Roman. Mixed-language speech is **never translated** and never force-normalized into either pure English or pure Hindi.
-- Language modes in Settings for V1: `Auto`, `English`, `Hinglish`. The `Hindi — Devanagari` option is removed from the V1 UI and re-added in V1.1.
+- Language modes in Settings for V1: `Auto`, `English`, `Hindi`, `Hinglish`.
 
 Canonical behavior example:
 
@@ -24,9 +24,9 @@ Canonical behavior example:
 
 Structure may improve. Language mixture may not change.
 
-## D2. ASR default: Hindi-fine-tuned Whisper *small*, int8, always warm
+## D2. ASR default: language-routed Whisper *small* q5, always warm
 
-- **Default (swar Balanced):** a Hindi/Hinglish-fine-tuned Whisper **small**, quantized (int8/q5), via whisper.cpp. ~150–250 MB on disk.
+- **Default (swar Balanced):** official multilingual Whisper **small** q5_1 for Auto, English, and Hinglish, plus a pinned Hindi-fine-tuned **small** q5_1 pack for explicit Hindi. Each is about 190 MB and runs through whisper.cpp.
 - **Opt-in (swar Accurate):** Hindi-tuned **large-v3-turbo**, quantized, ~500 MB. Available as a download; becomes default *only* if it passes the Phase 11 bake-off latency gates on the full hardware matrix.
 - **Fallback (swar Lite):** Whisper base multilingual, quantized, for old hardware.
 - Rationale: the product promise is *final text under 1 second after shortcut release*. With streaming partials from a warm small model, only the audio tail needs decoding at release. Turbo cannot reliably hit that on an 8 GB M1 or an AVX-less Windows box. Accuracy-first defaults break the "feels like a system feature" experience; accuracy is an upgrade, not the baseline.
@@ -234,7 +234,6 @@ Positioning line: *Wispr idles at ~800 MB of RAM and still needs the cloud for e
 
 # Part VI — Deferred (explicitly out of V1)
 
-- **Devanagari output** → V1.1 (D1).
 - **Command Mode** ("make the last line more concise") → V1.1. Good feature, but content-vs-instruction routing is genuinely hard and it violates the V1 scope rules (Dictation, Insights, General, System — nothing else).
 - **Qwen3-ASR / IndicConformer** → Phase 11 bake-off candidates behind the `AsrEngine` trait; never a V1 hard dependency.
 - **Cloud model mode, accounts, teams, encrypted DB** → later, threat-modeled first.
@@ -273,7 +272,7 @@ The Build Plan's Phases 0–12 stand, with these edits:
 
 # Part VIII — One-page summary
 
-**swar V1** = English + Hinglish (Roman), 100% local. Warm Hindi-tuned Whisper *small* int8 streams partials while you speak; release-to-text under a second. Deterministic cleanup always; a routed, embedded llama.cpp model resolves self-corrections on complex utterances; a protected-token validator guarantees no number, name, or language ever silently changes. Silero VAD, tiered keep-warm, ~1.3 GB core install, no account, no cloud, no audio stored. User edits feed an opt-in local flywheel that trains the Hinglish LoRA nobody else can copy.
+**swar V1** = English + Hindi + Hinglish, local by default. Warm quantized Whisper model packs stream partials while you speak. Deterministic cleanup always; routed enhancement is protected by a validator that rejects unexplained changes to numbers, names, negation, or language. Silero VAD, no account, no audio stored, and opt-in local learning remain hard requirements.
 
 The loop to perfect before anything else:
 

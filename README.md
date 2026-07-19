@@ -9,6 +9,9 @@ Swar is a private, offline voice keyboard for macOS and Windows.
 
 See [`docs/compatibility.md`](docs/compatibility.md) for the release matrix and hardware fallback policy.
 
+See [`docs/models.md`](docs/models.md) for the exact offline model hashes,
+licences, provenance, and measured multilingual bake-off.
+
 The platform icon roles and regeneration process are documented in [`docs/icons.md`](docs/icons.md).
 
 ## Prerequisites

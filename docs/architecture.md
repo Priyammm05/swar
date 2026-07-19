@@ -39,4 +39,7 @@ The runtime is built and verified in this dependency order:
 8. **Transcript enhancer.** A provider-neutral local interface routes raw, clean, and intent work. Protected numbers, addresses, URLs, and code-like tokens are validated before enhanced text is accepted.
 9. **Local personalization.** SQLite stores explicit vocabulary, voice metrics, and opt-in edit learning. Nothing is pre-seeded, uploaded, or learned unless the person enables it.
 
+The pinned model files, licences, provenance, and latest local bake-off are in
+[`docs/models.md`](models.md).
+
 Each layer has deterministic unit coverage. The combined system is exercised through the native Flutter-to-Rust bridge and the synthetic desktop-user journey.
