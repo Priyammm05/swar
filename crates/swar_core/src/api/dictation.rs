@@ -191,6 +191,10 @@ pub fn start_dictation_session(
         .lock()
         .map_err(|_| "dictation coordinator lock poisoned".to_owned())?
         .reserve_recording(&session_id)?;
+    // From here on the slot is reserved; the guard frees it on any early return
+    // or panic. It is disarmed only once the session is fully armed and handed
+    // back to the caller, after which `finish`/`cancel` own the release.
+    let reservation = ReservationGuard::new(session_id.clone());
     let mut lifecycle = DictationStateMachine::new();
     let preparing = lifecycle
         .transition(DictationState::Preparing, "shortcut activated")
@@ -202,7 +206,6 @@ pub fn start_dictation_session(
         Ok(device) => device,
         Err(error) => {
             fail_start(&mut lifecycle, &sink, &session_id, &error);
-            release_recording_reservation(&session_id);
             return Err(error);
         }
     };
@@ -234,7 +237,6 @@ pub fn start_dictation_session(
         Ok(start) => start,
         Err(error) => {
             fail_start(&mut lifecycle, &sink, &session_id, &error);
-            release_recording_reservation(&session_id);
             return Err(error);
         }
     };
@@ -243,15 +245,26 @@ pub fn start_dictation_session(
         .map_err(|error| error.to_string())?;
     emit_transition(&sink, &session_id, recording, None);
     let preview_running = Arc::new(AtomicBool::new(config.enable_live_preview));
-    let preview_worker = config.enable_live_preview.then(|| {
-        spawn_preview_worker(
+    let preview_worker = if config.enable_live_preview {
+        match spawn_preview_worker(
             session_id.clone(),
             config.model_path.clone(),
             config.language.clone(),
             sink.clone(),
             preview_running.clone(),
-        )
-    });
+        ) {
+            Ok(handle) => Some(handle),
+            Err(_) => {
+                // Live preview is optional. A thread-spawn failure must degrade
+                // to no-preview, never panic (which would poison ACTIVE_CAPTURE
+                // and permanently disable dictation).
+                preview_running.store(false, Ordering::Release);
+                None
+            }
+        }
+    } else {
+        None
+    };
 
     *active = Some(ActiveCapture {
         id: session_id.clone(),
@@ -265,11 +278,17 @@ pub fn start_dictation_session(
         sink,
         lifecycle,
     });
+    // The session is now armed; finish/cancel own the reservation from here.
+    reservation.disarm();
     Ok(session_id)
 }
 
 /// Stops capture, transcribes locally with whisper.cpp, cleans, inserts, and persists.
 pub fn finish_dictation_session(session_id: String) -> Result<DictationCompletion, String> {
+    // Releases the coordinator slot on every exit path — including an early `?`
+    // return or a panic inside transcription/insertion — so a failure can never
+    // wedge future dictations.
+    let _reservation = ReservationGuard::new(session_id.clone());
     let mut capture = take_capture(&session_id)?;
     COORDINATOR
         .lock()
@@ -285,12 +304,10 @@ pub fn finish_dictation_session(session_id: String) -> Result<DictationCompletio
         Ok(completion) => {
             transition_capture(&mut capture, DictationState::Completed, "history committed")?;
             transition_capture(&mut capture, DictationState::Idle, "session released")?;
-            complete_coordinator_session(&session_id);
             Ok(completion)
         }
         Err(error) => {
             let _ = transition_capture(&mut capture, DictationState::Failed, error.clone());
-            complete_coordinator_session(&session_id);
             Err(error)
         }
     }
@@ -443,14 +460,13 @@ fn record_dictation_stage(stage: &'static str) {
 
 /// Cancels the active capture and discards all PCM without writing history.
 pub fn cancel_dictation_session(session_id: String) -> Result<(), String> {
+    // The guard frees the coordinator slot even if `cancel_capture` or a
+    // transition returns an error partway through cancellation.
+    let _reservation = ReservationGuard::new(session_id.clone());
     let mut capture = take_capture(&session_id)?;
     transition_capture(&mut capture, DictationState::Cancelled, "user cancelled")?;
     stop_preview(&mut capture);
     capture_engine::cancel_capture(&session_id)?;
-    COORDINATOR
-        .lock()
-        .map_err(|_| "dictation coordinator lock poisoned".to_owned())?
-        .cancel_recording(&session_id)?;
     transition_capture(&mut capture, DictationState::Idle, "session released")?;
     Ok(())
 }
@@ -503,7 +519,7 @@ fn spawn_preview_worker(
     language: String,
     sink: StreamSink<DictationEvent>,
     running: Arc<AtomicBool>,
-) -> thread::JoinHandle<()> {
+) -> Result<thread::JoinHandle<()>, String> {
     thread::Builder::new()
         .name(format!("swar-preview-{session_id}"))
         .spawn(move || {
@@ -548,7 +564,7 @@ fn spawn_preview_worker(
                 });
             }
         })
-        .expect("the optional preview worker must start")
+        .map_err(|error| error.to_string())
 }
 
 fn stop_preview(capture: &mut ActiveCapture) {
@@ -619,16 +635,48 @@ fn fail_start(
     }
 }
 
-fn release_recording_reservation(session_id: &str) {
-    if let Ok(mut coordinator) = COORDINATOR.lock() {
-        let _ = coordinator.cancel_recording(session_id);
+/// Guarantees the coordinator recording slot is released on every exit path.
+///
+/// The reservation is a long-lived resource held across separate FFI calls, so
+/// a leak — from an early `?` return or a panic inside transcription/insertion —
+/// leaves the app silently unable to record until relaunch. This guard releases
+/// the slot in `Drop`. `disarm` commits the reservation when a session
+/// legitimately stays reserved past the current scope (after a successful
+/// `start_dictation_session`, where `finish`/`cancel` will release it later).
+struct ReservationGuard {
+    session_id: String,
+    armed: bool,
+}
+
+impl ReservationGuard {
+    fn new(session_id: String) -> Self {
+        Self {
+            session_id,
+            armed: true,
+        }
+    }
+
+    fn disarm(mut self) {
+        self.armed = false;
     }
 }
 
-fn complete_coordinator_session(session_id: &str) {
-    if let Ok(mut coordinator) = COORDINATOR.lock() {
-        let _ = coordinator.complete(session_id);
+impl Drop for ReservationGuard {
+    fn drop(&mut self) {
+        if self.armed {
+            abandon_coordinator_session(&self.session_id);
+        }
     }
+}
+
+/// Frees a session from the coordinator, recovering the lock if a prior panic
+/// poisoned it so the release path can never itself silently become a no-op.
+fn abandon_coordinator_session(session_id: &str) {
+    let mut coordinator = match COORDINATOR.lock() {
+        Ok(coordinator) => coordinator,
+        Err(poisoned) => poisoned.into_inner(),
+    };
+    coordinator.abandon(session_id);
 }
 
 fn monotonic_timestamp_ms() -> u64 {
@@ -696,5 +744,32 @@ mod tests {
     fn speech_markers_filter_known_blank_tokens() {
         assert!(!transcript_contains_speech("[BLANK_AUDIO]"));
         assert!(transcript_contains_speech("hello"));
+    }
+
+    // Serialised in one test: the coordinator exposes a single global slot, so
+    // splitting these into two `#[test]`s would let them race each other.
+    #[test]
+    fn reservation_guard_releases_on_drop_and_holds_when_disarmed() {
+        fn reserve(session: &str) -> Result<(), String> {
+            match COORDINATOR.lock() {
+                Ok(mut coordinator) => coordinator.reserve_recording(session),
+                Err(poisoned) => poisoned.into_inner().reserve_recording(session),
+            }
+        }
+
+        // An armed guard frees the slot on drop, so the next session can start.
+        reserve("guard-a").expect("reserve guard-a");
+        drop(ReservationGuard::new("guard-a".to_owned()));
+        reserve("guard-b").expect("slot must be free after the guard drops");
+        abandon_coordinator_session("guard-b");
+
+        // A disarmed guard keeps the reservation; a competing reserve must fail.
+        reserve("guard-c").expect("reserve guard-c");
+        ReservationGuard::new("guard-c".to_owned()).disarm();
+        assert!(
+            reserve("guard-d").is_err(),
+            "a disarmed guard must leave the slot reserved"
+        );
+        abandon_coordinator_session("guard-c");
     }
 }

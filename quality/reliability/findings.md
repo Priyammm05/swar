@@ -4,6 +4,11 @@ Companion to [degradation-test-plan.md](degradation-test-plan.md). This is the *
 
 Fix in priority order. IDs are stable — reference them in commits and regression tests.
 
+## Fix status
+
+- **FIXED (commit 1 — coordinator reservation safety):** R-001, R-002, R-005, R-020, R-028. An RAII `ReservationGuard` now releases the coordinator slot on every exit path (early `?`, error, or panic) via a new infallible `DictationCoordinator::abandon`; the release path recovers a poisoned lock instead of no-oping (R-028); the preview-worker spawn returns `Result` and degrades to no-preview instead of `.expect`-panicking under the `ACTIVE_CAPTURE` guard (R-002). Regression tests: `coordinator::abandon_frees_the_slot_from_any_phase`, `abandon_is_idempotent_and_ignores_unknown_sessions`, `api::dictation::reservation_guard_releases_on_drop_and_holds_when_disarmed`.
+- **OPEN:** everything else. R-011 (audio-worker spawn `.expect`) moved to commit 2 with the other `capture_engine` timeout work.
+
 ## Automated framework baseline (real run, this audit)
 
 `./scripts/run_test_framework.sh fast` → **passed**. `cargo fmt`/`check`/`clippy -D warnings` clean; **42 Rust tests** pass; Flutter boundary check + 3 user-test plans verified; Dart format + `flutter analyze` clean; **29 Flutter unit/widget tests** pass ("All tests passed!").

@@ -28,22 +28,17 @@ impl DictationCoordinator {
         Ok(())
     }
 
-    pub fn cancel_recording(&mut self, session_id: &str) -> Result<(), String> {
-        if self.recording_session.as_deref() != Some(session_id) {
-            return Err("the requested dictation session is not recording".to_owned());
-        }
-        self.recording_session = None;
-        Ok(())
-    }
-
-    pub fn complete(&mut self, session_id: &str) -> Result<(), String> {
-        if self.post_processing_sessions.remove(session_id) {
-            if self.recording_session.as_deref() == Some(session_id) {
-                self.recording_session = None;
-            }
-            Ok(())
-        } else {
-            Err("the requested dictation session is not being processed".to_owned())
+    /// Releases a session from the pipeline regardless of the phase it is in.
+    ///
+    /// This is the single release path for both a reserved recording and an
+    /// in-flight post-processing session. It is infallible and idempotent so an
+    /// RAII guard can call it on any exit path — including a panic between
+    /// reservation and completion — and always free the recording slot instead
+    /// of wedging every future dictation until the app is relaunched.
+    pub fn abandon(&mut self, session_id: &str) {
+        self.post_processing_sessions.remove(session_id);
+        if self.recording_session.as_deref() == Some(session_id) {
+            self.recording_session = None;
         }
     }
 
@@ -66,7 +61,7 @@ mod tests {
             .expect("first finalisation");
         assert!(coordinator.reserve_recording("two").is_err());
         assert_eq!(coordinator.active_recording(), Some("one"));
-        coordinator.complete("one").expect("first completion");
+        coordinator.abandon("one");
         coordinator
             .reserve_recording("two")
             .expect("next capture after completed insertion");
@@ -77,5 +72,31 @@ mod tests {
         let mut coordinator = DictationCoordinator::default();
         coordinator.reserve_recording("one").expect("first capture");
         assert!(coordinator.reserve_recording("two").is_err());
+    }
+
+    #[test]
+    fn abandon_frees_the_slot_from_any_phase() {
+        let mut coordinator = DictationCoordinator::default();
+        coordinator.reserve_recording("one").expect("reserve");
+        coordinator
+            .begin_post_processing("one")
+            .expect("post-processing");
+        // Simulates a panic/early return between reservation and completion.
+        coordinator.abandon("one");
+        assert_eq!(coordinator.active_recording(), None);
+        coordinator
+            .reserve_recording("two")
+            .expect("a new session must start after an abandoned one");
+    }
+
+    #[test]
+    fn abandon_is_idempotent_and_ignores_unknown_sessions() {
+        let mut coordinator = DictationCoordinator::default();
+        coordinator.reserve_recording("one").expect("reserve");
+        coordinator.abandon("someone-else");
+        assert_eq!(coordinator.active_recording(), Some("one"));
+        coordinator.abandon("one");
+        coordinator.abandon("one");
+        assert_eq!(coordinator.active_recording(), None);
     }
 }
