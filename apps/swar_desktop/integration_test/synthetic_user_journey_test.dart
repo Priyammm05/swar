@@ -64,6 +64,7 @@ void main() {
     await tester.tap(find.byKey(const Key('top-dictation-nav')));
     _recordStep('dictation tap dispatched');
     await _settle(tester);
+    await _pumpUntilFound(tester, find.byKey(const Key('dictation-list')));
     _recordStep('dictation transition settled');
     expect(find.byKey(const Key('dictation-list')), findsOneWidget);
     expect(find.byKey(const Key('dictation-record-0')), findsOneWidget);
@@ -77,6 +78,7 @@ void main() {
 
     await tester.tap(find.text('SHOW MORE ACTIVITY'));
     await _settle(tester);
+    await _pumpUntilGone(tester, find.text('SHOW MORE ACTIVITY'));
     expect(find.text('SHOW MORE ACTIVITY'), findsNothing);
     expect(history.requestedOffsets, containsAllInOrder(<int>[0, 50]));
     _recordCheck(
@@ -86,6 +88,7 @@ void main() {
 
     await tester.enterText(find.byKey(const Key('dictation-search')), 'launch');
     await tester.pump();
+    await _pumpUntilGone(tester, find.textContaining('customer call'));
     expect(find.textContaining('launch'), findsWidgets);
     expect(find.textContaining('customer call'), findsNothing);
     _recordCheck(
@@ -97,9 +100,12 @@ void main() {
     final loadsBeforeDictation = history.loadCalls;
     await tester.tap(find.byKey(const Key('global-dictation-control')));
     await _settle(tester);
+    await _pumpUntilFound(tester, find.text('Stop'));
     expect(find.text('Stop'), findsOneWidget);
     await tester.tap(find.byKey(const Key('global-dictation-control')));
     await _settle(tester);
+    await _pumpUntilFound(tester, find.text('Dictate'));
+    await _pumpUntil(tester, () => history.loadCalls > loadsBeforeDictation);
     expect(find.text('Dictate'), findsOneWidget);
     expect(engine.finishCalls, 1);
     expect(history.loadCalls, greaterThan(loadsBeforeDictation));
@@ -110,9 +116,17 @@ void main() {
 
     await tester.tap(find.byKey(const Key('top-settings-nav')));
     await _settle(tester);
+    await _pumpUntilFound(
+      tester,
+      find.byKey(const Key('general-settings-page')),
+    );
     expect(find.byKey(const Key('general-settings-page')), findsOneWidget);
     await tester.tap(find.byKey(const Key('settings-system-nav')));
     await _settle(tester);
+    await _pumpUntilFound(
+      tester,
+      find.byKey(const Key('launch-at-login-setting')),
+    );
     await tester.tap(find.byKey(const Key('launch-at-login-setting')));
     await _settle(tester);
     await tester.tap(find.byKey(const Key('settings-close-button')));
@@ -131,6 +145,7 @@ void main() {
 
     tester.view.physicalSize = const Size(620, 700);
     await _settle(tester);
+    await _pumpUntilFound(tester, find.byKey(const Key('compact-navigation')));
     expect(find.byKey(const Key('compact-navigation')), findsOneWidget);
     expect(find.byKey(const Key('top-dictation-nav')), findsNothing);
     _recordCheck(
@@ -292,6 +307,25 @@ Future<void> _writeEvidence(
   // ignore: avoid_print
   print('SWAR_SYNTHETIC_USER_EVIDENCE=${outputDirectory.path}');
 }
+
+// Swar cannot use pumpAndSettle because it schedules continuous recording
+// affordances, so async work (history paging, search, lifecycle transitions)
+// is drained by advancing bounded deterministic frames until a condition holds.
+Future<void> _pumpUntil(
+  WidgetTester tester,
+  bool Function() condition, {
+  int maxFrames = 60,
+}) async {
+  for (var frame = 0; frame < maxFrames && !condition(); frame++) {
+    await _settle(tester);
+  }
+}
+
+Future<void> _pumpUntilFound(WidgetTester tester, Finder finder) =>
+    _pumpUntil(tester, () => finder.evaluate().isNotEmpty);
+
+Future<void> _pumpUntilGone(WidgetTester tester, Finder finder) =>
+    _pumpUntil(tester, () => finder.evaluate().isEmpty);
 
 Future<void> _settle(WidgetTester tester) async {
   // Swar intentionally has continuously scheduled recording affordances. A
