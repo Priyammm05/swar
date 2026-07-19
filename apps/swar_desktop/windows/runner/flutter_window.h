@@ -25,7 +25,13 @@ class FlutterWindow : public Win32Window {
 
  private:
   static LRESULT CALLBACK KeyboardHook(int code, WPARAM wparam, LPARAM lparam);
+  static LRESULT CALLBACK OverlayWindowProc(HWND hwnd, UINT message,
+                                            WPARAM wparam, LPARAM lparam);
   static FlutterWindow* shortcut_window_;
+  bool CreateDictationOverlay();
+  void UpdateDictationOverlay(const std::string& state, double audio_level);
+  void HideDictationOverlay();
+  void PaintDictationOverlay(HWND hwnd);
 
   // The project to run.
   flutter::DartProject project_;
@@ -34,7 +40,13 @@ class FlutterWindow : public Win32Window {
   std::unique_ptr<flutter::FlutterViewController> flutter_controller_;
   std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>> desktop_channel_;
   HHOOK keyboard_hook_ = nullptr;
-  bool option_pressed_ = false;
+  DWORD shortcut_virtual_key_ = VK_MENU;
+  bool shortcut_pressed_ = false;
+  HWND overlay_window_ = nullptr;
+  std::string overlay_state_ = "idle";
+  double overlay_audio_level_ = 0.0;
+  double overlay_phase_ = 0.0;
+  bool overlay_hovered_ = false;
 };
 
 #endif  // RUNNER_FLUTTER_WINDOW_H_

@@ -9,6 +9,9 @@ class MainFlutterWindow: NSWindow {
   private var overlayController: DictationOverlayController?
 
   override func awakeFromNib() {
+    // Closing the red traffic-light button hides the application window. Keep
+    // the native window alive so clicking Swar in the Dock can show it again.
+    isReleasedWhenClosed = false
     let flutterViewController = FlutterViewController()
     let windowFrame = self.frame
     self.contentViewController = flutterViewController
@@ -33,14 +36,21 @@ class MainFlutterWindow: NSWindow {
       case "unregisterGlobalShortcut":
         shortcuts.unregister()
         result(nil)
+      case "configureGlobalShortcut":
+        let arguments = call.arguments as? [String: Any]
+        result(shortcuts.configure(arguments?["shortcutKey"] as? String ?? "option"))
       case "requestInsertionPermission":
         result(accessibility.requestIfNeeded())
+      case "foregroundApplication":
+        let application = NSWorkspace.shared.frontmostApplication
+        result(application?.localizedName ?? "")
       case "updateDictationOverlay":
         if let arguments = call.arguments as? [String: Any] {
           overlay.update(
             state: arguments["state"] as? String ?? "recording",
             audioLevel: arguments["audioLevel"] as? Double ?? 0,
-            isLatched: arguments["isLatched"] as? Bool ?? false
+            isLatched: arguments["isLatched"] as? Bool ?? false,
+            shortcutKey: arguments["shortcutKey"] as? String ?? "option"
           )
         }
         result(nil)
@@ -81,6 +91,7 @@ private final class OptionKeyMonitor {
   private var globalMonitor: Any?
   private var localMonitor: Any?
   private var isPressed = false
+  private var shortcutKey = "option"
 
   init(onPressed: @escaping () -> Void, onReleased: @escaping () -> Void) {
     self.onPressed = onPressed
@@ -108,8 +119,18 @@ private final class OptionKeyMonitor {
     isPressed = false
   }
 
+  func configure(_ shortcutKey: String) -> Bool {
+    let normalized = shortcutKey == "control" ? "control" : "option"
+    guard normalized != self.shortcutKey else { return register() }
+    unregister()
+    self.shortcutKey = normalized
+    return register()
+  }
+
   private func handle(_ event: NSEvent) {
-    let pressed = event.modifierFlags.contains(.option)
+    let pressed = shortcutKey == "control"
+      ? event.modifierFlags.contains(.control)
+      : event.modifierFlags.contains(.option)
     guard pressed != isPressed else { return }
     isPressed = pressed
     DispatchQueue.main.async { [weak self] in
@@ -147,11 +168,16 @@ private final class DictationOverlayController {
     panel = DictationOverlayPanel(contentView: content)
   }
 
-  func update(state: String, audioLevel: Double, isLatched: Bool) {
+  func update(state: String, audioLevel: Double, isLatched: Bool, shortcutKey: String) {
     let idle = state == "idle"
     if idle { commandOverlay.hide() }
     panel.ignoresMouseEvents = false
-    content.update(state: state, audioLevel: audioLevel, isLatched: isLatched)
+    content.update(
+      state: state,
+      audioLevel: audioLevel,
+      isLatched: isLatched,
+      shortcutKey: shortcutKey
+    )
     position()
     panel.orderFrontRegardless()
   }
@@ -316,6 +342,7 @@ private final class DictationOverlayView: NSView {
   private var longPressTimer: Timer?
   private var pointerIsDown = false
   private var longPressTriggered = false
+  private var shortcutSymbol = "⌥"
 
   init(
     onDictate: @escaping () -> Void,
@@ -335,13 +362,14 @@ private final class DictationOverlayView: NSView {
 
   required init?(coder: NSCoder) { nil }
 
-  func update(state: String, audioLevel: Double, isLatched: Bool) {
+  func update(state: String, audioLevel: Double, isLatched: Bool, shortcutKey: String) {
     self.state = state
     if state != "idle", isHovering {
       isHovering = false
     }
     targetAudioLevel = min(max(audioLevel * 9, 0), 1)
     _ = isLatched
+    shortcutSymbol = shortcutKey == "control" ? "⌃" : "⌥"
     startAnimating()
     needsDisplay = true
   }
@@ -450,7 +478,7 @@ private final class DictationOverlayView: NSView {
       .foregroundColor: NSColor.white.withAlphaComponent(opacity),
     ]
     let label = NSMutableAttributedString(string: "Dictate ", attributes: textAttributes)
-    label.append(NSAttributedString(string: "⌥", attributes: optionAttributes))
+    label.append(NSAttributedString(string: shortcutSymbol, attributes: optionAttributes))
     let labelSize = label.size()
     label.draw(
       at: NSPoint(x: hint.midX - labelSize.width / 2, y: hint.midY - labelSize.height / 2)

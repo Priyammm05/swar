@@ -34,15 +34,30 @@ final class PlatformDesktopShortcutGateway implements DesktopShortcutGateway {
   }
 
   @override
+  Future<String> foregroundApplication() async {
+    return await _channel.invokeMethod<String>('foregroundApplication') ?? '';
+  }
+
+  @override
+  Future<bool> configureShortcut(String shortcutKey) async {
+    return await _channel.invokeMethod<bool>('configureGlobalShortcut', {
+          'shortcutKey': shortcutKey,
+        }) ??
+        false;
+  }
+
+  @override
   Future<void> updateOverlay({
     required DesktopOverlayState state,
     required double audioLevel,
     required bool isLatched,
+    required String shortcutKey,
   }) {
     return _channel.invokeMethod<void>('updateDictationOverlay', {
       'state': state.name,
       'audioLevel': audioLevel,
       'isLatched': isLatched,
+      'shortcutKey': shortcutKey,
     });
   }
 

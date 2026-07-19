@@ -63,6 +63,12 @@ class AppDelegate: FlutterAppDelegate {
 
   @objc private func showMainWindow() {
     NSApp.activate(ignoringOtherApps: true)
-    NSApp.windows.first(where: { $0.canBecomeMain })?.makeKeyAndOrderFront(nil)
+    if let window = mainFlutterWindow {
+      window.makeKeyAndOrderFront(nil)
+      return
+    }
+    NSApp.windows
+      .first(where: { $0 is MainFlutterWindow })?
+      .makeKeyAndOrderFront(nil)
   }
 }

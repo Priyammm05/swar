@@ -24,10 +24,16 @@ final class DictationActivationController {
   final ShortcutGestureMachine _machine = ShortcutGestureMachine();
 
   Timer? _releaseTimer;
+  bool _isCompleting = false;
 
   bool get isLatched => _machine.isLatched;
+  bool get isCompleting => _isCompleting;
 
   Future<void> handle(DesktopShortcutEvent event) async {
+    // Key events generated while the previous result is being transcribed and
+    // inserted are deliberately discarded. Replaying them after completion
+    // would start a recording the user did not intend.
+    if (_isCompleting) return;
     switch (event.kind) {
       case DesktopShortcutEventKind.pressed:
         await _advance(ShortcutGestureInput.pressed);
@@ -53,7 +59,14 @@ final class DictationActivationController {
             await _advance(ShortcutGestureInput.startFailed);
           }
         case ShortcutGestureAction.finish:
-          await _finish();
+          if (_isCompleting) continue;
+          _isCompleting = true;
+          try {
+            await _finish();
+          } finally {
+            _isCompleting = false;
+            _modeChanged();
+          }
         case ShortcutGestureAction.cancel:
           await _cancel();
         case ShortcutGestureAction.notifyModeChanged:

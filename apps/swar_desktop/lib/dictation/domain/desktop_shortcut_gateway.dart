@@ -13,12 +13,17 @@ abstract interface class DesktopShortcutGateway {
 
   Future<bool> initialize();
 
+  Future<bool> configureShortcut(String shortcutKey);
+
   Future<bool> requestInsertionPermission();
+
+  Future<String> foregroundApplication();
 
   Future<void> updateOverlay({
     required DesktopOverlayState state,
     required double audioLevel,
     required bool isLatched,
+    required String shortcutKey,
   });
 
   Future<void> hideOverlay();
@@ -36,13 +41,20 @@ final class NoopDesktopShortcutGateway implements DesktopShortcutGateway {
   Future<bool> initialize() async => false;
 
   @override
+  Future<bool> configureShortcut(String shortcutKey) async => false;
+
+  @override
   Future<bool> requestInsertionPermission() async => true;
+
+  @override
+  Future<String> foregroundApplication() async => '';
 
   @override
   Future<void> updateOverlay({
     required DesktopOverlayState state,
     required double audioLevel,
     required bool isLatched,
+    required String shortcutKey,
   }) async {}
 
   @override
