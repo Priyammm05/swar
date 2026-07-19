@@ -47,15 +47,16 @@ flutter_rust_bridge::frb_generated_default_handler!();
 // Section: wire_funcs
 
 fn wire__crate__api__personalization__add_vocabulary_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
     rust_vec_len_: i32,
     data_len_: i32,
-) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
-    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
         flutter_rust_bridge::for_generated::TaskInfo {
             debug_name: "add_vocabulary",
-            port: None,
-            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
         },
         move || {
             let message = unsafe {
@@ -70,11 +71,13 @@ fn wire__crate__api__personalization__add_vocabulary_impl(
             let api_spoken = <String>::sse_decode(&mut deserializer);
             let api_written = <String>::sse_decode(&mut deserializer);
             deserializer.end();
-            transform_result_sse::<_, String>((move || {
-                let output_ok =
-                    crate::api::personalization::add_vocabulary(api_spoken, api_written)?;
-                Ok(output_ok)
-            })())
+            move |context| {
+                transform_result_sse::<_, String>((move || {
+                    let output_ok =
+                        crate::api::personalization::add_vocabulary(api_spoken, api_written)?;
+                    Ok(output_ok)
+                })())
+            }
         },
     )
 }
@@ -184,15 +187,16 @@ fn wire__crate__api__history__correct_dictation_impl(
     )
 }
 fn wire__crate__api__personalization__delete_vocabulary_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
     rust_vec_len_: i32,
     data_len_: i32,
-) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
-    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
         flutter_rust_bridge::for_generated::TaskInfo {
             debug_name: "delete_vocabulary",
-            port: None,
-            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
         },
         move || {
             let message = unsafe {
@@ -206,10 +210,12 @@ fn wire__crate__api__personalization__delete_vocabulary_impl(
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
             let api_spoken = <String>::sse_decode(&mut deserializer);
             deserializer.end();
-            transform_result_sse::<_, String>((move || {
-                let output_ok = crate::api::personalization::delete_vocabulary(api_spoken)?;
-                Ok(output_ok)
-            })())
+            move |context| {
+                transform_result_sse::<_, String>((move || {
+                    let output_ok = crate::api::personalization::delete_vocabulary(api_spoken)?;
+                    Ok(output_ok)
+                })())
+            }
         },
     )
 }
@@ -309,15 +315,16 @@ fn wire__crate__api__diagnostics__get_core_version_impl(
     )
 }
 fn wire__crate__api__personalization__get_voice_style_profile_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
     rust_vec_len_: i32,
     data_len_: i32,
-) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
-    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
         flutter_rust_bridge::for_generated::TaskInfo {
             debug_name: "get_voice_style_profile",
-            port: None,
-            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
         },
         move || {
             let message = unsafe {
@@ -330,10 +337,12 @@ fn wire__crate__api__personalization__get_voice_style_profile_impl(
             let mut deserializer =
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
             deserializer.end();
-            transform_result_sse::<_, String>((move || {
-                let output_ok = crate::api::personalization::get_voice_style_profile()?;
-                Ok(output_ok)
-            })())
+            move |context| {
+                transform_result_sse::<_, String>((move || {
+                    let output_ok = crate::api::personalization::get_voice_style_profile()?;
+                    Ok(output_ok)
+                })())
+            }
         },
     )
 }
@@ -467,15 +476,16 @@ fn wire__crate__api__dictation__list_microphones_impl(
     )
 }
 fn wire__crate__api__personalization__list_vocabulary_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
     rust_vec_len_: i32,
     data_len_: i32,
-) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
-    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
         flutter_rust_bridge::for_generated::TaskInfo {
             debug_name: "list_vocabulary",
-            port: None,
-            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
         },
         move || {
             let message = unsafe {
@@ -488,10 +498,12 @@ fn wire__crate__api__personalization__list_vocabulary_impl(
             let mut deserializer =
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
             deserializer.end();
-            transform_result_sse::<_, String>((move || {
-                let output_ok = crate::api::personalization::list_vocabulary()?;
-                Ok(output_ok)
-            })())
+            move |context| {
+                transform_result_sse::<_, String>((move || {
+                    let output_ok = crate::api::personalization::list_vocabulary()?;
+                    Ok(output_ok)
+                })())
+            }
         },
     )
 }
@@ -758,15 +770,16 @@ fn wire__crate__api__models__recommended_model_status_impl(
     )
 }
 fn wire__crate__api__personalization__record_user_edit_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
     rust_vec_len_: i32,
     data_len_: i32,
-) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
-    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
         flutter_rust_bridge::for_generated::TaskInfo {
             debug_name: "record_user_edit",
-            port: None,
-            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
         },
         move || {
             let message = unsafe {
@@ -782,14 +795,16 @@ fn wire__crate__api__personalization__record_user_edit_impl(
             let api_corrected = <String>::sse_decode(&mut deserializer);
             let api_learning_opted_in = <bool>::sse_decode(&mut deserializer);
             deserializer.end();
-            transform_result_sse::<_, String>((move || {
-                let output_ok = crate::api::personalization::record_user_edit(
-                    api_original,
-                    api_corrected,
-                    api_learning_opted_in,
-                )?;
-                Ok(output_ok)
-            })())
+            move |context| {
+                transform_result_sse::<_, String>((move || {
+                    let output_ok = crate::api::personalization::record_user_edit(
+                        api_original,
+                        api_corrected,
+                        api_learning_opted_in,
+                    )?;
+                    Ok(output_ok)
+                })())
+            }
         },
     )
 }
@@ -1426,6 +1441,12 @@ fn pde_ffi_dispatcher_primary_impl(
 ) {
     // Codec=Pde (Serialization + dispatch), see doc to use other codecs
     match func_id {
+        1 => wire__crate__api__personalization__add_vocabulary_impl(
+            port,
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
         2 => wire__crate__api__dictation__cancel_dictation_session_impl(
             port,
             ptr,
@@ -1434,6 +1455,12 @@ fn pde_ffi_dispatcher_primary_impl(
         ),
         3 => wire__crate__api__history__clear_local_history_impl(port, ptr, rust_vec_len, data_len),
         4 => wire__crate__api__history__correct_dictation_impl(port, ptr, rust_vec_len, data_len),
+        5 => wire__crate__api__personalization__delete_vocabulary_impl(
+            port,
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
         6 => wire__crate__api__personalization__export_learning_examples_impl(
             port,
             ptr,
@@ -1441,6 +1468,12 @@ fn pde_ffi_dispatcher_primary_impl(
             data_len,
         ),
         7 => wire__crate__api__dictation__finish_dictation_session_impl(
+            port,
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
+        9 => wire__crate__api__personalization__get_voice_style_profile_impl(
             port,
             ptr,
             rust_vec_len,
@@ -1465,6 +1498,12 @@ fn pde_ffi_dispatcher_primary_impl(
             data_len,
         ),
         13 => wire__crate__api__dictation__list_microphones_impl(port, ptr, rust_vec_len, data_len),
+        14 => wire__crate__api__personalization__list_vocabulary_impl(
+            port,
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
         15 => wire__crate__api__history__load_history_page_impl(port, ptr, rust_vec_len, data_len),
         16 => wire__crate__api__history__load_insights_snapshot_impl(
             port,
@@ -1485,6 +1524,12 @@ fn pde_ffi_dispatcher_primary_impl(
             data_len,
         ),
         21 => wire__crate__api__dictation__prepare_dictation_engine_impl(
+            port,
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
+        23 => wire__crate__api__personalization__record_user_edit_impl(
             port,
             ptr,
             rust_vec_len,
@@ -1520,19 +1565,10 @@ fn pde_ffi_dispatcher_sync_impl(
 ) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
     // Codec=Pde (Serialization + dispatch), see doc to use other codecs
     match func_id {
-        1 => wire__crate__api__personalization__add_vocabulary_impl(ptr, rust_vec_len, data_len),
-        5 => wire__crate__api__personalization__delete_vocabulary_impl(ptr, rust_vec_len, data_len),
         8 => wire__crate__api__diagnostics__get_core_version_impl(ptr, rust_vec_len, data_len),
-        9 => wire__crate__api__personalization__get_voice_style_profile_impl(
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        14 => wire__crate__api__personalization__list_vocabulary_impl(ptr, rust_vec_len, data_len),
         17 => wire__crate__api__settings__load_settings_impl(ptr, rust_vec_len, data_len),
         19 => wire__crate__api__dictation__offline_model_is_ready_impl(ptr, rust_vec_len, data_len),
         22 => wire__crate__api__models__recommended_model_status_impl(ptr, rust_vec_len, data_len),
-        23 => wire__crate__api__personalization__record_user_edit_impl(ptr, rust_vec_len, data_len),
         25 => wire__crate__api__settings__save_settings_impl(ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }

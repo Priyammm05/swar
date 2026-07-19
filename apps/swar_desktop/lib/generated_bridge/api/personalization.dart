@@ -9,19 +9,20 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 // These functions are ignored because they are not marked as `pub`: `apply_entries`, `apply_vocabulary`, `validate_pair`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_receiver_is_total_eq`, `clone`, `clone`, `eq`, `eq`, `fmt`, `fmt`
 
-List<VocabularyEntry> listVocabulary() =>
+Future<List<VocabularyEntry>> listVocabulary() =>
     RustLib.instance.api.crateApiPersonalizationListVocabulary();
 
-void addVocabulary({required String spoken, required String written}) => RustLib
-    .instance
-    .api
-    .crateApiPersonalizationAddVocabulary(spoken: spoken, written: written);
+Future<void> addVocabulary({required String spoken, required String written}) =>
+    RustLib.instance.api.crateApiPersonalizationAddVocabulary(
+      spoken: spoken,
+      written: written,
+    );
 
-void deleteVocabulary({required String spoken}) => RustLib.instance.api
+Future<void> deleteVocabulary({required String spoken}) => RustLib.instance.api
     .crateApiPersonalizationDeleteVocabulary(spoken: spoken);
 
 /// Learns only when the user explicitly enabled the local edit flywheel.
-bool recordUserEdit({
+Future<bool> recordUserEdit({
   required String original,
   required String corrected,
   required bool learningOptedIn,
@@ -31,7 +32,7 @@ bool recordUserEdit({
   learningOptedIn: learningOptedIn,
 );
 
-VoiceStyleSnapshot getVoiceStyleProfile() =>
+Future<VoiceStyleSnapshot> getVoiceStyleProfile() =>
     RustLib.instance.api.crateApiPersonalizationGetVoiceStyleProfile();
 
 /// Writes opted-in correction triples to a user-owned JSONL file. This is an

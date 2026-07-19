@@ -6,12 +6,12 @@ import 'package:swar_desktop/settings/domain/personalization_repository.dart';
 final class RustPersonalizationRepository implements PersonalizationRepository {
   @override
   Future<void> addVocabulary(String spoken, String written) async {
-    native.addVocabulary(spoken: spoken, written: written);
+    await native.addVocabulary(spoken: spoken, written: written);
   }
 
   @override
   Future<void> deleteVocabulary(String spoken) async {
-    native.deleteVocabulary(spoken: spoken);
+    await native.deleteVocabulary(spoken: spoken);
   }
 
   @override
@@ -19,8 +19,8 @@ final class RustPersonalizationRepository implements PersonalizationRepository {
 
   @override
   Future<List<SwarVocabularyEntry>> listVocabulary() async {
-    return native
-        .listVocabulary()
+    final entries = await native.listVocabulary();
+    return entries
         .map(
           (entry) => SwarVocabularyEntry(
             spoken: entry.spoken,

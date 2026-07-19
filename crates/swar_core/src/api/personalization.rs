@@ -1,5 +1,3 @@
-use flutter_rust_bridge::frb;
-
 use crate::storage;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -17,7 +15,6 @@ pub struct VoiceStyleSnapshot {
     pub lowercase_start_ratio: f64,
 }
 
-#[frb(sync)]
 pub fn list_vocabulary() -> Result<Vec<VocabularyEntry>, String> {
     storage::vocabulary_entries().map(|entries| {
         entries
@@ -31,19 +28,16 @@ pub fn list_vocabulary() -> Result<Vec<VocabularyEntry>, String> {
     })
 }
 
-#[frb(sync)]
 pub fn add_vocabulary(spoken: String, written: String) -> Result<(), String> {
     validate_pair(&spoken, &written)?;
     storage::upsert_vocabulary(&spoken, &written)
 }
 
-#[frb(sync)]
 pub fn delete_vocabulary(spoken: String) -> Result<(), String> {
     storage::remove_vocabulary(&spoken)
 }
 
 /// Learns only when the user explicitly enabled the local edit flywheel.
-#[frb(sync)]
 pub fn record_user_edit(
     original: String,
     corrected: String,
@@ -56,7 +50,6 @@ pub fn record_user_edit(
     Ok(true)
 }
 
-#[frb(sync)]
 pub fn get_voice_style_profile() -> Result<VoiceStyleSnapshot, String> {
     storage::voice_profile().map(|profile| VoiceStyleSnapshot {
         sample_count: profile.sample_count,

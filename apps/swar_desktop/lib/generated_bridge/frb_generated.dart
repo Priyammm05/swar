@@ -81,7 +81,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
 }
 
 abstract class RustLibApi extends BaseApi {
-  void crateApiPersonalizationAddVocabulary({
+  Future<void> crateApiPersonalizationAddVocabulary({
     required String spoken,
     required String written,
   });
@@ -98,7 +98,9 @@ abstract class RustLibApi extends BaseApi {
     required bool learningOptedIn,
   });
 
-  void crateApiPersonalizationDeleteVocabulary({required String spoken});
+  Future<void> crateApiPersonalizationDeleteVocabulary({
+    required String spoken,
+  });
 
   Future<String> crateApiPersonalizationExportLearningExamples();
 
@@ -108,7 +110,7 @@ abstract class RustLibApi extends BaseApi {
 
   String crateApiDiagnosticsGetCoreVersion();
 
-  VoiceStyleSnapshot crateApiPersonalizationGetVoiceStyleProfile();
+  Future<VoiceStyleSnapshot> crateApiPersonalizationGetVoiceStyleProfile();
 
   Future<String> crateApiHistoryInitializeLocalStore();
 
@@ -118,7 +120,7 @@ abstract class RustLibApi extends BaseApi {
 
   Future<List<MicrophoneDevice>> crateApiDictationListMicrophones();
 
-  List<VocabularyEntry> crateApiPersonalizationListVocabulary();
+  Future<List<VocabularyEntry>> crateApiPersonalizationListVocabulary();
 
   Future<HistoryPage> crateApiHistoryLoadHistoryPage({
     required String searchText,
@@ -144,7 +146,7 @@ abstract class RustLibApi extends BaseApi {
 
   OfflineModelStatus crateApiModelsRecommendedModelStatus();
 
-  bool crateApiPersonalizationRecordUserEdit({
+  Future<bool> crateApiPersonalizationRecordUserEdit({
     required String original,
     required String corrected,
     required bool learningOptedIn,
@@ -170,17 +172,22 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   });
 
   @override
-  void crateApiPersonalizationAddVocabulary({
+  Future<void> crateApiPersonalizationAddVocabulary({
     required String spoken,
     required String written,
   }) {
-    return handler.executeSync(
-      SyncTask(
-        callFfi: () {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_String(spoken, serializer);
           sse_encode_String(written, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 1)!;
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 1,
+            port: port_,
+          );
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_unit,
@@ -297,13 +304,20 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
-  void crateApiPersonalizationDeleteVocabulary({required String spoken}) {
-    return handler.executeSync(
-      SyncTask(
-        callFfi: () {
+  Future<void> crateApiPersonalizationDeleteVocabulary({
+    required String spoken,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_String(spoken, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 5)!;
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 5,
+            port: port_,
+          );
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_unit,
@@ -402,12 +416,17 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       const TaskConstMeta(debugName: "get_core_version", argNames: []);
 
   @override
-  VoiceStyleSnapshot crateApiPersonalizationGetVoiceStyleProfile() {
-    return handler.executeSync(
-      SyncTask(
-        callFfi: () {
+  Future<VoiceStyleSnapshot> crateApiPersonalizationGetVoiceStyleProfile() {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
           final serializer = SseSerializer(generalizedFrbRustBinding);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 9)!;
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 9,
+            port: port_,
+          );
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_voice_style_snapshot,
@@ -532,12 +551,17 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       const TaskConstMeta(debugName: "list_microphones", argNames: []);
 
   @override
-  List<VocabularyEntry> crateApiPersonalizationListVocabulary() {
-    return handler.executeSync(
-      SyncTask(
-        callFfi: () {
+  Future<List<VocabularyEntry>> crateApiPersonalizationListVocabulary() {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
           final serializer = SseSerializer(generalizedFrbRustBinding);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 14)!;
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 14,
+            port: port_,
+          );
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_list_vocabulary_entry,
@@ -781,19 +805,24 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       const TaskConstMeta(debugName: "recommended_model_status", argNames: []);
 
   @override
-  bool crateApiPersonalizationRecordUserEdit({
+  Future<bool> crateApiPersonalizationRecordUserEdit({
     required String original,
     required String corrected,
     required bool learningOptedIn,
   }) {
-    return handler.executeSync(
-      SyncTask(
-        callFfi: () {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_String(original, serializer);
           sse_encode_String(corrected, serializer);
           sse_encode_bool(learningOptedIn, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 23)!;
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 23,
+            port: port_,
+          );
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_bool,
