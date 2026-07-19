@@ -7,6 +7,7 @@ import 'api/diagnostics.dart';
 import 'api/dictation.dart';
 import 'api/history.dart';
 import 'api/models.dart';
+import 'api/personalization.dart';
 import 'api/settings.dart';
 import 'dart:async';
 import 'dart:convert';
@@ -60,6 +61,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   DictationEventKind dco_decode_dictation_event_kind(dynamic raw);
 
   @protected
+  DictationLifecycleState dco_decode_dictation_lifecycle_state(dynamic raw);
+
+  @protected
   DictationSessionConfig dco_decode_dictation_session_config(dynamic raw);
 
   @protected
@@ -85,6 +89,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   List<StoredDictation> dco_decode_list_stored_dictation(dynamic raw);
+
+  @protected
+  List<VocabularyEntry> dco_decode_list_vocabulary_entry(dynamic raw);
 
   @protected
   MicrophoneDevice dco_decode_microphone_device(dynamic raw);
@@ -115,6 +122,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void dco_decode_unit(dynamic raw);
+
+  @protected
+  VocabularyEntry dco_decode_vocabulary_entry(dynamic raw);
+
+  @protected
+  VoiceStyleSnapshot dco_decode_voice_style_snapshot(dynamic raw);
 
   @protected
   AnyhowException sse_decode_AnyhowException(SseDeserializer deserializer);
@@ -162,6 +175,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  DictationLifecycleState sse_decode_dictation_lifecycle_state(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   DictationSessionConfig sse_decode_dictation_session_config(
     SseDeserializer deserializer,
   );
@@ -191,6 +209,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   List<StoredDictation> sse_decode_list_stored_dictation(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  List<VocabularyEntry> sse_decode_list_vocabulary_entry(
     SseDeserializer deserializer,
   );
 
@@ -225,6 +248,14 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_decode_unit(SseDeserializer deserializer);
+
+  @protected
+  VocabularyEntry sse_decode_vocabulary_entry(SseDeserializer deserializer);
+
+  @protected
+  VoiceStyleSnapshot sse_decode_voice_style_snapshot(
+    SseDeserializer deserializer,
+  );
 
   @protected
   void sse_encode_AnyhowException(
@@ -284,6 +315,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_dictation_lifecycle_state(
+    DictationLifecycleState self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_dictation_session_config(
     DictationSessionConfig self,
     SseSerializer serializer,
@@ -322,6 +359,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_list_stored_dictation(
     List<StoredDictation> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_vocabulary_entry(
+    List<VocabularyEntry> self,
     SseSerializer serializer,
   );
 
@@ -366,6 +409,18 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_unit(void self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_vocabulary_entry(
+    VocabularyEntry self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_voice_style_snapshot(
+    VoiceStyleSnapshot self,
+    SseSerializer serializer,
+  );
 }
 
 // Section: wire_class

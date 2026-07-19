@@ -29,6 +29,7 @@ class NativeSettings {
   final bool milestones;
   final bool pasteAutomatically;
   final bool restoreClipboard;
+  final bool learnFromEdits;
   final String modelPath;
   final String microphoneId;
 
@@ -46,6 +47,7 @@ class NativeSettings {
     required this.milestones,
     required this.pasteAutomatically,
     required this.restoreClipboard,
+    required this.learnFromEdits,
     required this.modelPath,
     required this.microphoneId,
   });
@@ -68,6 +70,7 @@ class NativeSettings {
       milestones.hashCode ^
       pasteAutomatically.hashCode ^
       restoreClipboard.hashCode ^
+      learnFromEdits.hashCode ^
       modelPath.hashCode ^
       microphoneId.hashCode;
 
@@ -89,6 +92,7 @@ class NativeSettings {
           milestones == other.milestones &&
           pasteAutomatically == other.pasteAutomatically &&
           restoreClipboard == other.restoreClipboard &&
+          learnFromEdits == other.learnFromEdits &&
           modelPath == other.modelPath &&
           microphoneId == other.microphoneId;
 }

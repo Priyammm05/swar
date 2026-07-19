@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -5,12 +6,18 @@ import 'package:swar_desktop/design_system/swar_colors.dart';
 import 'package:swar_desktop/dictation/domain/dictation_history_repository.dart';
 import 'package:swar_desktop/dictation/domain/dictation_record.dart';
 import 'package:swar_desktop/dictation/presentation/dictation_history_view_model.dart';
+import 'package:swar_desktop/dictation/presentation/dictation_session_view_model.dart';
 
 /// Dictation overview translated from the approved HTML. Presentation Layer.
 final class DictationPage extends StatefulWidget {
-  const DictationPage({required this.repository, super.key});
+  const DictationPage({
+    required this.repository,
+    required this.sessionViewModel,
+    super.key,
+  });
 
   final DictationHistoryRepository repository;
+  final DictationSessionViewModel sessionViewModel;
 
   @override
   State<DictationPage> createState() => _DictationPageState();
@@ -18,18 +25,38 @@ final class DictationPage extends StatefulWidget {
 
 final class _DictationPageState extends State<DictationPage> {
   late final DictationHistoryViewModel _viewModel;
+  late int _completionRevision;
 
   @override
   void initState() {
     super.initState();
     _viewModel = DictationHistoryViewModel(repository: widget.repository)
       ..load();
+    _completionRevision = widget.sessionViewModel.completionRevision;
+    widget.sessionViewModel.addListener(_handleSessionChanged);
+  }
+
+  @override
+  void didUpdateWidget(covariant DictationPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.sessionViewModel == widget.sessionViewModel) return;
+    oldWidget.sessionViewModel.removeListener(_handleSessionChanged);
+    _completionRevision = widget.sessionViewModel.completionRevision;
+    widget.sessionViewModel.addListener(_handleSessionChanged);
   }
 
   @override
   void dispose() {
+    widget.sessionViewModel.removeListener(_handleSessionChanged);
     _viewModel.dispose();
     super.dispose();
+  }
+
+  void _handleSessionChanged() {
+    final revision = widget.sessionViewModel.completionRevision;
+    if (revision == _completionRevision) return;
+    _completionRevision = revision;
+    unawaited(_viewModel.refresh());
   }
 
   @override

@@ -21,6 +21,7 @@ final class SwarSettings {
     this.milestones = true,
     this.pasteAutomatically = true,
     this.restoreClipboard = true,
+    this.learnFromEdits = false,
     this.modelPath = '',
     this.microphoneId = '',
   });
@@ -38,6 +39,7 @@ final class SwarSettings {
   final bool milestones;
   final bool pasteAutomatically;
   final bool restoreClipboard;
+  final bool learnFromEdits;
   final String modelPath;
   final String microphoneId;
 
@@ -55,6 +57,7 @@ final class SwarSettings {
     bool? milestones,
     bool? pasteAutomatically,
     bool? restoreClipboard,
+    bool? learnFromEdits,
     String? modelPath,
     String? microphoneId,
   }) {
@@ -72,6 +75,7 @@ final class SwarSettings {
       milestones: milestones ?? this.milestones,
       pasteAutomatically: pasteAutomatically ?? this.pasteAutomatically,
       restoreClipboard: restoreClipboard ?? this.restoreClipboard,
+      learnFromEdits: learnFromEdits ?? this.learnFromEdits,
       modelPath: modelPath ?? this.modelPath,
       microphoneId: microphoneId ?? this.microphoneId,
     );

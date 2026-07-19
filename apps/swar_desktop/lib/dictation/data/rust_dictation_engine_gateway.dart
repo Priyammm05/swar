@@ -31,14 +31,24 @@ final class RustDictationEngineGateway implements DictationEngineGateway {
             pasteAutomatically: config.pasteAutomatically,
             restoreClipboard: config.restoreClipboard,
             maximumSeconds: 300,
+            enableLivePreview: config.enableLivePreview,
           ),
         )
         .map(
           (event) => DictationEngineEvent(
             sessionId: event.sessionId,
-            kind: DictationEngineEventKind.values[event.kind.index],
+            kind: DictationEngineEventKind.values.byName(event.kind.name),
+            previousState: DictationLifecycleState.values.byName(
+              event.previousState.name,
+            ),
+            currentState: DictationLifecycleState.values.byName(
+              event.currentState.name,
+            ),
+            timestampMilliseconds: event.timestampMs.toInt(),
+            reason: event.reason,
             audioLevel: event.audioLevel,
             message: event.message,
+            partialText: event.partialText,
           ),
         );
   }
@@ -55,6 +65,13 @@ final class RustDictationEngineGateway implements DictationEngineGateway {
   @override
   Future<void> cancel(String sessionId) =>
       native.cancelDictationSession(sessionId: sessionId);
+
+  @override
+  Future<bool> prepare(String modelPath) =>
+      native.prepareDictationEngine(modelPath: modelPath);
+
+  @override
+  Future<void> release() => native.releaseDictationEngine();
 
   @override
   bool modelIsReady(String modelPath) =>

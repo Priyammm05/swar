@@ -3,58 +3,65 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:swar_desktop/dictation/domain/dictation_engine_gateway.dart';
 
-enum DictationSessionState { idle, preparing, recording, finalising, failed }
-
 final class DictationSessionViewModel extends ChangeNotifier {
   DictationSessionViewModel({required DictationEngineGateway gateway})
     : _gateway = gateway;
 
   final DictationEngineGateway _gateway;
   StreamSubscription<DictationEngineEvent>? _subscription;
-  DictationSessionState _state = DictationSessionState.idle;
+  DictationLifecycleState _state = DictationLifecycleState.idle;
   String? _sessionId;
   String? _message;
   double _audioLevel = 0;
   bool _isInstallingModel = false;
+  int _completionRevision = 0;
+  bool _keepModelsWarm = true;
+  String? _partialText;
 
-  DictationSessionState get state => _state;
+  DictationLifecycleState get state => _state;
   String? get message => _message;
   double get audioLevel => _audioLevel;
-  bool get isRecording => _state == DictationSessionState.recording;
+  bool get isRecording => _state == DictationLifecycleState.recording;
+  bool get isProcessing => switch (_state) {
+    DictationLifecycleState.preparing ||
+    DictationLifecycleState.finalising ||
+    DictationLifecycleState.transcribing ||
+    DictationLifecycleState.cleaning ||
+    DictationLifecycleState.enhancing ||
+    DictationLifecycleState.inserting => true,
+    _ => false,
+  };
   bool get isInstallingModel => _isInstallingModel;
+  int get completionRevision => _completionRevision;
+  String? get partialText => _partialText;
 
   OfflineModelInstallation get recommendedModelStatus =>
       _gateway.recommendedModelStatus();
 
   Future<List<SwarMicrophone>> listMicrophones() => _gateway.listMicrophones();
 
+  Future<bool> prepare(String modelPath) async {
+    if (!_gateway.modelIsReady(modelPath)) return false;
+    return _gateway.prepare(modelPath);
+  }
+
   Future<void> start(DictationEngineConfig config) async {
     if (!_gateway.modelIsReady(config.modelPath)) {
       _fail('Choose an offline Whisper model before testing dictation.');
       return;
     }
+    await _gateway.prepare(config.modelPath);
     await _subscription?.cancel();
-    _state = DictationSessionState.preparing;
+    _keepModelsWarm = config.keepModelsWarm;
+    _state = DictationLifecycleState.preparing;
     _message = 'Preparing the microphone…';
     notifyListeners();
     _subscription = _gateway.start(config).listen((event) {
       _sessionId = event.sessionId;
       _audioLevel = event.audioLevel ?? _audioLevel;
-      switch (event.kind) {
-        case DictationEngineEventKind.preparing:
-          _state = DictationSessionState.preparing;
-        case DictationEngineEventKind.recording:
-        case DictationEngineEventKind.audioLevel:
-          _state = DictationSessionState.recording;
-          _message = 'Listening locally…';
-        case DictationEngineEventKind.finalising:
-          _state = DictationSessionState.finalising;
-          _message = 'Transcribing locally…';
-        case DictationEngineEventKind.cancelled:
-          _reset();
-        case DictationEngineEventKind.failed:
-          _fail(event.message ?? 'Dictation stopped unexpectedly.');
-      }
+      if (event.partialText != null) _partialText = event.partialText;
+      _state = event.currentState;
+      _message = _messageForState(event.currentState, event.message);
       notifyListeners();
     }, onError: (Object error) => _fail(_friendlyError(error)));
   }
@@ -62,15 +69,20 @@ final class DictationSessionViewModel extends ChangeNotifier {
   Future<void> finish() async {
     final sessionId = _sessionId;
     if (sessionId == null) return;
-    _state = DictationSessionState.finalising;
+    _state = DictationLifecycleState.finalising;
     _message = 'Transcribing locally…';
     notifyListeners();
     try {
       final completion = await _gateway.finish(sessionId);
-      _state = DictationSessionState.idle;
+      _state = DictationLifecycleState.idle;
+      _sessionId = null;
+      _audioLevel = 0;
+      _partialText = null;
+      _completionRevision += 1;
       _message = completion.insertionStatus == 'inserted'
           ? 'Dictation pasted.'
           : 'Dictation copied to the clipboard.';
+      if (!_keepModelsWarm) await _gateway.release();
     } catch (error) {
       _fail(_friendlyError(error));
     }
@@ -105,13 +117,14 @@ final class DictationSessionViewModel extends ChangeNotifier {
   }
 
   void _reset() {
-    _state = DictationSessionState.idle;
+    _state = DictationLifecycleState.idle;
     _sessionId = null;
     _audioLevel = 0;
+    _partialText = null;
   }
 
   void _fail(String message) {
-    _state = DictationSessionState.failed;
+    _state = DictationLifecycleState.failed;
     _message = message;
     notifyListeners();
   }
@@ -126,6 +139,25 @@ final class DictationSessionViewModel extends ChangeNotifier {
     }
     return 'Swar could not complete this dictation.';
   }
+
+  String _messageForState(
+    DictationLifecycleState state,
+    String? failureMessage,
+  ) => switch (state) {
+    DictationLifecycleState.idle => 'Ready.',
+    DictationLifecycleState.preparing => 'Preparing the microphone…',
+    DictationLifecycleState.recording => 'Listening locally…',
+    DictationLifecycleState.finalising => 'Finishing audio…',
+    DictationLifecycleState.transcribing => 'Transcribing locally…',
+    DictationLifecycleState.cleaning => 'Cleaning the transcript…',
+    DictationLifecycleState.enhancing => 'Refining locally…',
+    DictationLifecycleState.inserting => 'Pasting…',
+    DictationLifecycleState.copiedFallback => 'Copied to the clipboard.',
+    DictationLifecycleState.completed => 'Dictation complete.',
+    DictationLifecycleState.cancelled => 'Dictation cancelled.',
+    DictationLifecycleState.failed =>
+      failureMessage ?? 'Dictation stopped unexpectedly.',
+  };
 
   @override
   void dispose() {

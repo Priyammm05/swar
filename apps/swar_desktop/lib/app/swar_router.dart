@@ -47,7 +47,10 @@ GoRouter createSwarRouter({
               GoRoute(
                 path: SwarRoutes.dictation,
                 builder: (context, state) {
-                  return DictationPage(repository: dictationRepository);
+                  return DictationPage(
+                    repository: dictationRepository,
+                    sessionViewModel: dictationSessionViewModel,
+                  );
                 },
               ),
             ],

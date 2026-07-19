@@ -63,6 +63,9 @@ final class _SwarAppState extends State<SwarApp> {
     );
     _dictationSessionViewModel.addListener(_syncOverlay);
     _settingsViewModel.addListener(_syncOverlay);
+    unawaited(
+      _dictationSessionViewModel.prepare(_settingsViewModel.settings.modelPath),
+    );
     _shortcutSubscription = widget.desktopShortcutGateway.events.listen(
       (event) => unawaited(_activationController.handle(event)),
     );
@@ -88,6 +91,7 @@ final class _SwarAppState extends State<SwarApp> {
     _router.dispose();
     _settingsViewModel.dispose();
     _dictationSessionViewModel.dispose();
+    unawaited(widget.dictationEngineGateway.release());
     super.dispose();
   }
 
@@ -104,17 +108,26 @@ final class _SwarAppState extends State<SwarApp> {
         writingMode: settings.writingMode.name,
         pasteAutomatically: settings.pasteAutomatically,
         restoreClipboard: settings.restoreClipboard,
+        keepModelsWarm: settings.keepModelsWarm,
       ),
     );
-    return _dictationSessionViewModel.state != DictationSessionState.failed;
+    return _dictationSessionViewModel.state != DictationLifecycleState.failed;
   }
 
   void _syncOverlay() {
     final overlayState = switch (_dictationSessionViewModel.state) {
-      DictationSessionState.preparing => DesktopOverlayState.preparing,
-      DictationSessionState.recording => DesktopOverlayState.recording,
-      DictationSessionState.finalising => DesktopOverlayState.finalising,
-      DictationSessionState.idle || DictationSessionState.failed =>
+      DictationLifecycleState.preparing => DesktopOverlayState.preparing,
+      DictationLifecycleState.recording => DesktopOverlayState.recording,
+      DictationLifecycleState.finalising ||
+      DictationLifecycleState.transcribing ||
+      DictationLifecycleState.cleaning ||
+      DictationLifecycleState.enhancing ||
+      DictationLifecycleState.inserting ||
+      DictationLifecycleState.copiedFallback ||
+      DictationLifecycleState.completed => DesktopOverlayState.finalising,
+      DictationLifecycleState.idle ||
+      DictationLifecycleState.cancelled ||
+      DictationLifecycleState.failed =>
         _settingsViewModel.settings.showSwarBar
             ? DesktopOverlayState.idle
             : null,

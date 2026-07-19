@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:swar_desktop/dictation/application/shortcut_gesture_machine.dart';
 import 'package:swar_desktop/dictation/domain/desktop_shortcut_gateway.dart';
 
 /// Owns the push-to-talk gesture independently of Flutter presentation.
@@ -14,108 +15,59 @@ final class DictationActivationController {
        _cancel = cancel,
        _modeChanged = modeChanged;
 
-  static const _holdThreshold = Duration(milliseconds: 260);
   static const _doubleTapWindow = Duration(milliseconds: 340);
 
   final Future<bool> Function() _start;
   final Future<void> Function() _finish;
   final Future<void> Function() _cancel;
   final void Function() _modeChanged;
+  final ShortcutGestureMachine _machine = ShortcutGestureMachine();
 
   Timer? _releaseTimer;
-  DateTime? _pressedAt;
-  bool _active = false;
-  bool _latched = false;
-  bool _ignoreNextRelease = false;
 
-  bool get isLatched => _latched;
+  bool get isLatched => _machine.isLatched;
 
   Future<void> handle(DesktopShortcutEvent event) async {
     switch (event.kind) {
       case DesktopShortcutEventKind.pressed:
-        await _pressed();
+        await _advance(ShortcutGestureInput.pressed);
       case DesktopShortcutEventKind.released:
-        await _released();
+        await _advance(ShortcutGestureInput.released);
       case DesktopShortcutEventKind.toggle:
       case DesktopShortcutEventKind.stop:
-        await _toggle();
+        await _advance(ShortcutGestureInput.toggled);
       case DesktopShortcutEventKind.cancel:
-        await _cancelActive();
+        await _advance(ShortcutGestureInput.cancelled);
     }
   }
 
-  Future<void> _pressed() async {
-    _pressedAt = DateTime.now();
-    if (_latched) {
-      _ignoreNextRelease = true;
-      await _finishActive();
-      return;
+  Future<void> _advance(ShortcutGestureInput input) async {
+    final transition = _machine.advance(
+      input,
+      nowMilliseconds: DateTime.now().millisecondsSinceEpoch,
+    );
+    for (final action in transition.actions) {
+      switch (action) {
+        case ShortcutGestureAction.start:
+          if (!await _start()) {
+            await _advance(ShortcutGestureInput.startFailed);
+          }
+        case ShortcutGestureAction.finish:
+          await _finish();
+        case ShortcutGestureAction.cancel:
+          await _cancel();
+        case ShortcutGestureAction.notifyModeChanged:
+          _modeChanged();
+        case ShortcutGestureAction.scheduleDoubleTapWindow:
+          _releaseTimer?.cancel();
+          _releaseTimer = Timer(_doubleTapWindow, () {
+            unawaited(_advance(ShortcutGestureInput.doubleTapWindowElapsed));
+          });
+        case ShortcutGestureAction.cancelDoubleTapWindow:
+          _releaseTimer?.cancel();
+          _releaseTimer = null;
+      }
     }
-    if (_releaseTimer?.isActive ?? false) {
-      _releaseTimer?.cancel();
-      _releaseTimer = null;
-      _latched = true;
-      _modeChanged();
-      return;
-    }
-    if (_active) return;
-    _active = true;
-    _modeChanged();
-    if (!await _start()) {
-      _reset();
-    }
-  }
-
-  Future<void> _released() async {
-    if (_ignoreNextRelease) {
-      _ignoreNextRelease = false;
-      return;
-    }
-    if (!_active || _latched) return;
-    final heldFor = DateTime.now().difference(_pressedAt ?? DateTime.now());
-    if (heldFor >= _holdThreshold) {
-      await _finishActive();
-      return;
-    }
-    _releaseTimer?.cancel();
-    _releaseTimer = Timer(_doubleTapWindow, () {
-      unawaited(_finishActive());
-    });
-  }
-
-  Future<void> _toggle() async {
-    if (_active) {
-      await _finishActive();
-    } else {
-      _active = true;
-      _latched = true;
-      _modeChanged();
-      if (!await _start()) _reset();
-    }
-  }
-
-  Future<void> _cancelActive() async {
-    if (!_active) return;
-    _releaseTimer?.cancel();
-    await _cancel();
-    _reset();
-  }
-
-  Future<void> _finishActive() async {
-    if (!_active) return;
-    _releaseTimer?.cancel();
-    _active = false;
-    _latched = false;
-    _modeChanged();
-    await _finish();
-  }
-
-  void _reset() {
-    _releaseTimer?.cancel();
-    _releaseTimer = null;
-    _active = false;
-    _latched = false;
-    _modeChanged();
   }
 
   void dispose() {

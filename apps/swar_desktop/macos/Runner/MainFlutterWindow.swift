@@ -34,9 +34,7 @@ class MainFlutterWindow: NSWindow {
         shortcuts.unregister()
         result(nil)
       case "requestInsertionPermission":
-        // This is intentionally a silent status check. Permission guidance
-        // belongs in Swar's Settings; normal dictation must never summon TCC.
-        result(accessibility.isTrusted)
+        result(accessibility.requestIfNeeded())
       case "updateDictationOverlay":
         if let arguments = call.arguments as? [String: Any] {
           overlay.update(
@@ -62,7 +60,19 @@ class MainFlutterWindow: NSWindow {
 }
 
 private final class AccessibilityAccessController {
+  private var promptedThisLaunch = false
+
   var isTrusted: Bool { AXIsProcessTrusted() }
+
+  func requestIfNeeded() -> Bool {
+    if isTrusted { return true }
+    guard !promptedThisLaunch else { return false }
+
+    promptedThisLaunch = true
+    let options = ["AXTrustedCheckOptionPrompt": true] as CFDictionary
+    _ = AXIsProcessTrustedWithOptions(options)
+    return isTrusted
+  }
 }
 
 private final class OptionKeyMonitor {
@@ -117,7 +127,6 @@ private final class DictationOverlayController {
   private let panel: DictationOverlayPanel
   private let content: DictationOverlayView
   private let commandOverlay: CommandScreenOverlayController
-  private var targetSize = NSSize(width: 44, height: 7)
 
   init(channel: FlutterMethodChannel) {
     let commandOverlay = CommandScreenOverlayController()
@@ -136,10 +145,6 @@ private final class DictationOverlayController {
       onCancel: { channel.invokeMethod("overlayCancelPressed", arguments: nil) }
     )
     panel = DictationOverlayPanel(contentView: content)
-    content.onHoverChanged = { [weak self] hovering in
-      guard let self, self.content.isIdle else { return }
-      self.resize(to: hovering ? NSSize(width: 100, height: 58) : NSSize(width: 44, height: 7))
-    }
   }
 
   func update(state: String, audioLevel: Double, isLatched: Bool) {
@@ -147,11 +152,6 @@ private final class DictationOverlayController {
     if idle { commandOverlay.hide() }
     panel.ignoresMouseEvents = false
     content.update(state: state, audioLevel: audioLevel, isLatched: isLatched)
-    resize(
-      to: idle
-        ? (content.isHovering ? NSSize(width: 100, height: 58) : NSSize(width: 44, height: 7))
-        : NSSize(width: 106, height: 30)
-    )
     position()
     panel.orderFrontRegardless()
   }
@@ -169,24 +169,6 @@ private final class DictationOverlayController {
       x: visible.midX - frame.width / 2,
       y: visible.minY + 10
     ))
-  }
-
-  private func resize(to size: NSSize) {
-    guard size != targetSize else { return }
-    targetSize = size
-    let frame = panel.frame
-    let resizedFrame = NSRect(
-      x: frame.midX - size.width / 2,
-      y: frame.minY,
-      width: size.width,
-      height: size.height
-    )
-    NSAnimationContext.runAnimationGroup { context in
-      context.duration = 0.18
-      context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-      context.allowsImplicitAnimation = true
-      panel.animator().setFrame(resizedFrame, display: true)
-    }
   }
 }
 
@@ -295,7 +277,7 @@ private final class CommandScreenOverlayView: NSView {
 private final class DictationOverlayPanel: NSPanel {
   init(contentView: NSView) {
     super.init(
-      contentRect: NSRect(x: 0, y: 0, width: 44, height: 7),
+      contentRect: NSRect(x: 0, y: 0, width: 108, height: 60),
       styleMask: [.borderless, .nonactivatingPanel],
       backing: .buffered,
       defer: false
@@ -304,6 +286,7 @@ private final class DictationOverlayPanel: NSPanel {
     isOpaque = false
     backgroundColor = .clear
     hasShadow = false
+    acceptsMouseMovedEvents = true
     level = .statusBar
     hidesOnDeactivate = false
     isReleasedWhenClosed = false
@@ -328,12 +311,11 @@ private final class DictationOverlayView: NSView {
   private(set) var isHovering = false
   private var hoverProgress: CGFloat = 0
   private var activeProgress: CGFloat = 0
+  private var processingProgress: CGFloat = 0
   private var trackingArea: NSTrackingArea?
   private var longPressTimer: Timer?
   private var pointerIsDown = false
   private var longPressTriggered = false
-  var onHoverChanged: ((Bool) -> Void)?
-  var isIdle: Bool { state == "idle" }
 
   init(
     onDictate: @escaping () -> Void,
@@ -347,7 +329,7 @@ private final class DictationOverlayView: NSView {
     self.onLongPressEnd = onLongPressEnd
     self.onStop = onStop
     self.onCancel = onCancel
-    super.init(frame: NSRect(x: 0, y: 0, width: 44, height: 7))
+    super.init(frame: NSRect(x: 0, y: 0, width: 108, height: 60))
     wantsLayer = true
   }
 
@@ -357,7 +339,6 @@ private final class DictationOverlayView: NSView {
     self.state = state
     if state != "idle", isHovering {
       isHovering = false
-      onHoverChanged?(false)
     }
     targetAudioLevel = min(max(audioLevel * 9, 0), 1)
     _ = isLatched
@@ -393,13 +374,16 @@ private final class DictationOverlayView: NSView {
       RunLoop.main.add(timer, forMode: .common)
       return
     }
+    guard state == "recording" else { return }
     let point = convert(event.locationInWindow, from: nil)
-    if point.x < 44 {
+    if cancelButtonRect.contains(point) {
       onCancel()
-    } else if point.x > bounds.width - 44 {
+    } else if confirmButtonRect.contains(point) {
       onStop()
     }
   }
+
+  override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
   override func mouseUp(with event: NSEvent) {
     guard pointerIsDown else { return }
@@ -419,7 +403,7 @@ private final class DictationOverlayView: NSView {
     if let trackingArea { removeTrackingArea(trackingArea) }
     let area = NSTrackingArea(
       rect: bounds,
-      options: [.mouseEnteredAndExited, .activeAlways],
+      options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
       owner: self,
       userInfo: nil
     )
@@ -431,7 +415,6 @@ private final class DictationOverlayView: NSView {
     guard state == "idle" else { return }
     isHovering = true
     startAnimating()
-    onHoverChanged?(true)
   }
 
   override func mouseExited(with event: NSEvent) {
@@ -439,7 +422,6 @@ private final class DictationOverlayView: NSView {
     if pointerIsDown { return }
     isHovering = false
     startAnimating()
-    onHoverChanged?(false)
   }
 
   private func drawIdlePill(opacity: CGFloat) {
@@ -456,7 +438,7 @@ private final class DictationOverlayView: NSView {
 
   private func drawHoverControl(opacity: CGFloat) {
     guard opacity > 0.001, bounds.height > 12 else { return }
-    let hint = NSRect(x: 3, y: 32, width: 94, height: 24)
+    let hint = NSRect(x: 7, y: 32, width: 94, height: 24)
     NSColor(calibratedWhite: 0.02, alpha: 0.98 * opacity).setFill()
     NSBezierPath(roundedRect: hint, xRadius: 12, yRadius: 12).fill()
     let textAttributes: [NSAttributedString.Key: Any] = [
@@ -474,11 +456,11 @@ private final class DictationOverlayView: NSView {
       at: NSPoint(x: hint.midX - labelSize.width / 2, y: hint.midY - labelSize.height / 2)
     )
 
-    let rail = NSRect(x: 28, y: 0, width: 44, height: 6)
+    let rail = NSRect(x: 32, y: 0, width: 44, height: 6)
     NSColor(calibratedWhite: 0.42, alpha: 0.72 * opacity).setFill()
     NSBezierPath(roundedRect: rail, xRadius: 4, yRadius: 4).fill()
 
-    let button = NSRect(x: 29, y: 3, width: 42, height: 27)
+    let button = NSRect(x: 33, y: 3, width: 42, height: 27)
     NSColor(calibratedWhite: 0.16, alpha: 0.99 * opacity).setFill()
     NSBezierPath(roundedRect: button, xRadius: 13.5, yRadius: 13.5).fill()
     drawMicrophone(center: NSPoint(x: button.midX, y: button.midY + 1), opacity: opacity)
@@ -508,16 +490,34 @@ private final class DictationOverlayView: NSView {
   }
 
   private func drawActiveControl(opacity: CGFloat) {
-    let capsule = bounds.insetBy(dx: 0.75, dy: 0.75)
+    let capsule = activeControlRect.insetBy(dx: 0.75, dy: 0.75)
     NSColor(calibratedWhite: 0.015, alpha: 0.99 * opacity).setFill()
     NSBezierPath(roundedRect: capsule, xRadius: 15, yRadius: 15).fill()
     NSColor(calibratedWhite: 1, alpha: 0.13 * opacity).setStroke()
     let border = NSBezierPath(roundedRect: capsule, xRadius: 15, yRadius: 15)
     border.lineWidth = 0.75
     border.stroke()
-    drawCancel(opacity: opacity)
-    drawWaveform(opacity: opacity)
-    drawConfirm(opacity: opacity)
+    let recordingOpacity = opacity * (1 - processingProgress)
+    if recordingOpacity > 0.001 {
+      drawCancel(opacity: recordingOpacity)
+      drawWaveform(opacity: recordingOpacity)
+      drawConfirm(opacity: recordingOpacity)
+    }
+    if processingProgress > 0.001 {
+      drawProcessing(opacity: opacity * processingProgress)
+    }
+  }
+
+  private var activeControlRect: NSRect {
+    NSRect(x: 1, y: 0, width: 106, height: 30)
+  }
+
+  private var cancelButtonRect: NSRect {
+    NSRect(x: 0, y: 0, width: 32, height: 30)
+  }
+
+  private var confirmButtonRect: NSRect {
+    NSRect(x: 76, y: 0, width: 32, height: 30)
   }
 
   private func drawCancel(opacity: CGFloat) {
@@ -537,8 +537,7 @@ private final class DictationOverlayView: NSView {
   private func drawWaveform(opacity: CGFloat) {
     let centerX: CGFloat = 29
     let heights: [CGFloat] = [0.48, 0.72, 0.94, 0.68, 1.0, 0.82, 0.64, 0.92, 0.73, 0.56, 0.42]
-    let stateOpacity: CGFloat = state == "finalising" ? 0.62 : 1.0
-    NSColor(calibratedWhite: 1, alpha: stateOpacity * opacity).setFill()
+    NSColor(calibratedWhite: 1, alpha: opacity).setFill()
     for (index, multiplier) in heights.enumerated() {
       let wave = (sin(animationPhase + Double(index) * 0.82) + 1) / 2
       let ambient = state == "recording" ? 0.16 + wave * 0.18 : 0.13
@@ -554,6 +553,51 @@ private final class DictationOverlayView: NSView {
     }
   }
 
+  private func drawProcessing(opacity: CGFloat) {
+    for index in 0..<11 {
+      let pulse = (sin(animationPhase * 1.45 - Double(index) * 0.42) + 1) / 2
+      let alpha = opacity * (0.42 + CGFloat(pulse) * 0.58)
+      NSColor.white.withAlphaComponent(alpha).setFill()
+      let diameter: CGFloat = 2.6
+      let dot = NSRect(
+        x: 27 + CGFloat(index) * 4.1,
+        y: 15 - diameter / 2,
+        width: diameter,
+        height: diameter
+      )
+      NSBezierPath(ovalIn: dot).fill()
+    }
+
+    let center = NSPoint(x: 91, y: 15)
+    let radius: CGFloat = 6.5
+    let ring = NSRect(
+      x: center.x - radius,
+      y: center.y - radius,
+      width: radius * 2,
+      height: radius * 2
+    )
+    NSColor.white.withAlphaComponent(opacity * 0.22).setStroke()
+    let background = NSBezierPath(ovalIn: ring)
+    background.lineWidth = 1.8
+    background.stroke()
+
+    let startAngle = CGFloat(
+      animationPhase.truncatingRemainder(dividingBy: Double.pi * 2) * 180 / Double.pi
+    )
+    let spinner = NSBezierPath()
+    spinner.lineWidth = 1.8
+    spinner.lineCapStyle = .round
+    spinner.appendArc(
+      withCenter: center,
+      radius: radius,
+      startAngle: startAngle,
+      endAngle: startAngle + 235,
+      clockwise: false
+    )
+    NSColor.white.withAlphaComponent(opacity).setStroke()
+    spinner.stroke()
+  }
+
   private func startAnimating() {
     guard animationTimer == nil else { return }
     let timer = Timer(timeInterval: 1.0 / 60.0, repeats: true) { [weak self] _ in
@@ -563,14 +607,19 @@ private final class DictationOverlayView: NSView {
       self.targetAudioLevel *= 0.955
       let hoverTarget: CGFloat = self.isHovering && self.state == "idle" ? 1 : 0
       let activeTarget: CGFloat = self.state == "idle" ? 0 : 1
+      let processingTarget: CGFloat =
+        self.state == "finalising" || self.state == "preparing" ? 1 : 0
       self.hoverProgress += (hoverTarget - self.hoverProgress) * 0.20
       self.activeProgress += (activeTarget - self.activeProgress) * 0.20
+      self.processingProgress += (processingTarget - self.processingProgress) * 0.20
       self.needsDisplay = true
       if self.state == "idle", !self.isHovering,
-         self.hoverProgress < 0.002, self.activeProgress < 0.002
+         self.hoverProgress < 0.002, self.activeProgress < 0.002,
+         self.processingProgress < 0.002
       {
         self.hoverProgress = 0
         self.activeProgress = 0
+        self.processingProgress = 0
         self.stopAnimating()
       }
     }

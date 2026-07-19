@@ -6,9 +6,9 @@
 import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `available_threads`, `build_input_stream`, `build_typed_stream`, `is_builtin_microphone_name`, `resample_linear`, `select_input_device`, `spawn_audio_worker`, `take_capture`, `transcribe`
+// These functions are ignored because they are not marked as `pub`: `complete_coordinator_session`, `emit_transition`, `event_kind_for_state`, `fail_start`, `finish_capture`, `is_builtin_microphone_name`, `monotonic_timestamp_ms`, `release_recording_reservation`, `resample_linear`, `select_input_device`, `spawn_preview_worker`, `stop_preview`, `take_capture`, `transcript_contains_speech`, `transition_capture`
 // These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `ActiveCapture`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `clone`, `clone`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_receiver_is_total_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`
 
 /// Lists the audio inputs visible to CoreAudio/WASAPI through CPAL.
 Future<List<MicrophoneDevice>> listMicrophones() =>
@@ -35,6 +35,16 @@ Future<void> cancelDictationSession({required String sessionId}) => RustLib
 
 bool offlineModelIsReady({required String modelPath}) => RustLib.instance.api
     .crateApiDictationOfflineModelIsReady(modelPath: modelPath);
+
+/// Loads the selected model on the dedicated ASR worker before the first dictation.
+Future<bool> prepareDictationEngine({required String modelPath}) => RustLib
+    .instance
+    .api
+    .crateApiDictationPrepareDictationEngine(modelPath: modelPath);
+
+/// Releases the warm model without stopping the dedicated ASR worker.
+Future<void> releaseDictationEngine() =>
+    RustLib.instance.api.crateApiDictationReleaseDictationEngine();
 
 class DictationCompletion {
   final String sessionId;
@@ -84,12 +94,22 @@ class DictationEvent {
   final DictationEventKind kind;
   final double? audioLevel;
   final String? message;
+  final BigInt timestampMs;
+  final DictationLifecycleState previousState;
+  final DictationLifecycleState currentState;
+  final String reason;
+  final String? partialText;
 
   const DictationEvent({
     required this.sessionId,
     required this.kind,
     this.audioLevel,
     this.message,
+    required this.timestampMs,
+    required this.previousState,
+    required this.currentState,
+    required this.reason,
+    this.partialText,
   });
 
   @override
@@ -97,7 +117,12 @@ class DictationEvent {
       sessionId.hashCode ^
       kind.hashCode ^
       audioLevel.hashCode ^
-      message.hashCode;
+      message.hashCode ^
+      timestampMs.hashCode ^
+      previousState.hashCode ^
+      currentState.hashCode ^
+      reason.hashCode ^
+      partialText.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -107,14 +132,36 @@ class DictationEvent {
           sessionId == other.sessionId &&
           kind == other.kind &&
           audioLevel == other.audioLevel &&
-          message == other.message;
+          message == other.message &&
+          timestampMs == other.timestampMs &&
+          previousState == other.previousState &&
+          currentState == other.currentState &&
+          reason == other.reason &&
+          partialText == other.partialText;
 }
 
 enum DictationEventKind {
+  stateChanged,
   preparing,
   recording,
   audioLevel,
   finalising,
+  cancelled,
+  failed,
+  partialTranscript,
+}
+
+enum DictationLifecycleState {
+  idle,
+  preparing,
+  recording,
+  finalising,
+  transcribing,
+  cleaning,
+  enhancing,
+  inserting,
+  copiedFallback,
+  completed,
   cancelled,
   failed,
 }
@@ -128,6 +175,7 @@ class DictationSessionConfig {
   final bool pasteAutomatically;
   final bool restoreClipboard;
   final int maximumSeconds;
+  final bool enableLivePreview;
 
   const DictationSessionConfig({
     required this.modelPath,
@@ -138,6 +186,7 @@ class DictationSessionConfig {
     required this.pasteAutomatically,
     required this.restoreClipboard,
     required this.maximumSeconds,
+    required this.enableLivePreview,
   });
 
   @override
@@ -149,7 +198,8 @@ class DictationSessionConfig {
       sourceApplication.hashCode ^
       pasteAutomatically.hashCode ^
       restoreClipboard.hashCode ^
-      maximumSeconds.hashCode;
+      maximumSeconds.hashCode ^
+      enableLivePreview.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -163,7 +213,8 @@ class DictationSessionConfig {
           sourceApplication == other.sourceApplication &&
           pasteAutomatically == other.pasteAutomatically &&
           restoreClipboard == other.restoreClipboard &&
-          maximumSeconds == other.maximumSeconds;
+          maximumSeconds == other.maximumSeconds &&
+          enableLivePreview == other.enableLivePreview;
 }
 
 class MicrophoneDevice {

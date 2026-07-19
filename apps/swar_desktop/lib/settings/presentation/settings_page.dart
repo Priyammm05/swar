@@ -385,8 +385,7 @@ final class _GeneralSettings extends StatelessWidget {
                     sessionViewModel.message ?? 'Audio stays on this device.',
                 trailing: FilledButton.icon(
                   key: const Key('test-dictation-button'),
-                  onPressed:
-                      sessionViewModel.state == DictationSessionState.finalising
+                  onPressed: sessionViewModel.isProcessing
                       ? null
                       : sessionViewModel.isRecording
                       ? sessionViewModel.finish
@@ -398,6 +397,7 @@ final class _GeneralSettings extends StatelessWidget {
                             writingMode: settings.writingMode.name,
                             pasteAutomatically: settings.pasteAutomatically,
                             restoreClipboard: settings.restoreClipboard,
+                            keepModelsWarm: settings.keepModelsWarm,
                           ),
                         ),
                   icon: Icon(
@@ -471,6 +471,16 @@ final class _SystemSettings extends StatelessWidget {
               value: settings.keepModelsWarm,
               onChanged: (value) {
                 viewModel.setKeepModelsWarm(enabled: value);
+              },
+            ),
+            _ToggleSettingRow(
+              key: const Key('learn-from-edits-setting'),
+              title: 'Learn from my edits',
+              subtitle:
+                  'Learn vocabulary and writing preferences locally on this device.',
+              value: settings.learnFromEdits,
+              onChanged: (value) {
+                viewModel.setLearnFromEdits(enabled: value);
               },
             ),
           ],

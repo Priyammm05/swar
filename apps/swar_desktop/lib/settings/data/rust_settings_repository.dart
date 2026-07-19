@@ -32,6 +32,7 @@ final class RustSettingsRepository implements SettingsRepository {
       milestones: value.milestones,
       pasteAutomatically: value.pasteAutomatically,
       restoreClipboard: value.restoreClipboard,
+      learnFromEdits: value.learnFromEdits,
       modelPath: modelPath,
       microphoneId: value.microphoneId,
     );
@@ -54,6 +55,7 @@ final class RustSettingsRepository implements SettingsRepository {
         milestones: settings.milestones,
         pasteAutomatically: settings.pasteAutomatically,
         restoreClipboard: settings.restoreClipboard,
+        learnFromEdits: settings.learnFromEdits,
         modelPath: settings.modelPath,
         microphoneId: settings.microphoneId,
       ),

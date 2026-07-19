@@ -165,9 +165,7 @@ final class _DictationControl extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final recording = sessionViewModel.isRecording;
-    final busy =
-        sessionViewModel.state == DictationSessionState.preparing ||
-        sessionViewModel.state == DictationSessionState.finalising;
+    final busy = sessionViewModel.isProcessing;
     return Tooltip(
       message: recording
           ? 'Stop and transcribe (Option)'
@@ -217,6 +215,7 @@ final class _DictationControl extends StatelessWidget {
         writingMode: settings.writingMode.name,
         pasteAutomatically: settings.pasteAutomatically,
         restoreClipboard: settings.restoreClipboard,
+        keepModelsWarm: settings.keepModelsWarm,
       ),
     );
   }

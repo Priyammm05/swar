@@ -60,6 +60,9 @@ final class SettingsViewModel extends ChangeNotifier {
   void setRestoreClipboard({required bool enabled}) =>
       _save(_settings.copyWith(restoreClipboard: enabled));
 
+  void setLearnFromEdits({required bool enabled}) =>
+      _save(_settings.copyWith(learnFromEdits: enabled));
+
   void setModelPath(String value) =>
       _save(_settings.copyWith(modelPath: value.trim()));
 

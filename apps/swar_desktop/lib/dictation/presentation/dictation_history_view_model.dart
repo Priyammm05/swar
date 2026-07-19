@@ -14,6 +14,7 @@ final class DictationHistoryViewModel extends ChangeNotifier {
   bool _isLoading = false;
   bool _isLoadingMore = false;
   String? _errorMessage;
+  int _loadGeneration = 0;
 
   DictationQuery get query => _query;
   List<DictationRecord> get records => _records;
@@ -23,25 +24,38 @@ final class DictationHistoryViewModel extends ChangeNotifier {
   bool get hasMore => _records.length < _totalCount;
   String? get errorMessage => _errorMessage;
 
-  Future<void> load() async {
-    _isLoading = true;
+  Future<void> load() => _reload(showLoading: true);
+
+  /// Refreshes the first page after a completed dictation without replacing
+  /// the current feed with a full-page loading state.
+  Future<void> refresh() => _reload(showLoading: false);
+
+  Future<void> _reload({required bool showLoading}) async {
+    final generation = ++_loadGeneration;
+    if (showLoading) _isLoading = true;
     _errorMessage = null;
-    notifyListeners();
+    if (showLoading) notifyListeners();
     try {
       final page = await _repository.loadPage(
         _query,
         offset: 0,
         limit: pageSize,
       );
+      if (generation != _loadGeneration) return;
       _records = page.records;
       _totalCount = page.totalCount;
     } catch (_) {
-      _records = const [];
-      _totalCount = 0;
+      if (generation != _loadGeneration) return;
+      if (showLoading) {
+        _records = const [];
+        _totalCount = 0;
+      }
       _errorMessage = 'Swar could not load your local dictation history.';
     } finally {
-      _isLoading = false;
-      notifyListeners();
+      if (generation == _loadGeneration) {
+        _isLoading = false;
+        notifyListeners();
+      }
     }
   }
 

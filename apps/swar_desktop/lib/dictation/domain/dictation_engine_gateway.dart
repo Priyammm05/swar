@@ -13,10 +13,27 @@ final class SwarMicrophone {
 }
 
 enum DictationEngineEventKind {
+  stateChanged,
   preparing,
   recording,
   audioLevel,
   finalising,
+  cancelled,
+  failed,
+  partialTranscript,
+}
+
+enum DictationLifecycleState {
+  idle,
+  preparing,
+  recording,
+  finalising,
+  transcribing,
+  cleaning,
+  enhancing,
+  inserting,
+  copiedFallback,
+  completed,
   cancelled,
   failed,
 }
@@ -25,14 +42,24 @@ final class DictationEngineEvent {
   const DictationEngineEvent({
     required this.sessionId,
     required this.kind,
+    required this.previousState,
+    required this.currentState,
+    required this.timestampMilliseconds,
+    required this.reason,
     this.audioLevel,
     this.message,
+    this.partialText,
   });
 
   final String sessionId;
   final DictationEngineEventKind kind;
+  final DictationLifecycleState previousState;
+  final DictationLifecycleState currentState;
+  final int timestampMilliseconds;
+  final String reason;
   final double? audioLevel;
   final String? message;
+  final String? partialText;
 }
 
 final class DictationEngineConfig {
@@ -43,6 +70,8 @@ final class DictationEngineConfig {
     required this.writingMode,
     required this.pasteAutomatically,
     required this.restoreClipboard,
+    this.keepModelsWarm = true,
+    this.enableLivePreview = false,
   });
 
   final String modelPath;
@@ -51,6 +80,8 @@ final class DictationEngineConfig {
   final String writingMode;
   final bool pasteAutomatically;
   final bool restoreClipboard;
+  final bool keepModelsWarm;
+  final bool enableLivePreview;
 }
 
 final class DictationEngineCompletion {
@@ -83,6 +114,10 @@ abstract interface class DictationEngineGateway {
   Future<DictationEngineCompletion> finish(String sessionId);
 
   Future<void> cancel(String sessionId);
+
+  Future<bool> prepare(String modelPath);
+
+  Future<void> release();
 
   bool modelIsReady(String modelPath);
 
