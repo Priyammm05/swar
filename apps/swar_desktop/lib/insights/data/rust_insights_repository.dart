@@ -15,6 +15,19 @@ final class RustInsightsRepository implements InsightsRepository {
       averageWordsPerMinute: value.averageWordsPerMinute,
       currentStreakDays: value.currentStreakDays,
       longestStreakDays: value.longestStreakDays,
+      wordsCorrected: value.wordsCorrected.toInt(),
+      dictionaryHits: value.dictionaryHits.toInt(),
+      languageEnglish: value.languageEnglish.toInt(),
+      languageHindi: value.languageHindi.toInt(),
+      languageHinglish: value.languageHinglish.toInt(),
+      distinctAppCount: value.distinctAppCount.toInt(),
+      appUsage: value.appUsage
+          .map(
+            (usage) =>
+                SwarAppUsage(name: usage.name, count: usage.count.toInt()),
+          )
+          .toList(growable: false),
+      dailyActivity: value.dailyActivity.toList(growable: false),
     );
   }
 }

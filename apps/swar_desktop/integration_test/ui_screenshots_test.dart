@@ -37,7 +37,7 @@ void main() {
         dictationRepository: FakeDictationHistoryRepository(
           totalRecordCount: 60,
         ),
-        insightsRepository: const FakeInsightsRepository(),
+        insightsRepository: FakeInsightsRepository(),
         dictationEngineGateway: const _ShotEngine(),
         settingsRepository: InMemorySettingsRepository(
           initial: const SwarSettings(

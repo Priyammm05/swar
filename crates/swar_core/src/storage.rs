@@ -1,4 +1,5 @@
 use std::{
+    collections::HashMap,
     fs,
     path::{Path, PathBuf},
     sync::{Mutex, OnceLock},
@@ -8,7 +9,7 @@ use directories::{ProjectDirs, UserDirs};
 use rusqlite::{params, Connection};
 use serde::Serialize;
 
-use crate::api::history::{HistoryPage, InsightsSnapshot, StoredDictation};
+use crate::api::history::{AppUsage, HistoryPage, InsightsSnapshot, StoredDictation};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct StoredVocabularyEntry {
@@ -44,6 +45,38 @@ const MILLISECONDS_PER_DAY: i64 = 86_400_000;
 /// (the vocabulary is scanned on every dictation's hot path).
 const MAX_LEARNING_EXAMPLES: i64 = 5_000;
 const MAX_VOCABULARY_ENTRIES: i64 = 1_000;
+/// Heatmap window for the Insights streak grid (20 columns x 7 days).
+const DAILY_ACTIVITY_DAYS: usize = 140;
+/// How many top applications the "Where you dictate" card can render.
+const APP_USAGE_LIMIT: usize = 8;
+
+/// The writing system a transcript is in, inferred from its characters.
+enum TranscriptScript {
+    English,
+    Hindi,
+    Hinglish,
+}
+
+/// Classify a transcript by script: any Devanagari plus Latin letters reads as
+/// code-mixed Hinglish, only Devanagari as Hindi, otherwise English. This is a
+/// best-effort signal from the stored text — romanized Hindi that contains no
+/// Devanagari is indistinguishable from English and counts as English.
+fn classify_language(text: &str) -> TranscriptScript {
+    let mut devanagari = 0_usize;
+    let mut latin = 0_usize;
+    for character in text.chars() {
+        if ('\u{0900}'..='\u{097F}').contains(&character) {
+            devanagari += 1;
+        } else if character.is_ascii_alphabetic() {
+            latin += 1;
+        }
+    }
+    match (devanagari, latin) {
+        (0, _) => TranscriptScript::English,
+        (_, 0) => TranscriptScript::Hindi,
+        _ => TranscriptScript::Hinglish,
+    }
+}
 
 pub(crate) struct NewDictation<'a> {
     pub id: &'a str,
@@ -466,6 +499,69 @@ impl HistoryStore {
             total_words as f64 / (speech_ms as f64 / 60_000.0)
         };
         let streaks = self.streaks()?;
+
+        // Single pass over the real rows: language (by script), corrections, app
+        // usage, and the per-day heatmap. Nothing here is fabricated.
+        let today: i64 = self.connection.query_row(
+            "SELECT CAST(julianday(date('now', 'localtime')) AS INTEGER)",
+            [],
+            |row| row.get(0),
+        )?;
+        let mut statement = self.connection.prepare(
+            "SELECT final_text, source_app_name, word_count, was_user_edited,
+                    CAST(julianday(date(
+                        created_at / 1000, 'unixepoch', 'localtime'
+                    )) AS INTEGER)
+             FROM dictations WHERE is_deleted = 0
+               AND lower(trim(final_text)) NOT IN ('[blank_audio]', '[blank audio]')",
+        )?;
+        let mut english = 0_u64;
+        let mut hindi = 0_u64;
+        let mut hinglish = 0_u64;
+        let mut words_corrected = 0_u64;
+        let mut app_counts: HashMap<String, u64> = HashMap::new();
+        let mut daily = vec![0_u32; DAILY_ACTIVITY_DAYS];
+        let mut rows = statement.query([])?;
+        while let Some(row) = rows.next()? {
+            let text: String = row.get(0)?;
+            let app: String = row.get(1)?;
+            let word_count: i64 = row.get(2)?;
+            let edited: i64 = row.get(3)?;
+            let day: i64 = row.get(4)?;
+            match classify_language(&text) {
+                TranscriptScript::English => english += 1,
+                TranscriptScript::Hindi => hindi += 1,
+                TranscriptScript::Hinglish => hinglish += 1,
+            }
+            if edited != 0 {
+                words_corrected += word_count.max(0) as u64;
+            }
+            let app = app.trim();
+            if !app.is_empty() {
+                *app_counts.entry(app.to_string()).or_insert(0) += 1;
+            }
+            let age = today - day;
+            if age >= 0 && (age as usize) < DAILY_ACTIVITY_DAYS {
+                let index = DAILY_ACTIVITY_DAYS - 1 - age as usize;
+                daily[index] = daily[index].saturating_add(1);
+            }
+        }
+        drop(rows);
+
+        let dictionary_hits: u64 = self.connection.query_row(
+            "SELECT COALESCE(SUM(use_count), 0) FROM custom_vocabulary",
+            [],
+            |row| row.get(0),
+        )?;
+
+        let distinct_app_count = app_counts.len() as u64;
+        let mut app_usage: Vec<AppUsage> = app_counts
+            .into_iter()
+            .map(|(name, count)| AppUsage { name, count })
+            .collect();
+        app_usage.sort_by(|a, b| b.count.cmp(&a.count).then_with(|| a.name.cmp(&b.name)));
+        app_usage.truncate(APP_USAGE_LIMIT);
+
         Ok(InsightsSnapshot {
             total_words,
             total_dictations,
@@ -473,6 +569,14 @@ impl HistoryStore {
             average_words_per_minute,
             current_streak_days: streaks.0,
             longest_streak_days: streaks.1,
+            words_corrected,
+            dictionary_hits,
+            language_english: english,
+            language_hindi: hindi,
+            language_hinglish: hinglish,
+            app_usage,
+            distinct_app_count,
+            daily_activity: daily,
         })
     }
 

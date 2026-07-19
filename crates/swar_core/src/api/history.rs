@@ -22,6 +22,13 @@ pub struct HistoryPage {
     pub records: Vec<StoredDictation>,
 }
 
+/// One application's share of dictations, for the "Where you dictate" card.
+#[derive(Clone, Debug, Default)]
+pub struct AppUsage {
+    pub name: String,
+    pub count: u64,
+}
+
 #[derive(Clone, Debug, Default)]
 pub struct InsightsSnapshot {
     pub total_words: u64,
@@ -30,6 +37,22 @@ pub struct InsightsSnapshot {
     pub average_words_per_minute: f64,
     pub current_streak_days: u32,
     pub longest_streak_days: u32,
+    // --- extended aggregations, all computed from local rows ---
+    /// Words in dictations the user later edited (a proxy for "words corrected").
+    pub words_corrected: u64,
+    /// Sum of custom-vocabulary use counts ("from your dictionary").
+    pub dictionary_hits: u64,
+    /// Language of the transcript inferred from its script: pure Latin -> English,
+    /// pure Devanagari -> Hindi, mixed -> Hinglish. Counts of dictations per class.
+    pub language_english: u64,
+    pub language_hindi: u64,
+    pub language_hinglish: u64,
+    /// Top applications by dictation count (already bounded), plus the total
+    /// number of distinct applications seen.
+    pub app_usage: Vec<AppUsage>,
+    pub distinct_app_count: u64,
+    /// Per-day dictation counts for the streak heatmap, oldest first, ending today.
+    pub daily_activity: Vec<u32>,
 }
 
 /// Initializes Swar's private SQLite store under the OS application-support directory.

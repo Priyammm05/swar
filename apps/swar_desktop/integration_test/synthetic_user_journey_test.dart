@@ -46,7 +46,7 @@ void main() {
       SwarApp(
         diagnosticsGateway: const _SyntheticDiagnosticsGateway(),
         dictationRepository: history,
-        insightsRepository: const FakeInsightsRepository(),
+        insightsRepository: FakeInsightsRepository(),
         dictationEngineGateway: engine,
         settingsRepository: settings,
       ),

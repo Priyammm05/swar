@@ -6,7 +6,7 @@
 import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `fmt`, `fmt`, `fmt`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `clone`, `fmt`, `fmt`, `fmt`, `fmt`
 
 /// Initializes Swar's private SQLite store under the OS application-support directory.
 Future<String> initializeLocalStore() =>
@@ -43,6 +43,28 @@ Future<bool> correctDictation({
   learningOptedIn: learningOptedIn,
 );
 
+/// One application's share of dictations, for the "Where you dictate" card.
+class AppUsage {
+  final String name;
+  final BigInt count;
+
+  const AppUsage({required this.name, required this.count});
+
+  static Future<AppUsage> default_() =>
+      RustLib.instance.api.crateApiHistoryAppUsageDefault();
+
+  @override
+  int get hashCode => name.hashCode ^ count.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is AppUsage &&
+          runtimeType == other.runtimeType &&
+          name == other.name &&
+          count == other.count;
+}
+
 class HistoryPage {
   final int totalCount;
   final List<StoredDictation> records;
@@ -69,6 +91,26 @@ class InsightsSnapshot {
   final int currentStreakDays;
   final int longestStreakDays;
 
+  /// Words in dictations the user later edited (a proxy for "words corrected").
+  final BigInt wordsCorrected;
+
+  /// Sum of custom-vocabulary use counts ("from your dictionary").
+  final BigInt dictionaryHits;
+
+  /// Language of the transcript inferred from its script: pure Latin -> English,
+  /// pure Devanagari -> Hindi, mixed -> Hinglish. Counts of dictations per class.
+  final BigInt languageEnglish;
+  final BigInt languageHindi;
+  final BigInt languageHinglish;
+
+  /// Top applications by dictation count (already bounded), plus the total
+  /// number of distinct applications seen.
+  final List<AppUsage> appUsage;
+  final BigInt distinctAppCount;
+
+  /// Per-day dictation counts for the streak heatmap, oldest first, ending today.
+  final Uint32List dailyActivity;
+
   const InsightsSnapshot({
     required this.totalWords,
     required this.totalDictations,
@@ -76,6 +118,14 @@ class InsightsSnapshot {
     required this.averageWordsPerMinute,
     required this.currentStreakDays,
     required this.longestStreakDays,
+    required this.wordsCorrected,
+    required this.dictionaryHits,
+    required this.languageEnglish,
+    required this.languageHindi,
+    required this.languageHinglish,
+    required this.appUsage,
+    required this.distinctAppCount,
+    required this.dailyActivity,
   });
 
   static Future<InsightsSnapshot> default_() =>
@@ -88,7 +138,15 @@ class InsightsSnapshot {
       totalSpeechDurationMs.hashCode ^
       averageWordsPerMinute.hashCode ^
       currentStreakDays.hashCode ^
-      longestStreakDays.hashCode;
+      longestStreakDays.hashCode ^
+      wordsCorrected.hashCode ^
+      dictionaryHits.hashCode ^
+      languageEnglish.hashCode ^
+      languageHindi.hashCode ^
+      languageHinglish.hashCode ^
+      appUsage.hashCode ^
+      distinctAppCount.hashCode ^
+      dailyActivity.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -100,7 +158,15 @@ class InsightsSnapshot {
           totalSpeechDurationMs == other.totalSpeechDurationMs &&
           averageWordsPerMinute == other.averageWordsPerMinute &&
           currentStreakDays == other.currentStreakDays &&
-          longestStreakDays == other.longestStreakDays;
+          longestStreakDays == other.longestStreakDays &&
+          wordsCorrected == other.wordsCorrected &&
+          dictionaryHits == other.dictionaryHits &&
+          languageEnglish == other.languageEnglish &&
+          languageHindi == other.languageHindi &&
+          languageHinglish == other.languageHinglish &&
+          appUsage == other.appUsage &&
+          distinctAppCount == other.distinctAppCount &&
+          dailyActivity == other.dailyActivity;
 }
 
 class StoredDictation {

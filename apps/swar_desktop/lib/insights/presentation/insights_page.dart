@@ -1,12 +1,14 @@
-import 'dart:math' as math;
+// apps/swar_desktop/lib/insights/presentation/insights_page.dart
 
 import 'package:flutter/material.dart';
-import 'package:swar_desktop/design_system/swar_colors.dart';
+import 'package:swar_desktop/design_system/swar_components.dart';
+import 'package:swar_desktop/design_system/swar_tokens.dart';
+import 'package:swar_desktop/design_system/swar_typography.dart';
 import 'package:swar_desktop/insights/domain/insights_repository.dart';
 import 'package:swar_desktop/insights/domain/insights_snapshot.dart';
 import 'package:swar_desktop/insights/presentation/insights_view_model.dart';
 
-/// Insights dashboard translated from the approved HTML. Presentation Layer.
+/// Insights — locally computed usage, one calm view (spec §7). Presentation Layer.
 final class InsightsPage extends StatefulWidget {
   const InsightsPage({required this.repository, super.key});
 
@@ -33,658 +35,59 @@ final class _InsightsPageState extends State<InsightsPage> {
 
   @override
   Widget build(BuildContext context) {
+    final t = context.tokens;
     return ListenableBuilder(
       listenable: _viewModel,
-      builder: (context, _) => LayoutBuilder(
-        builder: (context, constraints) {
-          final compact = constraints.maxWidth < 720;
-          final dense = !compact && constraints.maxHeight < 860;
-          final outerHorizontalPadding = compact ? 16.0 : (dense ? 20.0 : 32.0);
-          final outerVerticalPadding = compact ? 20.0 : (dense ? 16.0 : 32.0);
-          final canvasPadding = compact ? 20.0 : (dense ? 24.0 : 40.0);
-          final sectionGap = dense ? 24.0 : 32.0;
-          return SingleChildScrollView(
-            key: const Key('insights-grid'),
-            padding: EdgeInsets.symmetric(
-              horizontal: outerHorizontalPadding,
-              vertical: outerVerticalPadding,
-            ),
-            child: Center(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 1200),
-                child: Container(
-                  constraints: BoxConstraints(
-                    minHeight: math.max(
-                      0,
-                      constraints.maxHeight - outerVerticalPadding * 2,
-                    ),
-                  ),
-                  padding: EdgeInsets.all(canvasPadding),
-                  decoration: BoxDecoration(
-                    color: SwarColors.surface,
-                    borderRadius: BorderRadius.circular(32),
-                    boxShadow: const [
-                      BoxShadow(
-                        color: Color(0x08000000),
-                        blurRadius: 8,
-                        offset: Offset(0, 1),
-                      ),
-                    ],
-                  ),
-                  child: LayoutBuilder(
-                    builder: (context, innerConstraints) {
-                      final wideTop = innerConstraints.maxWidth >= 1040;
-                      final wideBottom = innerConstraints.maxWidth >= 900;
-                      return Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          _InsightsHeader(dense: dense),
-                          SizedBox(height: sectionGap),
-                          _TopMetrics(
-                            wide: wideTop,
-                            dense: dense,
-                            snapshot: _viewModel.snapshot,
-                          ),
-                          SizedBox(height: sectionGap),
-                          _BottomMetrics(
-                            wide: wideBottom,
-                            dense: dense,
-                            snapshot: _viewModel.snapshot,
-                          ),
-                          if (_viewModel.errorMessage != null) ...[
-                            const SizedBox(height: 12),
-                            Text(
-                              _viewModel.errorMessage!,
-                              textAlign: TextAlign.center,
-                              style: const TextStyle(
-                                color: SwarColors.mutedInk,
-                              ),
-                            ),
-                          ],
-                        ],
-                      );
-                    },
-                  ),
-                ),
-              ),
-            ),
-          );
-        },
-      ),
-    );
-  }
-}
-
-final class _InsightsHeader extends StatelessWidget {
-  const _InsightsHeader({required this.dense});
-
-  final bool dense;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Expanded(
-          child: Text(
-            'Insights',
-            style: dense
-                ? Theme.of(context).textTheme.headlineMedium
-                : Theme.of(context).textTheme.displaySmall,
-          ),
-        ),
-        Container(
-          width: dense ? 32 : 40,
-          height: dense ? 32 : 40,
-          decoration: BoxDecoration(
-            color: SwarColors.surface,
-            border: Border.all(color: SwarColors.border),
-            shape: BoxShape.circle,
-            boxShadow: const [
-              BoxShadow(color: Color(0x0A000000), blurRadius: 5),
-            ],
-          ),
-          child: Icon(Icons.ios_share_rounded, size: dense ? 17 : 20),
-        ),
-      ],
-    );
-  }
-}
-
-final class _TopMetrics extends StatelessWidget {
-  const _TopMetrics({
-    required this.wide,
-    required this.dense,
-    required this.snapshot,
-  });
-
-  final bool wide;
-  final bool dense;
-  final SwarInsightsSnapshot snapshot;
-
-  @override
-  Widget build(BuildContext context) {
-    if (wide) {
-      return SizedBox(
-        height: dense ? 184 : 220,
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Expanded(
-              child: _PaceCard(
-                key: const Key('insights-pace-card'),
-                dense: dense,
-                wordsPerMinute: snapshot.averageWordsPerMinute,
-              ),
-            ),
-            const SizedBox(width: 24),
-            Expanded(
-              child: _CorrectionsCard(
-                key: const Key('insights-corrections-card'),
-                dense: dense,
-                totalDictations: snapshot.totalDictations,
-                duration: snapshot.totalSpeechDuration,
-              ),
-            ),
-            const SizedBox(width: 24),
-            Expanded(
-              flex: 2,
-              child: _TotalWordsCard(
-                key: const Key('insights-total-card'),
-                dense: dense,
-                totalWords: snapshot.totalWords,
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-    final cardHeight = dense ? 184.0 : 220.0;
-    return Column(
-      children: [
-        SizedBox(
-          height: cardHeight,
-          child: _PaceCard(
-            key: const Key('insights-pace-card'),
-            dense: dense,
-            wordsPerMinute: snapshot.averageWordsPerMinute,
-          ),
-        ),
-        const SizedBox(height: 24),
-        SizedBox(
-          height: cardHeight,
-          child: _CorrectionsCard(
-            key: const Key('insights-corrections-card'),
-            dense: dense,
-            totalDictations: snapshot.totalDictations,
-            duration: snapshot.totalSpeechDuration,
-          ),
-        ),
-        const SizedBox(height: 24),
-        SizedBox(
-          height: cardHeight,
-          child: _TotalWordsCard(
-            key: const Key('insights-total-card'),
-            dense: dense,
-            totalWords: snapshot.totalWords,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-final class _BottomMetrics extends StatelessWidget {
-  const _BottomMetrics({
-    required this.wide,
-    required this.dense,
-    required this.snapshot,
-  });
-
-  final bool wide;
-  final bool dense;
-  final SwarInsightsSnapshot snapshot;
-
-  @override
-  Widget build(BuildContext context) {
-    if (wide) {
-      return SizedBox(
-        height: dense ? 344 : 430,
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Expanded(
-              child: _DesktopUsageCard(
-                key: const Key('insights-activity-card'),
-                dense: dense,
-                totalDictations: snapshot.totalDictations,
-              ),
-            ),
-            const SizedBox(width: 24),
-            Expanded(
-              child: _StreakCard(
-                key: const Key('insights-streak-card'),
-                dense: dense,
-                currentStreak: snapshot.currentStreakDays,
-                longestStreak: snapshot.longestStreakDays,
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-    final cardHeight = dense ? 344.0 : 430.0;
-    return Column(
-      children: [
-        SizedBox(
-          height: cardHeight,
-          child: _DesktopUsageCard(
-            key: const Key('insights-activity-card'),
-            dense: dense,
-            totalDictations: snapshot.totalDictations,
-          ),
-        ),
-        const SizedBox(height: 24),
-        SizedBox(
-          height: cardHeight,
-          child: _StreakCard(
-            key: const Key('insights-streak-card'),
-            dense: dense,
-            currentStreak: snapshot.currentStreakDays,
-            longestStreak: snapshot.longestStreakDays,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-final class _PaceCard extends StatelessWidget {
-  const _PaceCard({
-    required this.dense,
-    required this.wordsPerMinute,
-    super.key,
-  });
-
-  final bool dense;
-  final double wordsPerMinute;
-
-  @override
-  Widget build(BuildContext context) {
-    return _Panel(
-      padding: EdgeInsets.all(dense ? 20 : 24),
-      child: Column(
-        children: [
-          Text(
-            wordsPerMinute.round().toString(),
-            style: TextStyle(
-              fontSize: dense ? 36 : 48,
-              height: 1.05,
-              fontWeight: FontWeight.w700,
-              letterSpacing: dense ? -1 : -1.5,
-            ),
-          ),
-          const SizedBox(height: 4),
-          const Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _CapsLabel('WORDS PER MINUTE'),
-              SizedBox(width: 4),
-              Icon(Icons.info_rounded, size: 12, color: Color(0xFFD1D5DB)),
-            ],
-          ),
-          const Spacer(),
-          SizedBox(
-            width: dense ? 144 : 180,
-            height: dense ? 72 : 90,
-            child: CustomPaint(
-              painter: _GaugePainter(strokeWidth: dense ? 16 : 20),
-              child: Align(
-                alignment: Alignment(0, 0.78),
-                child: const Column(
-                  mainAxisSize: MainAxisSize.min,
+      builder: (context, _) {
+        final snapshot = _viewModel.snapshot;
+        return Align(
+          alignment: Alignment.topCenter,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 1008),
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(32, 8, 32, 48),
+              children: [
+                Row(
                   children: [
                     Text(
-                      'Top',
-                      style: TextStyle(color: Color(0xFF9CA3AF), fontSize: 12),
+                      'Insights',
+                      style: SwarType.serifTitle.copyWith(color: t.ink),
                     ),
-                    Text(
-                      '0.1%',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
+                    const SizedBox(width: 12),
+                    const _OnDevicePill(),
                   ],
                 ),
-              ),
+                const SizedBox(height: 18),
+                _Grid(snapshot: snapshot),
+              ],
             ),
           ),
-        ],
+        );
+      },
+    );
+  }
+}
+
+final class _OnDevicePill extends StatelessWidget {
+  const _OnDevicePill();
+
+  @override
+  Widget build(BuildContext context) {
+    final t = context.tokens;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: t.spruceTint,
+        borderRadius: BorderRadius.circular(SwarRadii.pill),
       ),
-    );
-  }
-}
-
-final class _GaugePainter extends CustomPainter {
-  const _GaugePainter({required this.strokeWidth});
-
-  final double strokeWidth;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final rect = Rect.fromLTWH(10, 10, size.width - 20, (size.height - 10) * 2);
-    final background = Paint()
-      ..color = SwarColors.surfaceVariant
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = strokeWidth;
-    final fill = Paint()
-      ..color = SwarColors.leaf
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = strokeWidth;
-    canvas.drawArc(rect, math.pi, math.pi, false, background);
-    canvas.drawArc(rect, math.pi, math.pi * 0.82, false, fill);
-  }
-
-  @override
-  bool shouldRepaint(covariant _GaugePainter oldDelegate) {
-    return oldDelegate.strokeWidth != strokeWidth;
-  }
-}
-
-final class _CorrectionsCard extends StatelessWidget {
-  const _CorrectionsCard({
-    required this.dense,
-    required this.totalDictations,
-    required this.duration,
-    super.key,
-  });
-
-  final bool dense;
-  final int totalDictations;
-  final Duration duration;
-
-  @override
-  Widget build(BuildContext context) {
-    return _Panel(
-      padding: EdgeInsets.all(dense ? 20 : 24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            '$totalDictations',
-            style: TextStyle(
-              fontSize: dense ? 36 : 48,
-              height: 1.05,
-              fontWeight: FontWeight.w700,
-              letterSpacing: dense ? -1 : -1.5,
-            ),
-          ),
-          const SizedBox(height: 4),
-          const _CapsLabel('LOCAL DICTATIONS'),
-          const Spacer(),
-          const Divider(height: 1),
-          SizedBox(height: dense ? 8 : 12),
-          _CorrectionRow(value: '$totalDictations', label: 'transcripts saved'),
-          SizedBox(height: dense ? 8 : 12),
-          _CorrectionRow(
-            value: '${duration.inMinutes}',
-            label: 'minutes spoken',
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-final class _CorrectionRow extends StatelessWidget {
-  const _CorrectionRow({required this.value, required this.label});
-
-  final String value;
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Text(
-          value,
-          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Text(
-            label,
-            style: const TextStyle(color: SwarColors.mutedInk, fontSize: 12),
-          ),
-        ),
-        const Icon(Icons.info_rounded, size: 12, color: Color(0xFFD1D5DB)),
-      ],
-    );
-  }
-}
-
-final class _TotalWordsCard extends StatelessWidget {
-  const _TotalWordsCard({
-    required this.dense,
-    required this.totalWords,
-    super.key,
-  });
-
-  final bool dense;
-  final int totalWords;
-
-  @override
-  Widget build(BuildContext context) {
-    return _Panel(
-      padding: EdgeInsets.all(dense ? 20 : 24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            _formatCount(totalWords),
-            style: TextStyle(
-              fontSize: dense ? 36 : 48,
-              height: 1.05,
-              fontWeight: FontWeight.w700,
-              letterSpacing: dense ? -1 : -1.5,
-            ),
-          ),
-          const SizedBox(height: 4),
-          const _CapsLabel('TOTAL WORDS DICTATED'),
-          const Spacer(),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Icon(
-                          Icons.desktop_windows_outlined,
-                          size: 16,
-                          color: Color(0xFF4B5563),
-                        ),
-                        SizedBox(width: 8),
-                        Text(
-                          'Desktop',
-                          style: TextStyle(
-                            color: Color(0xFF4B5563),
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ],
-                    ),
-                    SizedBox(height: 4),
-                    Text(
-                      '${_formatCount(totalWords)} words',
-                      style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Container(
-                width: dense ? 128 : 142,
-                height: dense ? 32 : 36,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: SwarColors.surface,
-                  border: Border.all(color: SwarColors.border),
-                  borderRadius: BorderRadius.circular(dense ? 10 : 12),
-                ),
-                child: const Text(
-                  'Download on mobile',
-                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-final class _DesktopUsageCard extends StatelessWidget {
-  const _DesktopUsageCard({
-    required this.dense,
-    required this.totalDictations,
-    super.key,
-  });
-
-  final bool dense;
-  final int totalDictations;
-
-  @override
-  Widget build(BuildContext context) {
-    return _Panel(
-      padding: EdgeInsets.all(dense ? 24 : 32),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _CardHeader(
-            title: 'Desktop usage',
-            meta: 'LOCAL RECORDS | $totalDictations',
-            dense: dense,
-          ),
-          SizedBox(height: dense ? 20 : 32),
-          _UsageRow(
-            icon: Icons.memory_outlined,
-            percent: totalDictations == 0 ? 0 : 100,
-            label: '$totalDictations DICTATIONS',
-            color: SwarColors.leaf,
-            dense: dense,
-          ),
-          _UsageRow(
-            icon: Icons.swap_horiz_rounded,
-            label: '0 OTHER TASKS',
-            color: SwarColors.leafMid,
-            dense: dense,
-          ),
-          _UsageRow(
-            icon: Icons.mail_outline_rounded,
-            label: '0 EMAILS',
-            dense: dense,
-          ),
-          _UsageRow(
-            icon: Icons.chat_outlined,
-            label: '0 WORK MESSAGES',
-            dense: dense,
-          ),
-          _UsageRow(
-            icon: Icons.chat_bubble_outline_rounded,
-            label: '0 PERSONAL MESSAGES',
-            dense: dense,
-          ),
-          _UsageRow(
-            icon: Icons.description_outlined,
-            label: '0 DOCUMENTS',
-            dense: dense,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-final class _UsageRow extends StatelessWidget {
-  const _UsageRow({
-    required this.icon,
-    required this.label,
-    required this.dense,
-    this.percent = 0,
-    this.color = SwarColors.leafLight,
-  });
-
-  final IconData icon;
-  final int percent;
-  final String label;
-  final Color color;
-  final bool dense;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.only(bottom: dense ? 10 : 13),
       child: Row(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          SizedBox(
-            width: dense ? 20 : 24,
-            child: Icon(
-              icon,
-              size: dense ? 18 : 20,
-              color: const Color(0xFF4B5563),
-            ),
-          ),
-          SizedBox(width: dense ? 12 : 16),
-          Expanded(
-            child: Container(
-              height: dense ? 20 : 24,
-              clipBehavior: Clip.antiAlias,
-              decoration: BoxDecoration(
-                color: SwarColors.surfaceVariant,
-                borderRadius: BorderRadius.circular(4),
-              ),
-              alignment: Alignment.centerLeft,
-              child: FractionallySizedBox(
-                widthFactor: percent / 100,
-                child: ColoredBox(
-                  color: color,
-                  child: Center(
-                    child: percent == 0
-                        ? const SizedBox.shrink()
-                        : Text(
-                            '$percent%',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 10,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-          SizedBox(width: dense ? 12 : 16),
-          SizedBox(
-            width: dense ? 110 : 128,
-            child: Text(
-              label,
-              textAlign: TextAlign.right,
-              style: TextStyle(
-                color: SwarColors.mutedInk,
-                fontSize: dense ? 9 : 10,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 0.5,
-              ),
-            ),
+          Icon(Icons.lock_outline_rounded, size: 13, color: t.spruce),
+          const SizedBox(width: 5),
+          Text(
+            'on-device',
+            style: SwarType.captionMedium.copyWith(color: t.spruce),
           ),
         ],
       ),
@@ -692,165 +95,734 @@ final class _UsageRow extends StatelessWidget {
   }
 }
 
-final class _StreakCard extends StatelessWidget {
-  const _StreakCard({
-    required this.dense,
-    required this.currentStreak,
-    required this.longestStreak,
-    super.key,
-  });
+final class _Grid extends StatelessWidget {
+  const _Grid({required this.snapshot});
 
-  final bool dense;
-  final int currentStreak;
-  final int longestStreak;
-
-  @override
-  Widget build(BuildContext context) {
-    return _Panel(
-      padding: EdgeInsets.all(dense ? 24 : 32),
-      child: Column(
-        children: [
-          _CardHeader(
-            title: '$currentStreak day streak',
-            meta: 'LONGEST STREAK | $longestStreak DAYS',
-            dense: dense,
-          ),
-          SizedBox(height: dense ? 12 : 16),
-          const _MonthHeader(),
-          SizedBox(height: dense ? 12 : 16),
-          Expanded(child: _HeatMap(currentStreak: currentStreak)),
-          SizedBox(height: dense ? 16 : 24),
-          const _HeatLegend(),
-        ],
-      ),
-    );
-  }
-}
-
-final class _CardHeader extends StatelessWidget {
-  const _CardHeader({
-    required this.title,
-    required this.meta,
-    required this.dense,
-  });
-
-  final String title;
-  final String meta;
-  final bool dense;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Expanded(
-          child: Text(
-            title,
-            style: TextStyle(
-              fontSize: dense ? 20 : 24,
-              height: 1.33,
-              fontWeight: FontWeight.w700,
-              letterSpacing: dense ? -0.2 : -0.24,
-            ),
-          ),
-        ),
-        Text(
-          meta,
-          style: const TextStyle(
-            color: Color(0xFF9CA3AF),
-            fontSize: 10,
-            fontWeight: FontWeight.w700,
-            letterSpacing: 1,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-final class _MonthHeader extends StatelessWidget {
-  const _MonthHeader();
-
-  @override
-  Widget build(BuildContext context) {
-    return const Row(
-      children: [
-        Icon(Icons.chevron_left_rounded, size: 16, color: Color(0xFFD1D5DB)),
-        Expanded(
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: [
-              _CapsLabel('APR'),
-              _CapsLabel('MAY'),
-              _CapsLabel('JUN'),
-              _CapsLabel('JUL'),
-            ],
-          ),
-        ),
-        Icon(Icons.chevron_right_rounded, size: 16, color: Color(0xFFD1D5DB)),
-      ],
-    );
-  }
-}
-
-final class _HeatMap extends StatelessWidget {
-  const _HeatMap({required this.currentStreak});
-
-  final int currentStreak;
+  final SwarInsightsSnapshot snapshot;
 
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
+      key: const Key('insights-grid'),
       builder: (context, constraints) {
-        final cellSize = math.min(
-          28.0,
-          math.min(
-            (constraints.maxWidth - 54) / 12 - 4,
-            constraints.maxHeight / 7 - 4,
+        final wide = constraints.maxWidth >= 720;
+        final topCards = [
+          _WordsCorrectedCard(snapshot: snapshot),
+          _TimeSavedCard(snapshot: snapshot),
+          _TotalSpokenCard(
+            key: const Key('insights-total-card'),
+            snapshot: snapshot,
           ),
+        ];
+        final pace = _PaceCard(
+          key: const Key('insights-pace-card'),
+          snapshot: snapshot,
         );
+        final streak = _StreakCard(
+          key: const Key('insights-streak-card'),
+          snapshot: snapshot,
+        );
+        final language = _LanguageSplitCard(snapshot: snapshot);
+        final apps = _WhereYouDictateCard(snapshot: snapshot);
+
+        if (!wide) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              for (final card in topCards) ...[
+                card,
+                const SizedBox(height: 14),
+              ],
+              language,
+              const SizedBox(height: 14),
+              pace,
+              const SizedBox(height: 14),
+              apps,
+              const SizedBox(height: 14),
+              streak,
+            ],
+          );
+        }
+
         return Column(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            for (var row = 0; row < 7; row++)
-              Row(
-                children: [
-                  SizedBox(
-                    width: 38,
-                    child: Text(
-                      const [
-                        'SUN',
-                        'MON',
-                        'TUE',
-                        'WED',
-                        'THU',
-                        'FRI',
-                        'SAT',
-                      ][row],
-                      style: const TextStyle(
-                        color: Color(0xFF9CA3AF),
-                        fontSize: 9,
-                        fontWeight: FontWeight.w700,
-                      ),
+            _Row(
+              children: [
+                Expanded(child: topCards[0]),
+                const SizedBox(width: 14),
+                Expanded(child: topCards[1]),
+                const SizedBox(width: 14),
+                Expanded(child: topCards[2]),
+              ],
+            ),
+            const SizedBox(height: 14),
+            _Row(
+              children: [
+                Expanded(flex: 14, child: language),
+                const SizedBox(width: 14),
+                Expanded(flex: 10, child: pace),
+              ],
+            ),
+            const SizedBox(height: 14),
+            _Row(
+              children: [
+                Expanded(child: apps),
+                const SizedBox(width: 14),
+                Expanded(child: streak),
+              ],
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+final class _Row extends StatelessWidget {
+  const _Row({required this.children});
+
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    // Top-aligned rather than IntrinsicHeight-stretched: the cards contain
+    // flex-based bars that have no intrinsic height, and the page scrolls, so
+    // an unbounded stretch would fail to lay out.
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: children,
+    );
+  }
+}
+
+// --- top cards ---
+
+final class _StatCard extends StatelessWidget {
+  const _StatCard({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return SwarCard(
+      padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
+      child: child,
+    );
+  }
+}
+
+final class _UppercaseLabel extends StatelessWidget {
+  const _UppercaseLabel(this.text, {this.color});
+
+  final String text;
+  final Color? color;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = context.tokens;
+    return Text(
+      text.toUpperCase(),
+      style: SwarType.uppercaseLabel.copyWith(color: color ?? t.inkMuted),
+    );
+  }
+}
+
+final class _WordsCorrectedCard extends StatelessWidget {
+  const _WordsCorrectedCard({required this.snapshot});
+
+  final SwarInsightsSnapshot snapshot;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = context.tokens;
+    return _StatCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const _UppercaseLabel('Words corrected'),
+          const SizedBox(height: 10),
+          Text(
+            '${snapshot.wordsCorrected}',
+            style: SwarType.statHero.copyWith(color: t.ink),
+          ),
+          const SizedBox(height: 14),
+          _FooterLine(
+            chipIcon: Icons.menu_book_rounded,
+            chipFg: t.spruce,
+            chipBg: t.spruceTint,
+            text: '${snapshot.dictionaryHits} from your dictionary',
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+final class _TimeSavedCard extends StatelessWidget {
+  const _TimeSavedCard({required this.snapshot});
+
+  final SwarInsightsSnapshot snapshot;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = context.tokens;
+    final hours = snapshot.timeSaved.inMinutes / 60;
+    return SwarCard(
+      filled: t.spruce,
+      padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _UppercaseLabel('Time saved', color: t.spruceSoft),
+          const SizedBox(height: 10),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.baseline,
+            textBaseline: TextBaseline.alphabetic,
+            children: [
+              Text(
+                hours.toStringAsFixed(1),
+                style: SwarType.statHero.copyWith(color: t.saffron),
+              ),
+              const SizedBox(width: 4),
+              Text(
+                'hrs',
+                style: SwarType.rowTitle.copyWith(
+                  color: t.saffron,
+                  fontSize: 18,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Text.rich(
+            TextSpan(
+              children: [
+                const TextSpan(text: 'vs typing at 40 wpm · '),
+                TextSpan(
+                  text: 'estimate',
+                  style: TextStyle(color: t.spruceInk),
+                ),
+              ],
+              style: SwarType.description.copyWith(color: t.spruceSoft),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+final class _TotalSpokenCard extends StatelessWidget {
+  const _TotalSpokenCard({required this.snapshot, super.key});
+
+  final SwarInsightsSnapshot snapshot;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = context.tokens;
+    final minutes = snapshot.totalSpeechDuration.inMinutes;
+    final wpm = snapshot.averageWordsPerMinute.round();
+    return _StatCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const _UppercaseLabel('Total time spoken'),
+          const SizedBox(height: 10),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.baseline,
+            textBaseline: TextBaseline.alphabetic,
+            children: [
+              Text('$minutes', style: SwarType.statHero.copyWith(color: t.ink)),
+              const SizedBox(width: 4),
+              Text(
+                'min',
+                style: SwarType.rowTitle.copyWith(
+                  color: t.inkSecondary,
+                  fontSize: 18,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          _FooterLine(
+            chipIcon: Icons.bolt_rounded,
+            chipFg: t.saffronInk,
+            chipBg: t.saffronTint,
+            text: '${snapshot.totalWords} words · $wpm wpm',
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+final class _FooterLine extends StatelessWidget {
+  const _FooterLine({
+    required this.chipIcon,
+    required this.chipFg,
+    required this.chipBg,
+    required this.text,
+  });
+
+  final IconData chipIcon;
+  final Color chipFg;
+  final Color chipBg;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = context.tokens;
+    return Row(
+      children: [
+        Container(
+          width: 22,
+          height: 22,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: chipBg,
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: Icon(chipIcon, size: 13, color: chipFg),
+        ),
+        const SizedBox(width: 10),
+        Flexible(
+          child: Text(
+            text,
+            style: SwarType.description.copyWith(color: t.inkSecondary),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// --- language split ---
+
+final class _LanguageSplitCard extends StatelessWidget {
+  const _LanguageSplitCard({required this.snapshot});
+
+  final SwarInsightsSnapshot snapshot;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = context.tokens;
+    final bars = [
+      ('English', snapshot.englishShare, t.spruce),
+      ('Hindi', snapshot.hindiShare, t.spruceMid),
+      ('Hinglish', snapshot.hinglishShare, t.saffron),
+    ];
+    final maxShare = bars.map((b) => b.$2).fold(0.0, (a, b) => a > b ? a : b);
+    return SwarCard(
+      padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const _CardHeading(
+            title: 'Language split',
+            caption: 'what you actually speak',
+          ),
+          const SizedBox(height: 18),
+          SizedBox(
+            height: 120,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                for (final bar in bars)
+                  Expanded(
+                    child: _LanguageBar(
+                      label: bar.$1,
+                      share: bar.$2,
+                      maxShare: maxShare,
+                      color: bar.$3,
                     ),
                   ),
-                  for (var column = 0; column < 12; column++)
-                    Expanded(
-                      child: Center(
-                        child: Container(
-                          width: cellSize,
-                          height: cellSize,
-                          decoration: BoxDecoration(
-                            color:
-                                row * 12 + column >=
-                                    84 - currentStreak.clamp(0, 84)
-                                ? SwarColors.leaf
-                                : SwarColors.leafSoft,
-                            borderRadius: BorderRadius.circular(2),
-                          ),
-                        ),
-                      ),
-                    ),
-                ],
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          Container(height: 0.5, color: t.border),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Icon(Icons.translate_rounded, size: 14, color: t.inkSecondary),
+              const SizedBox(width: 8),
+              Flexible(
+                child: Text(
+                  'Mixed speech is kept as spoken — never translated.',
+                  style: SwarType.caption.copyWith(color: t.inkSecondary),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+final class _LanguageBar extends StatelessWidget {
+  const _LanguageBar({
+    required this.label,
+    required this.share,
+    required this.maxShare,
+    required this.color,
+  });
+
+  final String label;
+  final double share;
+  final double maxShare;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = context.tokens;
+    final fraction = maxShare == 0 ? 0.0 : share / maxShare;
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.end,
+      children: [
+        Expanded(
+          child: Align(
+            alignment: Alignment.bottomCenter,
+            child: FractionallySizedBox(
+              heightFactor: share == 0 ? 0.02 : fraction.clamp(0.04, 1.0),
+              child: Container(
+                width: 54,
+                decoration: BoxDecoration(
+                  color: color,
+                  borderRadius: const BorderRadius.vertical(
+                    top: Radius.circular(8),
+                    bottom: Radius.circular(4),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(label, style: SwarType.nav.copyWith(color: t.ink)),
+        const SizedBox(height: 2),
+        Text(
+          '${(share * 100).round()}%',
+          style: SwarType.caption.copyWith(color: t.inkMuted),
+        ),
+      ],
+    );
+  }
+}
+
+// --- speaking pace ---
+
+final class _PaceCard extends StatelessWidget {
+  const _PaceCard({required this.snapshot, super.key});
+
+  final SwarInsightsSnapshot snapshot;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = context.tokens;
+    return SwarCard(
+      padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const _CardHeading(title: 'Speaking pace'),
+          const SizedBox(height: 8),
+          Center(
+            child: Column(
+              children: [
+                Text(
+                  '${snapshot.averageWordsPerMinute.round()}',
+                  style: SwarType.wpmHero.copyWith(color: t.ink),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'WORDS / MIN',
+                  style: SwarType.uppercaseLabel.copyWith(color: t.inkMuted),
+                ),
+                const SizedBox(height: 14),
+                const _PaceWaveform(),
+                const SizedBox(height: 12),
+                Text(
+                  'faster than most typing',
+                  style: SwarType.description.copyWith(color: t.inkSecondary),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+final class _PaceWaveform extends StatelessWidget {
+  const _PaceWaveform();
+
+  @override
+  Widget build(BuildContext context) {
+    final t = context.tokens;
+    const heights = [10.0, 16.0, 22.0, 26.0, 18.0, 12.0];
+    final colors = [
+      t.spruceSoft,
+      t.spruceSoft,
+      t.spruce,
+      t.spruce,
+      t.spruce,
+      t.spruceSoft,
+    ];
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        for (var i = 0; i < heights.length; i++) ...[
+          Container(
+            width: 4,
+            height: heights[i],
+            decoration: BoxDecoration(
+              color: colors[i],
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          if (i != heights.length - 1) const SizedBox(width: 3),
+        ],
+      ],
+    );
+  }
+}
+
+// --- where you dictate ---
+
+final class _WhereYouDictateCard extends StatelessWidget {
+  const _WhereYouDictateCard({required this.snapshot});
+
+  final SwarInsightsSnapshot snapshot;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = context.tokens;
+    final total = snapshot.totalAppEvents;
+    final apps = snapshot.appUsage.take(3).toList();
+    final palette = [t.spruce, t.spruceMid, t.spruceSoft];
+    final barText = [t.spruceInk, t.spruceInk, t.spruce];
+    return SwarCard(
+      padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _CardHeading(
+            title: 'Where you dictate',
+            caption: '${snapshot.distinctAppCount} apps',
+          ),
+          const SizedBox(height: 16),
+          if (apps.isEmpty)
+            Text(
+              'No dictations yet.',
+              style: SwarType.description.copyWith(color: t.inkMuted),
+            )
+          else
+            for (var i = 0; i < apps.length; i++) ...[
+              _AppUsageRow(
+                usage: apps[i],
+                share: total == 0 ? 0 : apps[i].count / total,
+                barColor: palette[i % palette.length],
+                textOnBar: barText[i % barText.length],
+              ),
+              if (i != apps.length - 1) const SizedBox(height: 12),
+            ],
+          const SizedBox(height: 16),
+          Container(height: 0.5, color: t.border),
+          const SizedBox(height: 12),
+          Text(
+            'Counts come from the app in focus, not its contents.',
+            style: SwarType.caption.copyWith(color: t.inkMuted),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+final class _AppUsageRow extends StatelessWidget {
+  const _AppUsageRow({
+    required this.usage,
+    required this.share,
+    required this.barColor,
+    required this.textOnBar,
+  });
+
+  final SwarAppUsage usage;
+  final double share;
+  final Color barColor;
+  final Color textOnBar;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = context.tokens;
+    return Row(
+      children: [
+        SizedBox(
+          width: 18,
+          child: Icon(_iconFor(usage.name), size: 17, color: t.inkSecondary),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final width = (constraints.maxWidth * share).clamp(
+                32.0,
+                constraints.maxWidth,
+              );
+              return Align(
+                alignment: Alignment.centerLeft,
+                child: Container(
+                  width: width,
+                  height: 20,
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  alignment: Alignment.centerLeft,
+                  decoration: BoxDecoration(
+                    color: barColor,
+                    borderRadius: BorderRadius.circular(5),
+                  ),
+                  child: Text(
+                    '${(share * 100).round()}%',
+                    style: SwarType.captionMedium.copyWith(color: textOnBar),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+        const SizedBox(width: 10),
+        SizedBox(
+          width: 74,
+          child: Text(
+            usage.name,
+            textAlign: TextAlign.right,
+            overflow: TextOverflow.ellipsis,
+            style: SwarType.caption.copyWith(color: t.inkSecondary),
+          ),
+        ),
+      ],
+    );
+  }
+
+  IconData _iconFor(String app) {
+    final name = app.toLowerCase();
+    if (name.contains('code') ||
+        name.contains('studio') ||
+        name.contains('term') ||
+        name.contains('xcode')) {
+      return Icons.code_rounded;
+    }
+    if (name.contains('mail') || name.contains('outlook')) {
+      return Icons.mail_outline_rounded;
+    }
+    if (name.contains('slack') ||
+        name.contains('chat') ||
+        name.contains('message') ||
+        name.contains('discord') ||
+        name.contains('teams')) {
+      return Icons.chat_bubble_outline_rounded;
+    }
+    return Icons.window_rounded;
+  }
+}
+
+// --- streak heatmap ---
+
+final class _StreakCard extends StatelessWidget {
+  const _StreakCard({required this.snapshot, super.key});
+
+  final SwarInsightsSnapshot snapshot;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = context.tokens;
+    return SwarCard(
+      padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _CardHeading(
+            title: '${snapshot.currentStreakDays}-day streak',
+            caption: 'longest · ${snapshot.longestStreakDays} days',
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Days you dictated at least once.',
+            style: SwarType.caption.copyWith(color: t.inkSecondary),
+          ),
+          const SizedBox(height: 14),
+          _Heatmap(activity: snapshot.dailyActivity),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              Text('Less', style: SwarType.caption.copyWith(color: t.inkMuted)),
+              const SizedBox(width: 6),
+              for (final color in t.streakRamp) ...[
+                Container(
+                  width: 12,
+                  height: 12,
+                  decoration: BoxDecoration(
+                    color: color,
+                    borderRadius: BorderRadius.circular(3),
+                  ),
+                ),
+                const SizedBox(width: 4),
+              ],
+              const SizedBox(width: 2),
+              Text('More', style: SwarType.caption.copyWith(color: t.inkMuted)),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+final class _Heatmap extends StatelessWidget {
+  const _Heatmap({required this.activity});
+
+  final List<int> activity;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = context.tokens;
+    // Render 20 columns of 7 days; take the most recent window.
+    const columns = 20;
+    const rows = 7;
+    const cells = columns * rows;
+    final tail = activity.length >= cells
+        ? activity.sublist(activity.length - cells)
+        : <int>[...List<int>.filled(cells - activity.length, 0), ...activity];
+    final maxCount = tail.fold(0, (a, b) => a > b ? a : b);
+
+    Color colorFor(int count) {
+      if (count <= 0) return t.streakEmpty;
+      if (maxCount <= 1) return t.streakRamp[3];
+      final ratio = count / maxCount;
+      if (ratio > 0.66) return t.streakRamp[3];
+      if (ratio > 0.33) return t.streakRamp[2];
+      return t.streakRamp[1];
+    }
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        const gap = 4.0;
+        final cell = (constraints.maxWidth - gap * (columns - 1)) / columns;
+        return Wrap(
+          spacing: gap,
+          runSpacing: gap,
+          children: [
+            for (var i = 0; i < cells; i++)
+              Container(
+                width: cell,
+                height: cell,
+                decoration: BoxDecoration(
+                  color: colorFor(tail[i]),
+                  borderRadius: BorderRadius.circular(3),
+                ),
               ),
           ],
         );
@@ -859,107 +831,26 @@ final class _HeatMap extends StatelessWidget {
   }
 }
 
-String _formatCount(int value) {
-  final digits = value.toString();
-  final result = StringBuffer();
-  for (var index = 0; index < digits.length; index++) {
-    if (index > 0 && (digits.length - index) % 3 == 0) result.write(',');
-    result.write(digits[index]);
-  }
-  return result.toString();
-}
+final class _CardHeading extends StatelessWidget {
+  const _CardHeading({required this.title, this.caption});
 
-final class _HeatLegend extends StatelessWidget {
-  const _HeatLegend();
+  final String title;
+  final String? caption;
 
   @override
   Widget build(BuildContext context) {
-    return const Row(
+    final t = context.tokens;
+    return Row(
       children: [
-        _CapsLabel('LESS'),
-        SizedBox(width: 8),
-        _LegendSquare(color: SwarColors.leafSoft),
-        _LegendSquare(color: SwarColors.leafPale),
-        _LegendSquare(color: SwarColors.leafLight),
-        _LegendSquare(color: SwarColors.leaf),
-        SizedBox(width: 5),
-        _CapsLabel('MORE'),
-        Spacer(),
-        _LegendSquare(
-          color: SwarColors.leafSoft,
-          borderColor: SwarColors.leaf,
-          size: 16,
-        ),
-        SizedBox(width: 8),
-        Text(
-          'CURRENT STREAK',
-          style: TextStyle(
-            color: SwarColors.mutedInk,
-            fontSize: 10,
-            fontWeight: FontWeight.w700,
+        Expanded(
+          child: Text(
+            title,
+            style: SwarType.cardHeading.copyWith(color: t.ink),
           ),
         ),
+        if (caption != null)
+          Text(caption!, style: SwarType.caption.copyWith(color: t.inkMuted)),
       ],
-    );
-  }
-}
-
-final class _LegendSquare extends StatelessWidget {
-  const _LegendSquare({required this.color, this.borderColor, this.size = 12});
-
-  final Color color;
-  final Color? borderColor;
-  final double size;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: size,
-      height: size,
-      margin: const EdgeInsets.only(right: 4),
-      decoration: BoxDecoration(
-        color: color,
-        border: borderColor == null ? null : Border.all(color: borderColor!),
-        borderRadius: BorderRadius.circular(2),
-      ),
-    );
-  }
-}
-
-final class _Panel extends StatelessWidget {
-  const _Panel({required this.child, required this.padding});
-
-  final Widget child;
-  final EdgeInsets padding;
-
-  @override
-  Widget build(BuildContext context) {
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: SwarColors.panel,
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Padding(padding: padding, child: child),
-    );
-  }
-}
-
-final class _CapsLabel extends StatelessWidget {
-  const _CapsLabel(this.text);
-
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    return Text(
-      text,
-      style: const TextStyle(
-        color: Color(0xFF9CA3AF),
-        fontSize: 10,
-        height: 1.6,
-        fontWeight: FontWeight.w700,
-        letterSpacing: 0.5,
-      ),
     );
   }
 }
