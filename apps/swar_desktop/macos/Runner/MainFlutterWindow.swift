@@ -323,6 +323,17 @@ private final class DictationOverlayPanel: NSPanel {
   override var canBecomeMain: Bool { false }
 }
 
+/// Overlay design tokens (spec §3). The bar is dark in both app themes.
+private enum OverlayPalette {
+  static let pillBg = NSColor(srgbRed: 0x1C / 255.0, green: 0x1F / 255.0, blue: 0x1E / 255.0, alpha: 1)
+  static let pillBgAlt = NSColor(srgbRed: 0x26 / 255.0, green: 0x30 / 255.0, blue: 0x2B / 255.0, alpha: 1)
+  static let onPill = NSColor.white
+  static let onPillMut = NSColor(srgbRed: 0x9A / 255.0, green: 0xA6 / 255.0, blue: 0xA0 / 255.0, alpha: 1)
+  static let onPillSoft = NSColor(srgbRed: 0xC9 / 255.0, green: 0xD2 / 255.0, blue: 0xCE / 255.0, alpha: 1)
+  static let spruce = NSColor(srgbRed: 0x2F / 255.0, green: 0x55 / 255.0, blue: 0x47 / 255.0, alpha: 1)
+  static let saffron = NSColor(srgbRed: 0xF4 / 255.0, green: 0xB2 / 255.0, blue: 0x4A / 255.0, alpha: 1)
+}
+
 private final class DictationOverlayView: NSView {
   private let onDictate: () -> Void
   private let onLongPressStart: () -> Void
@@ -456,7 +467,7 @@ private final class DictationOverlayView: NSView {
     guard opacity > 0.001 else { return }
     let pill = NSRect(x: bounds.midX - 22, y: 0, width: 44, height: 7)
       .insetBy(dx: 0.5, dy: 0.5)
-    NSColor(calibratedWhite: 0.25, alpha: 0.90 * opacity).setFill()
+    OverlayPalette.pillBg.withAlphaComponent(0.92 * opacity).setFill()
     NSBezierPath(roundedRect: pill, xRadius: 6, yRadius: 6).fill()
     NSColor(calibratedWhite: 1, alpha: 0.28 * opacity).setStroke()
     let border = NSBezierPath(roundedRect: pill, xRadius: 6, yRadius: 6)
@@ -467,7 +478,7 @@ private final class DictationOverlayView: NSView {
   private func drawHoverControl(opacity: CGFloat) {
     guard opacity > 0.001, bounds.height > 12 else { return }
     let hint = NSRect(x: 7, y: 32, width: 94, height: 24)
-    NSColor(calibratedWhite: 0.02, alpha: 0.98 * opacity).setFill()
+    OverlayPalette.pillBg.withAlphaComponent(0.98 * opacity).setFill()
     NSBezierPath(roundedRect: hint, xRadius: 12, yRadius: 12).fill()
     let textAttributes: [NSAttributedString.Key: Any] = [
       .font: NSFont.systemFont(ofSize: 11.5, weight: .medium),
@@ -485,11 +496,11 @@ private final class DictationOverlayView: NSView {
     )
 
     let rail = NSRect(x: 32, y: 0, width: 44, height: 6)
-    NSColor(calibratedWhite: 0.42, alpha: 0.72 * opacity).setFill()
+    OverlayPalette.pillBgAlt.withAlphaComponent(0.72 * opacity).setFill()
     NSBezierPath(roundedRect: rail, xRadius: 4, yRadius: 4).fill()
 
     let button = NSRect(x: 33, y: 3, width: 42, height: 27)
-    NSColor(calibratedWhite: 0.16, alpha: 0.99 * opacity).setFill()
+    OverlayPalette.spruce.withAlphaComponent(0.99 * opacity).setFill()
     NSBezierPath(roundedRect: button, xRadius: 13.5, yRadius: 13.5).fill()
     drawMicrophone(center: NSPoint(x: button.midX, y: button.midY + 1), opacity: opacity)
   }
@@ -519,7 +530,7 @@ private final class DictationOverlayView: NSView {
 
   private func drawActiveControl(opacity: CGFloat) {
     let capsule = activeControlRect.insetBy(dx: 0.75, dy: 0.75)
-    NSColor(calibratedWhite: 0.015, alpha: 0.99 * opacity).setFill()
+    OverlayPalette.pillBg.withAlphaComponent(0.99 * opacity).setFill()
     NSBezierPath(roundedRect: capsule, xRadius: 15, yRadius: 15).fill()
     NSColor(calibratedWhite: 1, alpha: 0.13 * opacity).setStroke()
     let border = NSBezierPath(roundedRect: capsule, xRadius: 15, yRadius: 15)
@@ -550,9 +561,9 @@ private final class DictationOverlayView: NSView {
 
   private func drawCancel(opacity: CGFloat) {
     let circle = NSRect(x: 3, y: 5, width: 20, height: 20)
-    NSColor(calibratedWhite: 0.20, alpha: opacity).setFill()
+    OverlayPalette.pillBgAlt.withAlphaComponent(opacity).setFill()
     NSBezierPath(ovalIn: circle).fill()
-    NSColor(calibratedWhite: 0.90, alpha: opacity).setStroke()
+    OverlayPalette.onPillMut.withAlphaComponent(opacity).setStroke()
     let cross = NSBezierPath()
     cross.lineWidth = 1.5
     cross.move(to: NSPoint(x: 9, y: 11))
@@ -565,7 +576,7 @@ private final class DictationOverlayView: NSView {
   private func drawWaveform(opacity: CGFloat) {
     let centerX: CGFloat = 29
     let heights: [CGFloat] = [0.48, 0.72, 0.94, 0.68, 1.0, 0.82, 0.64, 0.92, 0.73, 0.56, 0.42]
-    NSColor(calibratedWhite: 1, alpha: opacity).setFill()
+    OverlayPalette.saffron.withAlphaComponent(opacity).setFill()
     for (index, multiplier) in heights.enumerated() {
       let wave = (sin(animationPhase + Double(index) * 0.82) + 1) / 2
       let ambient = state == "recording" ? 0.16 + wave * 0.18 : 0.13
@@ -585,7 +596,7 @@ private final class DictationOverlayView: NSView {
     for index in 0..<11 {
       let pulse = (sin(animationPhase * 1.45 - Double(index) * 0.42) + 1) / 2
       let alpha = opacity * (0.42 + CGFloat(pulse) * 0.58)
-      NSColor.white.withAlphaComponent(alpha).setFill()
+      OverlayPalette.saffron.withAlphaComponent(alpha).setFill()
       let diameter: CGFloat = 2.6
       let dot = NSRect(
         x: 27 + CGFloat(index) * 4.1,
@@ -622,7 +633,7 @@ private final class DictationOverlayView: NSView {
       endAngle: startAngle + 235,
       clockwise: false
     )
-    NSColor.white.withAlphaComponent(opacity).setStroke()
+    OverlayPalette.saffron.withAlphaComponent(opacity).setStroke()
     spinner.stroke()
   }
 
@@ -664,9 +675,9 @@ private final class DictationOverlayView: NSView {
 
   private func drawConfirm(opacity: CGFloat) {
     let circle = NSRect(x: 83, y: 5, width: 20, height: 20)
-    NSColor.white.withAlphaComponent(opacity).setFill()
+    OverlayPalette.spruce.withAlphaComponent(opacity).setFill()
     NSBezierPath(ovalIn: circle).fill()
-    NSColor(calibratedWhite: 0.08, alpha: opacity).setStroke()
+    OverlayPalette.onPill.withAlphaComponent(opacity).setStroke()
     let check = NSBezierPath()
     check.lineWidth = 1.6
     check.move(to: NSPoint(x: 88, y: 15))
