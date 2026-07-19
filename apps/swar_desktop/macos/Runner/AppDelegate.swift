@@ -6,7 +6,6 @@ class AppDelegate: FlutterAppDelegate {
   private var statusItem: NSStatusItem?
 
   override func applicationDidFinishLaunching(_ notification: Notification) {
-    super.applicationDidFinishLaunching(notification)
     configureStatusItem()
   }
 
