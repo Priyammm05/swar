@@ -34,6 +34,11 @@ bool recordUserEdit({
 VoiceStyleSnapshot getVoiceStyleProfile() =>
     RustLib.instance.api.crateApiPersonalizationGetVoiceStyleProfile();
 
+/// Writes opted-in correction triples to a user-owned JSONL file. This is an
+/// explicit action and never uploads data.
+Future<String> exportLearningExamples() =>
+    RustLib.instance.api.crateApiPersonalizationExportLearningExamples();
+
 class VocabularyEntry {
   final String spoken;
   final String written;

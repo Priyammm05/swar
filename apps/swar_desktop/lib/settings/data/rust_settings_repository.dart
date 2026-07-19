@@ -35,6 +35,19 @@ final class RustSettingsRepository implements SettingsRepository {
       learnFromEdits: value.learnFromEdits,
       modelPath: modelPath,
       microphoneId: value.microphoneId,
+      shortcutKey:
+          SwarShortcutKey.values
+              .where((key) => key.name == value.shortcutKey)
+              .firstOrNull ??
+          SwarShortcutKey.option,
+      excludedApplications: List.unmodifiable(value.excludedApplications),
+      enhancementProvider:
+          SwarEnhancementProvider.values
+              .where((provider) => provider.name == value.enhancementProvider)
+              .firstOrNull ??
+          SwarEnhancementProvider.local,
+      providerEndpoint: value.providerEndpoint,
+      providerModel: value.providerModel,
     );
   }
 
@@ -58,6 +71,11 @@ final class RustSettingsRepository implements SettingsRepository {
         learnFromEdits: settings.learnFromEdits,
         modelPath: settings.modelPath,
         microphoneId: settings.microphoneId,
+        shortcutKey: settings.shortcutKey.name,
+        excludedApplications: settings.excludedApplications,
+        enhancementProvider: settings.enhancementProvider.name,
+        providerEndpoint: settings.providerEndpoint,
+        providerModel: settings.providerModel,
       ),
     );
   }

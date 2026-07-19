@@ -27,11 +27,15 @@ final class RustDictationEngineGateway implements DictationEngineGateway {
             microphoneId: config.microphoneId,
             language: config.language,
             writingMode: config.writingMode,
-            sourceApplication: 'Desktop',
+            sourceApplication: config.sourceApplication,
             pasteAutomatically: config.pasteAutomatically,
             restoreClipboard: config.restoreClipboard,
             maximumSeconds: 300,
             enableLivePreview: config.enableLivePreview,
+            enhancementProvider: config.enhancementProvider,
+            providerEndpoint: config.providerEndpoint,
+            providerModel: config.providerModel,
+            providerApiKey: config.providerApiKey,
           ),
         )
         .map(
@@ -69,6 +73,11 @@ final class RustDictationEngineGateway implements DictationEngineGateway {
   @override
   Future<bool> prepare(String modelPath) =>
       native.prepareDictationEngine(modelPath: modelPath);
+
+  @override
+  Future<void> prepareAudio(String microphoneId) async {
+    await native.prepareAudioCapture(microphoneId: microphoneId);
+  }
 
   @override
   Future<void> release() => native.releaseDictationEngine();

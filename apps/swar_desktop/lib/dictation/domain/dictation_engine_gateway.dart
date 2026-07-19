@@ -72,6 +72,11 @@ final class DictationEngineConfig {
     required this.restoreClipboard,
     this.keepModelsWarm = true,
     this.enableLivePreview = false,
+    this.sourceApplication = '',
+    this.enhancementProvider = 'local',
+    this.providerEndpoint = '',
+    this.providerModel = '',
+    this.providerApiKey = '',
   });
 
   final String modelPath;
@@ -82,6 +87,11 @@ final class DictationEngineConfig {
   final bool restoreClipboard;
   final bool keepModelsWarm;
   final bool enableLivePreview;
+  final String sourceApplication;
+  final String enhancementProvider;
+  final String providerEndpoint;
+  final String providerModel;
+  final String providerApiKey;
 }
 
 final class DictationEngineCompletion {
@@ -116,6 +126,8 @@ abstract interface class DictationEngineGateway {
   Future<void> cancel(String sessionId);
 
   Future<bool> prepare(String modelPath);
+
+  Future<void> prepareAudio(String microphoneId);
 
   Future<void> release();
 

@@ -6,7 +6,7 @@
 import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `complete_coordinator_session`, `emit_transition`, `event_kind_for_state`, `fail_start`, `finish_capture`, `is_builtin_microphone_name`, `monotonic_timestamp_ms`, `release_recording_reservation`, `resample_linear`, `select_input_device`, `spawn_preview_worker`, `stop_preview`, `take_capture`, `transcript_contains_speech`, `transition_capture`
+// These functions are ignored because they are not marked as `pub`: `complete_coordinator_session`, `emit_transition`, `event_kind_for_state`, `fail_start`, `finish_capture`, `is_builtin_microphone_name`, `monotonic_timestamp_ms`, `release_recording_reservation`, `select_input_device`, `spawn_preview_worker`, `stop_preview`, `take_capture`, `transcript_contains_speech`, `transition_capture`
 // These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `ActiveCapture`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_receiver_is_total_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`
 
@@ -41,6 +41,13 @@ Future<bool> prepareDictationEngine({required String modelPath}) => RustLib
     .instance
     .api
     .crateApiDictationPrepareDictationEngine(modelPath: modelPath);
+
+/// Starts CoreAudio/WASAPI before the first shortcut so native pre-roll is
+/// available from the first dictation without moving PCM into Dart.
+Future<int> prepareAudioCapture({required String microphoneId}) => RustLib
+    .instance
+    .api
+    .crateApiDictationPrepareAudioCapture(microphoneId: microphoneId);
 
 /// Releases the warm model without stopping the dedicated ASR worker.
 Future<void> releaseDictationEngine() =>
@@ -176,6 +183,10 @@ class DictationSessionConfig {
   final bool restoreClipboard;
   final int maximumSeconds;
   final bool enableLivePreview;
+  final String enhancementProvider;
+  final String providerEndpoint;
+  final String providerModel;
+  final String providerApiKey;
 
   const DictationSessionConfig({
     required this.modelPath,
@@ -187,6 +198,10 @@ class DictationSessionConfig {
     required this.restoreClipboard,
     required this.maximumSeconds,
     required this.enableLivePreview,
+    required this.enhancementProvider,
+    required this.providerEndpoint,
+    required this.providerModel,
+    required this.providerApiKey,
   });
 
   @override
@@ -199,7 +214,11 @@ class DictationSessionConfig {
       pasteAutomatically.hashCode ^
       restoreClipboard.hashCode ^
       maximumSeconds.hashCode ^
-      enableLivePreview.hashCode;
+      enableLivePreview.hashCode ^
+      enhancementProvider.hashCode ^
+      providerEndpoint.hashCode ^
+      providerModel.hashCode ^
+      providerApiKey.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -214,7 +233,11 @@ class DictationSessionConfig {
           pasteAutomatically == other.pasteAutomatically &&
           restoreClipboard == other.restoreClipboard &&
           maximumSeconds == other.maximumSeconds &&
-          enableLivePreview == other.enableLivePreview;
+          enableLivePreview == other.enableLivePreview &&
+          enhancementProvider == other.enhancementProvider &&
+          providerEndpoint == other.providerEndpoint &&
+          providerModel == other.providerModel &&
+          providerApiKey == other.providerApiKey;
 }
 
 class MicrophoneDevice {

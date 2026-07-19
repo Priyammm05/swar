@@ -6,6 +6,7 @@ import 'package:swar_desktop/dictation/domain/dictation_engine_gateway.dart';
 import 'package:swar_desktop/dictation/presentation/dictation_session_view_model.dart';
 import 'package:swar_desktop/settings/domain/swar_settings.dart';
 import 'package:swar_desktop/settings/presentation/settings_view_model.dart';
+import 'package:swar_desktop/settings/presentation/personalization_view_model.dart';
 
 enum SettingsSection { general, system }
 
@@ -15,12 +16,14 @@ final class SwarSettingsDialog extends StatefulWidget {
     required this.viewModel,
     required this.diagnosticsGateway,
     required this.dictationSessionViewModel,
+    required this.personalizationViewModel,
     super.key,
   });
 
   final SettingsViewModel viewModel;
   final CoreDiagnosticsGateway diagnosticsGateway;
   final DictationSessionViewModel dictationSessionViewModel;
+  final PersonalizationViewModel personalizationViewModel;
 
   @override
   State<SwarSettingsDialog> createState() => _SwarSettingsDialogState();
@@ -231,10 +234,12 @@ final class _SettingsContent extends StatelessWidget {
             SettingsSection.general => _GeneralSettings(
               viewModel: widget.viewModel,
               sessionViewModel: widget.dictationSessionViewModel,
+              personalizationViewModel: widget.personalizationViewModel,
             ),
             SettingsSection.system => _SystemSettings(
               viewModel: widget.viewModel,
               diagnosticsGateway: widget.diagnosticsGateway,
+              personalizationViewModel: widget.personalizationViewModel,
             ),
           };
         },
@@ -247,10 +252,12 @@ final class _GeneralSettings extends StatelessWidget {
   const _GeneralSettings({
     required this.viewModel,
     required this.sessionViewModel,
+    required this.personalizationViewModel,
   });
 
   final SettingsViewModel viewModel;
   final DictationSessionViewModel sessionViewModel;
+  final PersonalizationViewModel personalizationViewModel;
 
   @override
   Widget build(BuildContext context) {
@@ -264,10 +271,34 @@ final class _GeneralSettings extends StatelessWidget {
             _SettingRow(
               title: 'Shortcut',
               subtitle:
-                  'Hold Option and release to finish. Double-tap Option to lock recording.',
-              trailing: OutlinedButton(
-                onPressed: null,
-                child: const Text('Change'),
+                  'Hold and release to finish. Double-tap to lock recording.',
+              trailing: SizedBox(
+                width: 180,
+                child: DropdownButtonFormField<SwarShortcutKey>(
+                  key: const Key('shortcut-setting'),
+                  isExpanded: true,
+                  initialValue: settings.shortcutKey,
+                  decoration: const InputDecoration(
+                    border: OutlineInputBorder(),
+                    contentPadding: EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 12,
+                    ),
+                  ),
+                  items: const [
+                    DropdownMenuItem(
+                      value: SwarShortcutKey.option,
+                      child: Text('Option ⌥'),
+                    ),
+                    DropdownMenuItem(
+                      value: SwarShortcutKey.control,
+                      child: Text('Control ⌃'),
+                    ),
+                  ],
+                  onChanged: (value) {
+                    if (value != null) viewModel.setShortcutKey(value);
+                  },
+                ),
               ),
             ),
             _SettingRow(
@@ -281,7 +312,8 @@ final class _GeneralSettings extends StatelessWidget {
             ),
             _SettingRow(
               title: 'Dictation language',
-              subtitle: 'Preserve English, Hindi, or Hinglish as you speak.',
+              subtitle:
+                  'Auto detect handles English, Hindi, and Hinglish locally.',
               trailing: SizedBox(
                 width: 190,
                 child: DropdownButtonFormField<SwarLanguagePreference>(
@@ -298,7 +330,7 @@ final class _GeneralSettings extends StatelessWidget {
                   items: const [
                     DropdownMenuItem(
                       value: SwarLanguagePreference.automatic,
-                      child: Text('Auto detect'),
+                      child: Text('Auto detect (recommended)'),
                     ),
                     DropdownMenuItem(
                       value: SwarLanguagePreference.english,
@@ -372,6 +404,20 @@ final class _GeneralSettings extends StatelessWidget {
                 ),
               ),
             ),
+            _SettingRow(
+              title: 'Personal vocabulary',
+              subtitle:
+                  '${personalizationViewModel.entries.length} local pronunciation and spelling preferences.',
+              trailing: _VocabularyButton(viewModel: personalizationViewModel),
+            ),
+            _SettingRow(
+              title: 'Optional cleanup provider',
+              subtitle:
+                  settings.enhancementProvider == SwarEnhancementProvider.local
+                  ? 'Local processing only. No text leaves this device.'
+                  : 'Opt-in OpenAI-compatible provider. The key is never saved.',
+              trailing: _ProviderSettingsButton(viewModel: viewModel),
+            ),
           ],
         ),
         const SizedBox(height: 24),
@@ -398,6 +444,11 @@ final class _GeneralSettings extends StatelessWidget {
                             pasteAutomatically: settings.pasteAutomatically,
                             restoreClipboard: settings.restoreClipboard,
                             keepModelsWarm: settings.keepModelsWarm,
+                            enhancementProvider:
+                                settings.enhancementProvider.name,
+                            providerEndpoint: settings.providerEndpoint,
+                            providerModel: settings.providerModel,
+                            providerApiKey: viewModel.providerApiKey,
                           ),
                         ),
                   icon: Icon(
@@ -424,10 +475,12 @@ final class _SystemSettings extends StatelessWidget {
   const _SystemSettings({
     required this.viewModel,
     required this.diagnosticsGateway,
+    required this.personalizationViewModel,
   });
 
   final SettingsViewModel viewModel;
   final CoreDiagnosticsGateway diagnosticsGateway;
+  final PersonalizationViewModel personalizationViewModel;
 
   @override
   Widget build(BuildContext context) {
@@ -447,6 +500,19 @@ final class _SystemSettings extends StatelessWidget {
               onChanged: (value) {
                 viewModel.setLaunchAtLogin(enabled: value);
               },
+            ),
+            _SettingRow(
+              title: 'Export learning examples',
+              subtitle:
+                  personalizationViewModel.message ??
+                  'Create a local JSONL file only when you choose to export.',
+              trailing: OutlinedButton(
+                key: const Key('export-learning-examples'),
+                onPressed: personalizationViewModel.isLoading
+                    ? null
+                    : personalizationViewModel.export,
+                child: const Text('Export'),
+              ),
             ),
             _ToggleSettingRow(
               key: const Key('show-swar-bar-setting'),
@@ -482,6 +548,13 @@ final class _SystemSettings extends StatelessWidget {
               onChanged: (value) {
                 viewModel.setLearnFromEdits(enabled: value);
               },
+            ),
+            _SettingRow(
+              title: 'Private applications',
+              subtitle: settings.excludedApplications.isEmpty
+                  ? 'No foreground application names are excluded.'
+                  : '${settings.excludedApplications.length} applications excluded from context.',
+              trailing: _ExcludedApplicationsButton(viewModel: viewModel),
             ),
           ],
         ),
@@ -555,6 +628,185 @@ final class _SystemSettings extends StatelessWidget {
   }
 }
 
+final class _ExcludedApplicationsButton extends StatelessWidget {
+  const _ExcludedApplicationsButton({required this.viewModel});
+
+  final SettingsViewModel viewModel;
+
+  @override
+  Widget build(BuildContext context) {
+    return OutlinedButton(
+      key: const Key('excluded-applications-button'),
+      onPressed: () async {
+        final controller = TextEditingController(
+          text: viewModel.settings.excludedApplications.join(', '),
+        );
+        final result = await showDialog<String>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Private applications'),
+            content: SizedBox(
+              width: 440,
+              child: TextField(
+                key: const Key('excluded-applications-field'),
+                controller: controller,
+                autofocus: true,
+                decoration: const InputDecoration(
+                  labelText: 'Application names, separated by commas',
+                  hintText: '1Password, Banking, Password Manager',
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                key: const Key('save-excluded-applications'),
+                onPressed: () => Navigator.of(context).pop(controller.text),
+                child: const Text('Save'),
+              ),
+            ],
+          ),
+        );
+        controller.dispose();
+        if (result != null) {
+          viewModel.setExcludedApplications(result.split(','));
+        }
+      },
+      child: const Text('Edit'),
+    );
+  }
+}
+
+final class _VocabularyButton extends StatelessWidget {
+  const _VocabularyButton({required this.viewModel});
+
+  final PersonalizationViewModel viewModel;
+
+  @override
+  Widget build(BuildContext context) {
+    return OutlinedButton(
+      key: const Key('personal-vocabulary-button'),
+      onPressed: () => showDialog<void>(
+        context: context,
+        builder: (context) => _VocabularyDialog(viewModel: viewModel),
+      ),
+      child: const Text('Manage'),
+    );
+  }
+}
+
+final class _VocabularyDialog extends StatefulWidget {
+  const _VocabularyDialog({required this.viewModel});
+
+  final PersonalizationViewModel viewModel;
+
+  @override
+  State<_VocabularyDialog> createState() => _VocabularyDialogState();
+}
+
+final class _VocabularyDialogState extends State<_VocabularyDialog> {
+  final _spoken = TextEditingController();
+  final _written = TextEditingController();
+
+  @override
+  void dispose() {
+    _spoken.dispose();
+    _written.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      key: const Key('personal-vocabulary-dialog'),
+      title: const Text('Personal vocabulary'),
+      content: SizedBox(
+        width: 520,
+        height: 420,
+        child: ListenableBuilder(
+          listenable: widget.viewModel,
+          builder: (context, _) => Column(
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      key: const Key('vocabulary-spoken-field'),
+                      controller: _spoken,
+                      decoration: const InputDecoration(
+                        labelText: 'Swar hears',
+                        hintText: 'sewer',
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: TextField(
+                      key: const Key('vocabulary-written-field'),
+                      controller: _written,
+                      decoration: const InputDecoration(
+                        labelText: 'Swar writes',
+                        hintText: 'Swar',
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  FilledButton(
+                    key: const Key('add-vocabulary-entry'),
+                    onPressed: () async {
+                      if (_spoken.text.trim().isEmpty ||
+                          _written.text.trim().isEmpty) {
+                        return;
+                      }
+                      await widget.viewModel.add(_spoken.text, _written.text);
+                      _spoken.clear();
+                      _written.clear();
+                    },
+                    child: const Text('Add'),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+              Expanded(
+                child: widget.viewModel.entries.isEmpty
+                    ? const Center(
+                        child: Text('No personal vocabulary added yet.'),
+                      )
+                    : ListView.builder(
+                        itemCount: widget.viewModel.entries.length,
+                        itemBuilder: (context, index) {
+                          final entry = widget.viewModel.entries[index];
+                          return ListTile(
+                            key: Key('vocabulary-entry-$index'),
+                            title: Text('${entry.spoken} → ${entry.written}'),
+                            subtitle: Text('Used ${entry.useCount} times'),
+                            trailing: IconButton(
+                              tooltip: 'Delete',
+                              onPressed: () =>
+                                  widget.viewModel.delete(entry.spoken),
+                              icon: const Icon(Icons.delete_outline_rounded),
+                            ),
+                          );
+                        },
+                      ),
+              ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        FilledButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Done'),
+        ),
+      ],
+    );
+  }
+}
+
 final class _SettingsScrollView extends StatelessWidget {
   const _SettingsScrollView({
     required this.title,
@@ -612,6 +864,111 @@ final class _SettingsGroup extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+final class _ProviderSettingsButton extends StatelessWidget {
+  const _ProviderSettingsButton({required this.viewModel});
+
+  final SettingsViewModel viewModel;
+
+  @override
+  Widget build(BuildContext context) {
+    return OutlinedButton(
+      key: const Key('provider-settings-button'),
+      onPressed: () => _show(context),
+      child: const Text('Configure'),
+    );
+  }
+
+  Future<void> _show(BuildContext context) async {
+    final endpoint = TextEditingController(
+      text: viewModel.settings.providerEndpoint,
+    );
+    final model = TextEditingController(text: viewModel.settings.providerModel);
+    final apiKey = TextEditingController(text: viewModel.providerApiKey);
+    var provider = viewModel.settings.enhancementProvider;
+    await showDialog<void>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: const Text('Cleanup provider'),
+          content: SizedBox(
+            width: 480,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                DropdownButtonFormField<SwarEnhancementProvider>(
+                  key: const Key('enhancement-provider-setting'),
+                  initialValue: provider,
+                  decoration: const InputDecoration(labelText: 'Provider'),
+                  items: const [
+                    DropdownMenuItem(
+                      value: SwarEnhancementProvider.local,
+                      child: Text('Local only'),
+                    ),
+                    DropdownMenuItem(
+                      value: SwarEnhancementProvider.byok,
+                      child: Text('OpenAI-compatible, bring your own key'),
+                    ),
+                  ],
+                  onChanged: (value) {
+                    if (value != null) setState(() => provider = value);
+                  },
+                ),
+                if (provider == SwarEnhancementProvider.byok) ...[
+                  const SizedBox(height: 16),
+                  TextField(
+                    key: const Key('provider-endpoint-setting'),
+                    controller: endpoint,
+                    decoration: const InputDecoration(
+                      labelText: 'HTTPS endpoint',
+                      hintText: 'https://api.example.com/v1',
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    key: const Key('provider-model-setting'),
+                    controller: model,
+                    decoration: const InputDecoration(labelText: 'Model'),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    key: const Key('provider-key-setting'),
+                    controller: apiKey,
+                    obscureText: true,
+                    decoration: const InputDecoration(
+                      labelText: 'API key, kept only until Swar closes',
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              key: const Key('save-provider-settings'),
+              onPressed: () {
+                viewModel
+                  ..setEnhancementProvider(provider)
+                  ..setProviderEndpoint(endpoint.text)
+                  ..setProviderModel(model.text)
+                  ..setProviderApiKey(apiKey.text);
+                Navigator.of(context).pop();
+              },
+              child: const Text('Save'),
+            ),
+          ],
+        ),
+      ),
+    );
+    endpoint.dispose();
+    model.dispose();
+    apiKey.dispose();
   }
 }
 

@@ -4,6 +4,10 @@ enum SwarLanguagePreference { automatic, english, hindi, hinglish }
 
 enum SwarWritingMode { raw, clean, intent }
 
+enum SwarShortcutKey { option, control }
+
+enum SwarEnhancementProvider { local, byok }
+
 /// Domain Model.
 /// Settings that the Phase 1 shell can edit without owning product logic.
 final class SwarSettings {
@@ -24,6 +28,11 @@ final class SwarSettings {
     this.learnFromEdits = false,
     this.modelPath = '',
     this.microphoneId = '',
+    this.shortcutKey = SwarShortcutKey.option,
+    this.excludedApplications = const [],
+    this.enhancementProvider = SwarEnhancementProvider.local,
+    this.providerEndpoint = '',
+    this.providerModel = '',
   });
 
   final SwarLanguagePreference language;
@@ -42,6 +51,11 @@ final class SwarSettings {
   final bool learnFromEdits;
   final String modelPath;
   final String microphoneId;
+  final SwarShortcutKey shortcutKey;
+  final List<String> excludedApplications;
+  final SwarEnhancementProvider enhancementProvider;
+  final String providerEndpoint;
+  final String providerModel;
 
   SwarSettings copyWith({
     SwarLanguagePreference? language,
@@ -60,6 +74,11 @@ final class SwarSettings {
     bool? learnFromEdits,
     String? modelPath,
     String? microphoneId,
+    SwarShortcutKey? shortcutKey,
+    List<String>? excludedApplications,
+    SwarEnhancementProvider? enhancementProvider,
+    String? providerEndpoint,
+    String? providerModel,
   }) {
     return SwarSettings(
       language: language ?? this.language,
@@ -78,6 +97,11 @@ final class SwarSettings {
       learnFromEdits: learnFromEdits ?? this.learnFromEdits,
       modelPath: modelPath ?? this.modelPath,
       microphoneId: microphoneId ?? this.microphoneId,
+      shortcutKey: shortcutKey ?? this.shortcutKey,
+      excludedApplications: excludedApplications ?? this.excludedApplications,
+      enhancementProvider: enhancementProvider ?? this.enhancementProvider,
+      providerEndpoint: providerEndpoint ?? this.providerEndpoint,
+      providerModel: providerModel ?? this.providerModel,
     );
   }
 }

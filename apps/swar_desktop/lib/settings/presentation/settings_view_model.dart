@@ -13,8 +13,10 @@ final class SettingsViewModel extends ChangeNotifier {
 
   final SettingsRepository _repository;
   SwarSettings _settings;
+  String _providerApiKey = '';
 
   SwarSettings get settings => _settings;
+  String get providerApiKey => _providerApiKey;
 
   void setLanguage(SwarLanguagePreference language) {
     _save(_settings.copyWith(language: language));
@@ -68,6 +70,34 @@ final class SettingsViewModel extends ChangeNotifier {
 
   void setMicrophoneId(String value) =>
       _save(_settings.copyWith(microphoneId: value.trim()));
+
+  void setShortcutKey(SwarShortcutKey value) =>
+      _save(_settings.copyWith(shortcutKey: value));
+
+  void setExcludedApplications(List<String> values) => _save(
+    _settings.copyWith(
+      excludedApplications: values
+          .map((value) => value.trim())
+          .where((value) => value.isNotEmpty)
+          .toSet()
+          .toList(growable: false),
+    ),
+  );
+
+  void setEnhancementProvider(SwarEnhancementProvider value) =>
+      _save(_settings.copyWith(enhancementProvider: value));
+
+  void setProviderEndpoint(String value) =>
+      _save(_settings.copyWith(providerEndpoint: value.trim()));
+
+  void setProviderModel(String value) =>
+      _save(_settings.copyWith(providerModel: value.trim()));
+
+  /// Secrets deliberately live only for the current app process.
+  void setProviderApiKey(String value) {
+    _providerApiKey = value.trim();
+    notifyListeners();
+  }
 
   void _save(SwarSettings settings) {
     _settings = settings;

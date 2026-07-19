@@ -82,6 +82,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   InsightsSnapshot dco_decode_insights_snapshot(dynamic raw);
 
   @protected
+  List<String> dco_decode_list_String(dynamic raw);
+
+  @protected
   List<MicrophoneDevice> dco_decode_list_microphone_device(dynamic raw);
 
   @protected
@@ -198,6 +201,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   InsightsSnapshot sse_decode_insights_snapshot(SseDeserializer deserializer);
+
+  @protected
+  List<String> sse_decode_list_String(SseDeserializer deserializer);
 
   @protected
   List<MicrophoneDevice> sse_decode_list_microphone_device(
@@ -343,6 +349,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
     InsightsSnapshot self,
     SseSerializer serializer,
   );
+
+  @protected
+  void sse_encode_list_String(List<String> self, SseSerializer serializer);
 
   @protected
   void sse_encode_list_microphone_device(

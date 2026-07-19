@@ -32,6 +32,11 @@ class NativeSettings {
   final bool learnFromEdits;
   final String modelPath;
   final String microphoneId;
+  final String shortcutKey;
+  final List<String> excludedApplications;
+  final String enhancementProvider;
+  final String providerEndpoint;
+  final String providerModel;
 
   const NativeSettings({
     required this.language,
@@ -50,6 +55,11 @@ class NativeSettings {
     required this.learnFromEdits,
     required this.modelPath,
     required this.microphoneId,
+    required this.shortcutKey,
+    required this.excludedApplications,
+    required this.enhancementProvider,
+    required this.providerEndpoint,
+    required this.providerModel,
   });
 
   static Future<NativeSettings> default_() =>
@@ -72,7 +82,12 @@ class NativeSettings {
       restoreClipboard.hashCode ^
       learnFromEdits.hashCode ^
       modelPath.hashCode ^
-      microphoneId.hashCode;
+      microphoneId.hashCode ^
+      shortcutKey.hashCode ^
+      excludedApplications.hashCode ^
+      enhancementProvider.hashCode ^
+      providerEndpoint.hashCode ^
+      providerModel.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -94,5 +109,10 @@ class NativeSettings {
           restoreClipboard == other.restoreClipboard &&
           learnFromEdits == other.learnFromEdits &&
           modelPath == other.modelPath &&
-          microphoneId == other.microphoneId;
+          microphoneId == other.microphoneId &&
+          shortcutKey == other.shortcutKey &&
+          excludedApplications == other.excludedApplications &&
+          enhancementProvider == other.enhancementProvider &&
+          providerEndpoint == other.providerEndpoint &&
+          providerModel == other.providerModel;
 }

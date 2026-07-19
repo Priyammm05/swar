@@ -31,6 +31,18 @@ Future<InsightsSnapshot> loadInsightsSnapshot() =>
 Future<void> clearLocalHistory() =>
     RustLib.instance.api.crateApiHistoryClearLocalHistory();
 
+/// Applies an explicit user correction and optionally feeds the local learning
+/// loop. The original audio is never retained.
+Future<bool> correctDictation({
+  required String id,
+  required String correctedText,
+  required bool learningOptedIn,
+}) => RustLib.instance.api.crateApiHistoryCorrectDictation(
+  id: id,
+  correctedText: correctedText,
+  learningOptedIn: learningOptedIn,
+);
+
 class HistoryPage {
   final int totalCount;
   final List<StoredDictation> records;

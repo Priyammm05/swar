@@ -11,6 +11,7 @@ import 'package:swar_desktop/dictation/presentation/dictation_session_view_model
 import 'package:swar_desktop/insights/presentation/insights_page.dart';
 import 'package:swar_desktop/insights/domain/insights_repository.dart';
 import 'package:swar_desktop/settings/presentation/settings_view_model.dart';
+import 'package:swar_desktop/settings/presentation/personalization_view_model.dart';
 
 /// Router Composition. Application Layer.
 GoRouter createSwarRouter({
@@ -19,6 +20,7 @@ GoRouter createSwarRouter({
   required SettingsViewModel settingsViewModel,
   required CoreDiagnosticsGateway diagnosticsGateway,
   required DictationSessionViewModel dictationSessionViewModel,
+  required PersonalizationViewModel personalizationViewModel,
 }) {
   return GoRouter(
     initialLocation: SwarRoutes.insights,
@@ -30,6 +32,7 @@ GoRouter createSwarRouter({
             settingsViewModel: settingsViewModel,
             diagnosticsGateway: diagnosticsGateway,
             dictationSessionViewModel: dictationSessionViewModel,
+            personalizationViewModel: personalizationViewModel,
           );
         },
         branches: [
@@ -50,6 +53,7 @@ GoRouter createSwarRouter({
                   return DictationPage(
                     repository: dictationRepository,
                     sessionViewModel: dictationSessionViewModel,
+                    settingsViewModel: settingsViewModel,
                   );
                 },
               ),

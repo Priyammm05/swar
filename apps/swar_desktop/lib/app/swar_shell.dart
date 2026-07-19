@@ -6,6 +6,7 @@ import 'package:swar_desktop/dictation/domain/dictation_engine_gateway.dart';
 import 'package:swar_desktop/dictation/presentation/dictation_session_view_model.dart';
 import 'package:swar_desktop/settings/presentation/settings_page.dart';
 import 'package:swar_desktop/settings/presentation/settings_view_model.dart';
+import 'package:swar_desktop/settings/presentation/personalization_view_model.dart';
 
 const _desktopNavigationBreakpoint = 760.0;
 
@@ -16,6 +17,7 @@ final class SwarShell extends StatelessWidget {
     required this.settingsViewModel,
     required this.diagnosticsGateway,
     required this.dictationSessionViewModel,
+    required this.personalizationViewModel,
     super.key,
   });
 
@@ -23,6 +25,7 @@ final class SwarShell extends StatelessWidget {
   final SettingsViewModel settingsViewModel;
   final CoreDiagnosticsGateway diagnosticsGateway;
   final DictationSessionViewModel dictationSessionViewModel;
+  final PersonalizationViewModel personalizationViewModel;
 
   @override
   Widget build(BuildContext context) {
@@ -69,6 +72,7 @@ final class SwarShell extends StatelessWidget {
         viewModel: settingsViewModel,
         diagnosticsGateway: diagnosticsGateway,
         dictationSessionViewModel: dictationSessionViewModel,
+        personalizationViewModel: personalizationViewModel,
       ),
     );
   }

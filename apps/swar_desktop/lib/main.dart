@@ -10,6 +10,7 @@ import 'package:swar_desktop/generated_bridge/api/history.dart';
 import 'package:swar_desktop/generated_bridge/frb_generated.dart';
 import 'package:swar_desktop/insights/data/rust_insights_repository.dart';
 import 'package:swar_desktop/settings/data/rust_settings_repository.dart';
+import 'package:swar_desktop/settings/data/rust_personalization_repository.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -24,6 +25,7 @@ Future<void> main() async {
       dictationEngineGateway: RustDictationEngineGateway(),
       desktopShortcutGateway: PlatformDesktopShortcutGateway(),
       settingsRepository: RustSettingsRepository(),
+      personalizationRepository: RustPersonalizationRepository(),
     ),
   );
 }
