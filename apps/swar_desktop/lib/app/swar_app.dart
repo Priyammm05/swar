@@ -208,6 +208,8 @@ final class _SwarAppState extends State<SwarApp> {
       debugShowCheckedModeBanner: false,
       title: 'swar',
       theme: SwarTheme.light(),
+      darkTheme: SwarTheme.dark(),
+      themeMode: ThemeMode.system,
       routerConfig: _router,
       builder: (context, child) => RepaintBoundary(
         key: const Key('swar-app-capture-boundary'),

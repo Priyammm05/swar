@@ -5,6 +5,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:swar_desktop/app/swar_app.dart';
+import 'package:swar_desktop/design_system/swar_components.dart';
 import 'package:swar_desktop/diagnostics/domain/core_diagnostics_gateway.dart';
 import 'package:swar_desktop/dictation/data/fake_dictation_history_repository.dart';
 import 'package:swar_desktop/dictation/domain/dictation_engine_gateway.dart';
@@ -130,29 +131,25 @@ void main() {
 
     await tester.tap(find.byKey(const Key('top-settings-nav')));
     await tester.pumpAndSettle();
-    expect(find.byKey(const Key('settings-dialog')), findsOneWidget);
     expect(find.byKey(const Key('general-settings-page')), findsOneWidget);
     await tester.tap(find.byKey(const Key('settings-system-nav')));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('launch-at-login-setting')));
+
+    final launchToggle = find.descendant(
+      of: find.byKey(const Key('launch-at-login-setting')),
+      matching: find.byType(SwarToggle),
+    );
+    await tester.tap(launchToggle);
     await tester.pump();
 
-    await tester.tap(find.byKey(const Key('settings-close-button')));
-    await tester.pumpAndSettle();
+    // Leave Settings and return; the routed branch keeps its state, so the
+    // change must persist without a modal to reopen.
     await tester.tap(find.byKey(const Key('top-insights-nav')));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('top-settings-nav')));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('settings-system-nav')));
-    await tester.pumpAndSettle();
 
-    final setting = tester.widget<SwitchListTile>(
-      find.descendant(
-        of: find.byKey(const Key('launch-at-login-setting')),
-        matching: find.byType(SwitchListTile),
-      ),
-    );
-    expect(setting.value, isTrue);
+    expect(tester.widget<SwarToggle>(launchToggle).value, isTrue);
   });
 
   testWidgets('settings test dictation explains the missing local model', (
@@ -176,8 +173,7 @@ void main() {
           )
           .first,
     );
-    final button = tester.widget<ButtonStyleButton>(testButton);
-    button.onPressed!.call();
+    await tester.tap(testButton);
     await tester.pump();
 
     expect(
@@ -243,24 +239,41 @@ void main() {
           ),
         ),
       );
-      await tester.pump();
+      await tester.pumpAndSettle();
 
-      await tester.tap(find.byKey(const Key('global-dictation-control')));
-      await tester.pump();
-      expect(find.text('Stop'), findsOneWidget);
-
-      await tester.tap(find.byKey(const Key('global-dictation-control')));
-      await tester.pump();
-      expect(find.text('Working'), findsOneWidget);
-      final workingButton = tester.widget<FilledButton>(
-        find.byKey(const Key('global-dictation-control')),
+      // Dictation is exercised through the Settings "Test dictation" control now
+      // that the in-window Dictate button is gone.
+      await tester.tap(find.byKey(const Key('top-settings-nav')));
+      await tester.pumpAndSettle();
+      final testButton = find.byKey(const Key('test-dictation-button'));
+      await tester.scrollUntilVisible(
+        testButton,
+        260,
+        scrollable: find
+            .descendant(
+              of: find.byKey(const Key('general-settings-scroll')),
+              matching: find.byType(Scrollable),
+            )
+            .first,
       );
-      expect(workingButton.onPressed, isNull);
+
+      await tester.tap(testButton);
+      await tester.pump();
+      expect(find.text('Stop and transcribe'), findsOneWidget);
+
+      await tester.tap(testButton);
+      await tester.pump();
+      expect(engine.finishCalls, 1);
+
+      // While the finish is in flight the control is locked: tapping again must
+      // not start or finish a second time.
+      await tester.tap(testButton, warnIfMissed: false);
+      await tester.pump();
       expect(engine.finishCalls, 1);
 
       engine.complete();
       await tester.pump();
-      expect(find.text('Dictate'), findsOneWidget);
+      expect(find.text('Start test'), findsOneWidget);
       expect(engine.finishCalls, 1);
     },
   );

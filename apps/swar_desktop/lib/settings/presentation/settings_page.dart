@@ -1,5 +1,9 @@
+// apps/swar_desktop/lib/settings/presentation/settings_page.dart
+
 import 'package:flutter/material.dart';
-import 'package:swar_desktop/design_system/swar_colors.dart';
+import 'package:swar_desktop/design_system/swar_components.dart';
+import 'package:swar_desktop/design_system/swar_tokens.dart';
+import 'package:swar_desktop/design_system/swar_typography.dart';
 import 'package:swar_desktop/diagnostics/domain/core_diagnostics_gateway.dart';
 import 'package:swar_desktop/diagnostics/presentation/core_diagnostics_card.dart';
 import 'package:swar_desktop/dictation/domain/dictation_engine_gateway.dart';
@@ -10,9 +14,11 @@ import 'package:swar_desktop/settings/presentation/personalization_view_model.da
 
 enum SettingsSection { general, system }
 
-/// Settings stay close to the current task instead of becoming a destination.
-final class SwarSettingsDialog extends StatefulWidget {
-  const SwarSettingsDialog({
+/// Settings — a full screen (spec §8). The shared top nav sits above (from the
+/// shell); this page renders the serif title, the General/System sub-toggle, and
+/// the grouped setting cards. Presentation Layer.
+final class SwarSettingsPage extends StatefulWidget {
+  const SwarSettingsPage({
     required this.viewModel,
     required this.diagnosticsGateway,
     required this.dictationSessionViewModel,
@@ -26,156 +32,87 @@ final class SwarSettingsDialog extends StatefulWidget {
   final PersonalizationViewModel personalizationViewModel;
 
   @override
-  State<SwarSettingsDialog> createState() => _SwarSettingsDialogState();
+  State<SwarSettingsPage> createState() => _SwarSettingsPageState();
 }
 
-final class _SwarSettingsDialogState extends State<SwarSettingsDialog> {
+final class _SwarSettingsPageState extends State<SwarSettingsPage> {
   SettingsSection _section = SettingsSection.general;
 
+  void _select(SettingsSection section) => setState(() => _section = section);
+
   @override
   Widget build(BuildContext context) {
-    final screen = MediaQuery.sizeOf(context);
-    final compact = screen.width < 820;
-    return Dialog(
-      key: const Key('settings-dialog'),
-      insetPadding: EdgeInsets.all(compact ? 12 : 24),
-      clipBehavior: Clip.antiAlias,
-      child: ConstrainedBox(
-        constraints: BoxConstraints(
-          maxWidth: 1240,
-          maxHeight: screen.height * 0.9,
-          minHeight: compact ? 520 : 650,
-        ),
-        child: compact ? _buildCompact(context) : _buildDesktop(context),
-      ),
-    );
-  }
-
-  Widget _buildDesktop(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        SizedBox(
-          width: 248,
-          child: _SettingsNavigation(section: _section, onSelected: _select),
-        ),
-        Expanded(
-          child: _SettingsContent(section: _section, widget: widget),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildCompact(BuildContext context) {
-    return Column(
-      children: [
-        Container(
-          padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
-          decoration: const BoxDecoration(
-            color: SwarColors.chrome,
-            border: Border(bottom: BorderSide(color: SwarColors.border)),
+    return ListenableBuilder(
+      listenable: Listenable.merge([
+        widget.viewModel,
+        widget.dictationSessionViewModel,
+        widget.personalizationViewModel,
+      ]),
+      builder: (context, _) {
+        return switch (_section) {
+          SettingsSection.general => _GeneralSettings(
+            key: const Key('general-settings-page'),
+            section: _section,
+            onSection: _select,
+            viewModel: widget.viewModel,
+            sessionViewModel: widget.dictationSessionViewModel,
+            personalizationViewModel: widget.personalizationViewModel,
           ),
-          child: Row(
-            children: [
-              Expanded(
-                child: SegmentedButton<SettingsSection>(
-                  key: const Key('settings-section-control'),
-                  segments: const [
-                    ButtonSegment(
-                      value: SettingsSection.general,
-                      icon: Icon(Icons.tune_rounded),
-                      label: Text('General'),
-                    ),
-                    ButtonSegment(
-                      value: SettingsSection.system,
-                      icon: Icon(Icons.computer_rounded),
-                      label: Text('System', key: Key('settings-system-nav')),
-                    ),
-                  ],
-                  selected: {_section},
-                  onSelectionChanged: (value) => _select(value.single),
-                ),
-              ),
-              const SizedBox(width: 8),
-              IconButton(
-                key: const Key('settings-close-button'),
-                tooltip: 'Close settings',
-                onPressed: () => Navigator.of(context).pop(),
-                icon: const Icon(Icons.close_rounded),
-              ),
-            ],
+          SettingsSection.system => _SystemSettings(
+            key: const Key('system-settings-page'),
+            section: _section,
+            onSection: _select,
+            viewModel: widget.viewModel,
+            diagnosticsGateway: widget.diagnosticsGateway,
+            personalizationViewModel: widget.personalizationViewModel,
           ),
-        ),
-        Expanded(
-          child: _SettingsContent(section: _section, widget: widget),
-        ),
-      ],
+        };
+      },
     );
-  }
-
-  void _select(SettingsSection section) {
-    setState(() => _section = section);
   }
 }
 
-final class _SettingsNavigation extends StatelessWidget {
-  const _SettingsNavigation({required this.section, required this.onSelected});
+/// Page scaffold: centered 960px column, serif title + sub-toggle, then content.
+final class _SettingsScaffold extends StatelessWidget {
+  const _SettingsScaffold({
+    required this.title,
+    required this.section,
+    required this.onSection,
+    required this.children,
+    required this.scrollKey,
+  });
 
+  final String title;
   final SettingsSection section;
-  final ValueChanged<SettingsSection> onSelected;
+  final ValueChanged<SettingsSection> onSection;
+  final List<Widget> children;
+  final Key scrollKey;
 
   @override
   Widget build(BuildContext context) {
-    return ColoredBox(
-      color: SwarColors.chrome,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(18, 24, 18, 20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+    final t = context.tokens;
+    return Align(
+      alignment: Alignment.topCenter,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 1008),
+        child: ListView(
+          key: scrollKey,
+          padding: const EdgeInsets.fromLTRB(32, 8, 32, 48),
           children: [
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 10),
-              child: Text(
-                'SETTINGS',
-                style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                  color: SwarColors.mutedInk,
-                  letterSpacing: 1.4,
-                ),
-              ),
-            ),
-            const SizedBox(height: 26),
-            _SettingsNavButton(
-              key: const Key('settings-general-nav'),
-              icon: Icons.tune_rounded,
-              label: 'General',
-              selected: section == SettingsSection.general,
-              onPressed: () => onSelected(SettingsSection.general),
-            ),
-            const SizedBox(height: 8),
-            _SettingsNavButton(
-              key: const Key('settings-system-nav'),
-              icon: Icons.computer_rounded,
-              label: 'System',
-              selected: section == SettingsSection.system,
-              onPressed: () => onSelected(SettingsSection.system),
-            ),
-            const Spacer(),
             Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                const Expanded(
+                Expanded(
                   child: Text(
-                    'Swar preview',
-                    style: TextStyle(color: SwarColors.mutedInk),
+                    title,
+                    style: SwarType.serifTitle.copyWith(color: t.ink),
                   ),
                 ),
-                IconButton(
-                  key: const Key('settings-close-button'),
-                  tooltip: 'Close settings',
-                  onPressed: () => Navigator.of(context).pop(),
-                  icon: const Icon(Icons.close_rounded),
-                ),
+                _SubToggle(section: section, onSection: onSection),
               ],
             ),
+            const SizedBox(height: 26),
+            ...children,
           ],
         ),
       ),
@@ -183,78 +120,97 @@ final class _SettingsNavigation extends StatelessWidget {
   }
 }
 
-final class _SettingsNavButton extends StatelessWidget {
-  const _SettingsNavButton({
-    required this.icon,
+/// General/System sub-toggle — active segment white with a border (§8.1).
+final class _SubToggle extends StatelessWidget {
+  const _SubToggle({required this.section, required this.onSection});
+
+  final SettingsSection section;
+  final ValueChanged<SettingsSection> onSection;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = context.tokens;
+    return Container(
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: t.surfaceSunken,
+        borderRadius: BorderRadius.circular(SwarRadii.pill),
+        border: Border.all(color: t.border, width: 0.5),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _SubSegment(
+            key: const Key('settings-general-nav'),
+            label: 'General',
+            active: section == SettingsSection.general,
+            onTap: () => onSection(SettingsSection.general),
+          ),
+          _SubSegment(
+            key: const Key('settings-system-nav'),
+            label: 'System',
+            active: section == SettingsSection.system,
+            onTap: () => onSection(SettingsSection.system),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+final class _SubSegment extends StatelessWidget {
+  const _SubSegment({
     required this.label,
-    required this.selected,
-    required this.onPressed,
+    required this.active,
+    required this.onTap,
     super.key,
   });
 
-  final IconData icon;
   final String label;
-  final bool selected;
-  final VoidCallback onPressed;
+  final bool active;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return TextButton.icon(
-      onPressed: onPressed,
-      style: TextButton.styleFrom(
-        foregroundColor: SwarColors.ink,
-        backgroundColor: selected ? SwarColors.canvas : Colors.transparent,
-        alignment: Alignment.centerLeft,
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 17),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      ),
-      icon: Icon(icon, size: 23),
-      label: Text(
-        label,
-        style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
+    final t = context.tokens;
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
+          decoration: BoxDecoration(
+            color: active ? t.surfaceCard : Colors.transparent,
+            borderRadius: BorderRadius.circular(SwarRadii.pill),
+            border: active ? Border.all(color: t.border, width: 0.5) : null,
+          ),
+          child: Text(
+            label,
+            style: SwarType.nav.copyWith(
+              color: active ? t.ink : t.inkSecondary,
+            ),
+          ),
+        ),
       ),
     );
   }
 }
 
-final class _SettingsContent extends StatelessWidget {
-  const _SettingsContent({required this.section, required this.widget});
-
-  final SettingsSection section;
-  final SwarSettingsDialog widget;
-
-  @override
-  Widget build(BuildContext context) {
-    return ColoredBox(
-      color: SwarColors.surface,
-      child: ListenableBuilder(
-        listenable: widget.viewModel,
-        builder: (context, _) {
-          return switch (section) {
-            SettingsSection.general => _GeneralSettings(
-              viewModel: widget.viewModel,
-              sessionViewModel: widget.dictationSessionViewModel,
-              personalizationViewModel: widget.personalizationViewModel,
-            ),
-            SettingsSection.system => _SystemSettings(
-              viewModel: widget.viewModel,
-              diagnosticsGateway: widget.diagnosticsGateway,
-              personalizationViewModel: widget.personalizationViewModel,
-            ),
-          };
-        },
-      ),
-    );
-  }
-}
+// --- General ---
 
 final class _GeneralSettings extends StatelessWidget {
   const _GeneralSettings({
+    required this.section,
+    required this.onSection,
     required this.viewModel,
     required this.sessionViewModel,
     required this.personalizationViewModel,
+    super.key,
   });
 
+  final SettingsSection section;
+  final ValueChanged<SettingsSection> onSection;
   final SettingsViewModel viewModel;
   final DictationSessionViewModel sessionViewModel;
   final PersonalizationViewModel personalizationViewModel;
@@ -262,48 +218,34 @@ final class _GeneralSettings extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final settings = viewModel.settings;
-    return _SettingsScrollView(
-      key: const Key('general-settings-page'),
+    final modelInstalled = sessionViewModel.recommendedModelStatus.installed;
+    return _SettingsScaffold(
       title: 'General',
+      section: section,
+      onSection: onSection,
+      scrollKey: const Key('general-settings-scroll'),
       children: [
-        _SettingsGroup(
+        _GroupCard(
           children: [
             _SettingRow(
               title: 'Shortcut',
-              subtitle:
+              description:
                   'Hold and release to finish. Double-tap to lock recording.',
-              trailing: SizedBox(
-                width: 180,
-                child: DropdownButtonFormField<SwarShortcutKey>(
-                  key: const Key('shortcut-setting'),
-                  isExpanded: true,
-                  initialValue: settings.shortcutKey,
-                  decoration: const InputDecoration(
-                    border: OutlineInputBorder(),
-                    contentPadding: EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 12,
-                    ),
-                  ),
-                  items: const [
-                    DropdownMenuItem(
-                      value: SwarShortcutKey.option,
-                      child: Text('Option ⌥'),
-                    ),
-                    DropdownMenuItem(
-                      value: SwarShortcutKey.control,
-                      child: Text('Control ⌃'),
-                    ),
-                  ],
-                  onChanged: (value) {
-                    if (value != null) viewModel.setShortcutKey(value);
-                  },
-                ),
+              trailing: _MenuDropdown<SwarShortcutKey>(
+                fieldKey: const Key('shortcut-setting'),
+                value: settings.shortcutKey,
+                minWidth: 150,
+                labelFor: (value) => switch (value) {
+                  SwarShortcutKey.option => 'Option ⌥',
+                  SwarShortcutKey.control => 'Control ⌃',
+                },
+                items: SwarShortcutKey.values,
+                onChanged: viewModel.setShortcutKey,
               ),
             ),
             _SettingRow(
               title: 'Microphone',
-              subtitle:
+              description:
                   'Swar uses the built-in microphone unless you choose another.',
               trailing: _MicrophoneSelector(
                 viewModel: viewModel,
@@ -312,107 +254,76 @@ final class _GeneralSettings extends StatelessWidget {
             ),
             _SettingRow(
               title: 'Dictation language',
-              subtitle:
+              description:
                   'Auto detect handles English, Hindi, and Hinglish locally.',
-              trailing: SizedBox(
-                width: 190,
-                child: DropdownButtonFormField<SwarLanguagePreference>(
-                  key: const Key('language-setting'),
-                  isExpanded: true,
-                  initialValue: settings.language,
-                  decoration: const InputDecoration(
-                    border: OutlineInputBorder(),
-                    contentPadding: EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 12,
-                    ),
-                  ),
-                  items: const [
-                    DropdownMenuItem(
-                      value: SwarLanguagePreference.automatic,
-                      child: Text('Auto detect (recommended)'),
-                    ),
-                    DropdownMenuItem(
-                      value: SwarLanguagePreference.english,
-                      child: Text('English'),
-                    ),
-                    DropdownMenuItem(
-                      value: SwarLanguagePreference.hindi,
-                      child: Text('Hindi'),
-                    ),
-                    DropdownMenuItem(
-                      value: SwarLanguagePreference.hinglish,
-                      child: Text('Hinglish'),
-                    ),
-                  ],
-                  onChanged: (value) {
-                    if (value != null) viewModel.setLanguage(value);
-                  },
-                ),
+              trailing: _MenuDropdown<SwarLanguagePreference>(
+                fieldKey: const Key('language-setting'),
+                value: settings.language,
+                minWidth: 160,
+                labelFor: (value) => switch (value) {
+                  SwarLanguagePreference.automatic => 'Auto detect',
+                  SwarLanguagePreference.english => 'English',
+                  SwarLanguagePreference.hindi => 'Hindi',
+                  SwarLanguagePreference.hinglish => 'Hinglish',
+                },
+                items: SwarLanguagePreference.values,
+                onChanged: viewModel.setLanguage,
               ),
             ),
             _SettingRow(
               title: 'Writing mode',
-              subtitle: 'Choose how closely Swar shapes the words you speak.',
-              trailing: SegmentedButton<SwarWritingMode>(
+              description:
+                  'Choose how closely Swar shapes the words you speak.',
+              trailing: SwarSegmented<SwarWritingMode>(
                 key: const Key('writing-mode-setting'),
+                showCheckOnSelected: true,
+                selected: settings.writingMode,
+                onChanged: viewModel.setWritingMode,
                 segments: const [
-                  ButtonSegment(value: SwarWritingMode.raw, label: Text('Raw')),
-                  ButtonSegment(
-                    value: SwarWritingMode.clean,
-                    label: Text('Clean'),
-                  ),
-                  ButtonSegment(
-                    value: SwarWritingMode.intent,
-                    label: Text('Intent'),
-                  ),
+                  SwarSegment(value: SwarWritingMode.raw, label: 'Raw'),
+                  SwarSegment(value: SwarWritingMode.clean, label: 'Clean'),
+                  SwarSegment(value: SwarWritingMode.intent, label: 'Intent'),
                 ],
-                selected: {settings.writingMode},
-                onSelectionChanged: (value) {
-                  viewModel.setWritingMode(value.single);
-                },
               ),
             ),
             _SettingRow(
               title: 'Offline model',
-              subtitle: settings.modelPath.isEmpty
-                  ? 'Install the private multilingual voice model once.'
-                  : settings.modelPath,
-              trailing: FilledButton.icon(
-                key: const Key('install-offline-model-button'),
-                onPressed: sessionViewModel.isInstallingModel
-                    ? null
-                    : () async {
-                        final path = await sessionViewModel
-                            .installRecommendedModel();
-                        if (path != null) viewModel.setModelPath(path);
-                      },
-                icon: sessionViewModel.isInstallingModel
-                    ? const SizedBox.square(
-                        dimension: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2),
+              descriptionWidget: Text(
+                settings.modelPath.isEmpty
+                    ? 'Install the private multilingual voice model once.'
+                    : _shortenPath(settings.modelPath),
+                style: settings.modelPath.isEmpty
+                    ? SwarType.description.copyWith(
+                        color: context.tokens.inkSecondary,
                       )
-                    : Icon(
-                        sessionViewModel.recommendedModelStatus.installed
-                            ? Icons.check_circle_outline_rounded
-                            : Icons.download_rounded,
-                      ),
-                label: Text(
-                  sessionViewModel.recommendedModelStatus.installed
-                      ? 'Use installed model'
-                      : 'Install model',
-                ),
+                    : const TextStyle(
+                        fontFamily: 'monospace',
+                        fontSize: 12,
+                        height: 1.4,
+                      ).copyWith(color: context.tokens.inkSecondary),
+              ),
+              trailing: SwarPrimaryButton(
+                key: const Key('install-offline-model-button'),
+                label: modelInstalled ? 'Use installed model' : 'Install model',
+                icon: modelInstalled
+                    ? Icons.check_circle_outline_rounded
+                    : Icons.download_rounded,
+                busy: sessionViewModel.isInstallingModel,
+                onPressed: () async {
+                  final path = await sessionViewModel.installRecommendedModel();
+                  if (path != null) viewModel.setModelPath(path);
+                },
               ),
             ),
             _SettingRow(
               title: 'Personal vocabulary',
-              subtitle:
+              description:
                   '${personalizationViewModel.entries.length} local pronunciation and spelling preferences.',
               trailing: _VocabularyButton(viewModel: personalizationViewModel),
             ),
             _SettingRow(
               title: 'Optional cleanup provider',
-              subtitle:
+              description:
                   settings.enhancementProvider == SwarEnhancementProvider.local
                   ? 'Local processing only. No text leaves this device.'
                   : 'Opt-in OpenAI-compatible provider. The key is never saved.',
@@ -420,50 +331,71 @@ final class _GeneralSettings extends StatelessWidget {
             ),
           ],
         ),
-        const SizedBox(height: 24),
-        ListenableBuilder(
-          listenable: sessionViewModel,
-          builder: (context, _) => _SettingsGroup(
-            children: [
-              _SettingRow(
-                title: 'Test dictation',
-                subtitle:
-                    sessionViewModel.message ?? 'Audio stays on this device.',
-                trailing: FilledButton.icon(
-                  key: const Key('test-dictation-button'),
-                  onPressed: sessionViewModel.isProcessing
-                      ? null
-                      : sessionViewModel.isRecording
-                      ? sessionViewModel.finish
-                      : () => sessionViewModel.start(
-                          DictationEngineConfig(
-                            modelPath: settings.modelPath,
-                            microphoneId: settings.microphoneId,
-                            language: settings.language.name,
-                            writingMode: settings.writingMode.name,
-                            pasteAutomatically: settings.pasteAutomatically,
-                            restoreClipboard: settings.restoreClipboard,
-                            keepModelsWarm: settings.keepModelsWarm,
-                            enhancementProvider:
-                                settings.enhancementProvider.name,
-                            providerEndpoint: settings.providerEndpoint,
-                            providerModel: settings.providerModel,
-                            providerApiKey: viewModel.providerApiKey,
-                          ),
+        const SizedBox(height: 14),
+        _GroupCard(
+          children: [
+            _SettingRow(
+              title: 'Test dictation',
+              descriptionWidget: _TestStatus(message: sessionViewModel.message),
+              trailing: SwarPrimaryButton(
+                key: const Key('test-dictation-button'),
+                label: sessionViewModel.isRecording
+                    ? 'Stop and transcribe'
+                    : 'Start test',
+                icon: sessionViewModel.isRecording
+                    ? Icons.stop_rounded
+                    : Icons.mic_none_rounded,
+                onPressed: sessionViewModel.isProcessing
+                    ? null
+                    : sessionViewModel.isRecording
+                    ? sessionViewModel.finish
+                    : () => sessionViewModel.start(
+                        DictationEngineConfig(
+                          modelPath: settings.modelPath,
+                          microphoneId: settings.microphoneId,
+                          language: settings.language.name,
+                          writingMode: settings.writingMode.name,
+                          pasteAutomatically: settings.pasteAutomatically,
+                          restoreClipboard: settings.restoreClipboard,
+                          keepModelsWarm: settings.keepModelsWarm,
+                          enhancementProvider:
+                              settings.enhancementProvider.name,
+                          providerEndpoint: settings.providerEndpoint,
+                          providerModel: settings.providerModel,
+                          providerApiKey: viewModel.providerApiKey,
                         ),
-                  icon: Icon(
-                    sessionViewModel.isRecording
-                        ? Icons.stop_rounded
-                        : Icons.mic_none_rounded,
-                  ),
-                  label: Text(
-                    sessionViewModel.isRecording
-                        ? 'Stop and transcribe'
-                        : 'Start test',
-                  ),
-                ),
+                      ),
               ),
-            ],
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+final class _TestStatus extends StatelessWidget {
+  const _TestStatus({required this.message});
+
+  final String? message;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = context.tokens;
+    final pasted = message == null;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(
+          pasted ? Icons.check_circle_rounded : Icons.info_outline_rounded,
+          size: 14,
+          color: pasted ? t.spruce : t.inkSecondary,
+        ),
+        const SizedBox(width: 6),
+        Flexible(
+          child: Text(
+            message ?? 'Dictation pasted.',
+            style: SwarType.description.copyWith(color: t.inkSecondary),
           ),
         ),
       ],
@@ -471,13 +403,20 @@ final class _GeneralSettings extends StatelessWidget {
   }
 }
 
+// --- System ---
+
 final class _SystemSettings extends StatelessWidget {
   const _SystemSettings({
+    required this.section,
+    required this.onSection,
     required this.viewModel,
     required this.diagnosticsGateway,
     required this.personalizationViewModel,
+    super.key,
   });
 
+  final SettingsSection section;
+  final ValueChanged<SettingsSection> onSection;
   final SettingsViewModel viewModel;
   final CoreDiagnosticsGateway diagnosticsGateway;
   final PersonalizationViewModel personalizationViewModel;
@@ -485,179 +424,331 @@ final class _SystemSettings extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final settings = viewModel.settings;
-    return _SettingsScrollView(
-      key: const Key('system-settings-page'),
+    return _SettingsScaffold(
       title: 'System',
+      section: section,
+      onSection: onSection,
+      scrollKey: const Key('system-settings-scroll'),
       children: [
-        Text('App settings', style: Theme.of(context).textTheme.titleMedium),
-        const SizedBox(height: 14),
-        _SettingsGroup(
+        const _GroupLabel('App settings'),
+        _GroupCard(
           children: [
-            _ToggleSettingRow(
-              key: const Key('launch-at-login-setting'),
+            _ToggleRow(
+              rowKey: const Key('launch-at-login-setting'),
               title: 'Launch app at login',
               value: settings.launchAtLogin,
-              onChanged: (value) {
-                viewModel.setLaunchAtLogin(enabled: value);
-              },
+              onChanged: (value) => viewModel.setLaunchAtLogin(enabled: value),
             ),
             _SettingRow(
               title: 'Export learning examples',
-              subtitle:
+              description:
                   personalizationViewModel.message ??
                   'Create a local JSONL file only when you choose to export.',
-              trailing: OutlinedButton(
+              trailing: SwarGhostButton(
                 key: const Key('export-learning-examples'),
+                label: 'Export',
                 onPressed: personalizationViewModel.isLoading
                     ? null
                     : personalizationViewModel.export,
-                child: const Text('Export'),
               ),
             ),
-            _ToggleSettingRow(
-              key: const Key('show-swar-bar-setting'),
-              title: 'Show Swar Bar at all times',
+            _ToggleRow(
+              rowKey: const Key('show-swar-bar-setting'),
+              title: 'Show Swar bar at all times',
               value: settings.showSwarBar,
-              onChanged: (value) {
-                viewModel.setShowSwarBar(enabled: value);
-              },
+              onChanged: (value) => viewModel.setShowSwarBar(enabled: value),
             ),
-            _ToggleSettingRow(
-              key: const Key('show-in-dock-setting'),
+            _ToggleRow(
+              rowKey: const Key('show-in-dock-setting'),
               title: 'Show app in Dock or taskbar',
               value: settings.showInDock,
-              onChanged: (value) {
-                viewModel.setShowInDock(enabled: value);
-              },
+              onChanged: (value) => viewModel.setShowInDock(enabled: value),
             ),
-            _ToggleSettingRow(
-              key: const Key('keep-models-warm-setting'),
+            _ToggleRow(
+              rowKey: const Key('keep-models-warm-setting'),
               title: 'Keep voice model ready',
-              subtitle: 'Uses more memory, but starts dictation faster.',
+              description: 'Uses more memory, but starts dictation faster.',
               value: settings.keepModelsWarm,
-              onChanged: (value) {
-                viewModel.setKeepModelsWarm(enabled: value);
-              },
+              onChanged: (value) => viewModel.setKeepModelsWarm(enabled: value),
             ),
-            _ToggleSettingRow(
-              key: const Key('learn-from-edits-setting'),
+            _ToggleRow(
+              rowKey: const Key('learn-from-edits-setting'),
               title: 'Learn from my edits',
-              subtitle:
+              description:
                   'Learn vocabulary and writing preferences locally on this device.',
               value: settings.learnFromEdits,
-              onChanged: (value) {
-                viewModel.setLearnFromEdits(enabled: value);
-              },
+              onChanged: (value) => viewModel.setLearnFromEdits(enabled: value),
             ),
             _SettingRow(
               title: 'Keep history for',
-              subtitle:
+              description:
                   'Your dictation history stays on this machine. Older entries are removed automatically.',
-              trailing: SizedBox(
-                width: 180,
-                child: DropdownButtonFormField<int>(
-                  key: const Key('history-retention-setting'),
-                  isExpanded: true,
-                  initialValue: settings.historyRetentionDays,
-                  decoration: const InputDecoration(
-                    border: OutlineInputBorder(),
-                    contentPadding: EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 12,
-                    ),
-                  ),
-                  items: const [
-                    DropdownMenuItem(value: 30, child: Text('30 days')),
-                    DropdownMenuItem(value: 90, child: Text('90 days')),
-                    DropdownMenuItem(value: 180, child: Text('180 days')),
-                    DropdownMenuItem(value: 365, child: Text('1 year')),
-                  ],
-                  onChanged: (value) {
-                    if (value != null) {
-                      viewModel.setHistoryRetentionDays(value);
-                    }
-                  },
-                ),
+              trailing: _MenuDropdown<int>(
+                fieldKey: const Key('history-retention-setting'),
+                value: settings.historyRetentionDays,
+                minWidth: 150,
+                labelFor: (value) => value == 365 ? '1 year' : '$value days',
+                items: const [30, 90, 180, 365],
+                onChanged: viewModel.setHistoryRetentionDays,
               ),
             ),
             _SettingRow(
               title: 'Private applications',
-              subtitle: settings.excludedApplications.isEmpty
+              description: settings.excludedApplications.isEmpty
                   ? 'No foreground application names are excluded.'
                   : '${settings.excludedApplications.length} applications excluded from context.',
               trailing: _ExcludedApplicationsButton(viewModel: viewModel),
             ),
           ],
         ),
-        const SizedBox(height: 30),
-        Text('Sound', style: Theme.of(context).textTheme.titleMedium),
-        const SizedBox(height: 14),
-        _SettingsGroup(
+        const _GroupLabel('Sound'),
+        _GroupCard(
           children: [
-            _ToggleSettingRow(
-              key: const Key('dictation-sounds-setting'),
+            _ToggleRow(
+              rowKey: const Key('dictation-sounds-setting'),
               title: 'Dictation and notification sounds',
               value: settings.dictationSounds,
-              onChanged: (value) {
-                viewModel.setDictationSounds(enabled: value);
-              },
+              onChanged: (value) =>
+                  viewModel.setDictationSounds(enabled: value),
             ),
-            _ToggleSettingRow(
-              key: const Key('mute-music-setting'),
+            _ToggleRow(
+              rowKey: const Key('mute-music-setting'),
               title: 'Mute music while dictating',
               value: settings.muteMusic,
-              onChanged: (value) {
-                viewModel.setMuteMusic(enabled: value);
-              },
+              onChanged: (value) => viewModel.setMuteMusic(enabled: value),
             ),
           ],
         ),
-        const SizedBox(height: 30),
-        Text('Notifications', style: Theme.of(context).textTheme.titleMedium),
-        const SizedBox(height: 14),
-        _SettingsGroup(
+        const _GroupLabel('Notifications'),
+        _GroupCard(
           children: [
-            _ToggleSettingRow(
+            _ToggleRow(
               title: 'Suggestions',
-              subtitle: 'Tips for improving how you use Swar.',
+              description: 'Tips for improving how you use Swar.',
               value: settings.suggestions,
-              onChanged: (value) {
-                viewModel.setSuggestions(enabled: value);
-              },
+              onChanged: (value) => viewModel.setSuggestions(enabled: value),
             ),
-            _ToggleSettingRow(
+            _ToggleRow(
               title: 'Announcements',
-              subtitle: 'New features or capabilities.',
+              description: 'New features or capabilities.',
               value: settings.announcements,
-              onChanged: (value) {
-                viewModel.setAnnouncements(enabled: value);
-              },
+              onChanged: (value) => viewModel.setAnnouncements(enabled: value),
             ),
-            _ToggleSettingRow(
+            _ToggleRow(
               title: 'Milestones',
-              subtitle: 'Word-count milestones and streaks.',
+              description: 'Word-count milestones and streaks.',
               value: settings.milestones,
-              onChanged: (value) {
-                viewModel.setMilestones(enabled: value);
-              },
+              onChanged: (value) => viewModel.setMilestones(enabled: value),
             ),
           ],
         ),
-        const SizedBox(height: 30),
-        Text('Offline engine', style: Theme.of(context).textTheme.titleMedium),
-        const SizedBox(height: 14),
-        _SettingsGroup(
-          children: [
-            Padding(
-              padding: const EdgeInsets.all(22),
-              child: CoreDiagnosticsCard(gateway: diagnosticsGateway),
-            ),
-          ],
+        const _GroupLabel('Offline engine'),
+        _GroupCard(
+          padding: const EdgeInsets.all(22),
+          child: CoreDiagnosticsCard(gateway: diagnosticsGateway),
         ),
       ],
     );
   }
 }
+
+String _shortenPath(String path) {
+  final parts = path.split('/');
+  if (parts.length <= 4) return path;
+  return '…/${parts.sublist(parts.length - 4).join('/')}';
+}
+
+// --- shared row / group primitives (§8.2) ---
+
+final class _GroupLabel extends StatelessWidget {
+  const _GroupLabel(this.label);
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = context.tokens;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(2, 22, 0, 10),
+      child: Text(
+        label,
+        style: SwarType.description.copyWith(
+          color: t.inkSecondary,
+          fontSize: 14,
+        ),
+      ),
+    );
+  }
+}
+
+final class _GroupCard extends StatelessWidget {
+  const _GroupCard({this.children, this.child, this.padding});
+
+  final List<Widget>? children;
+  final Widget? child;
+  final EdgeInsetsGeometry? padding;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = context.tokens;
+    final content =
+        child ??
+        Column(
+          children: [
+            for (var i = 0; i < children!.length; i++) ...[
+              children![i],
+              if (i != children!.length - 1) const SwarInsetDivider(inset: 0),
+            ],
+          ],
+        );
+    return Container(
+      padding: padding ?? const EdgeInsets.symmetric(horizontal: 22),
+      decoration: BoxDecoration(
+        color: t.surfaceSunken,
+        borderRadius: BorderRadius.circular(SwarRadii.cardLarge),
+        border: Border.all(color: t.border, width: 0.5),
+      ),
+      child: content,
+    );
+  }
+}
+
+/// Settings row (§8.2): info block left, control right, 16–18px vertical.
+final class _SettingRow extends StatelessWidget {
+  const _SettingRow({
+    required this.title,
+    required this.trailing,
+    this.description,
+    this.descriptionWidget,
+    this.rowKey,
+  });
+
+  final String title;
+  final String? description;
+  final Widget? descriptionWidget;
+  final Widget trailing;
+  final Key? rowKey;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = context.tokens;
+    return Padding(
+      key: rowKey,
+      padding: const EdgeInsets.symmetric(vertical: 17),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: SwarType.rowTitle.copyWith(color: t.ink)),
+                if (descriptionWidget != null) ...[
+                  const SizedBox(height: 4),
+                  descriptionWidget!,
+                ] else if (description != null) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    description!,
+                    style: SwarType.description.copyWith(color: t.inkSecondary),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(width: 24),
+          trailing,
+        ],
+      ),
+    );
+  }
+}
+
+final class _ToggleRow extends StatelessWidget {
+  const _ToggleRow({
+    required this.title,
+    required this.value,
+    required this.onChanged,
+    this.description,
+    this.rowKey,
+  });
+
+  final String title;
+  final String? description;
+  final bool value;
+  final ValueChanged<bool> onChanged;
+  final Key? rowKey;
+
+  @override
+  Widget build(BuildContext context) {
+    return _SettingRow(
+      rowKey: rowKey,
+      title: title,
+      description: description,
+      trailing: SwarToggle(value: value, onChanged: onChanged),
+    );
+  }
+}
+
+/// A pill dropdown that opens a native menu anchored to the button (§8.6).
+final class _MenuDropdown<T> extends StatelessWidget {
+  const _MenuDropdown({
+    required this.value,
+    required this.items,
+    required this.labelFor,
+    required this.onChanged,
+    required this.minWidth,
+    this.fieldKey,
+  });
+
+  final T value;
+  final List<T> items;
+  final String Function(T) labelFor;
+  final ValueChanged<T> onChanged;
+  final double minWidth;
+  final Key? fieldKey;
+
+  @override
+  Widget build(BuildContext context) {
+    return KeyedSubtree(
+      key: fieldKey,
+      child: SwarDropdownButton(
+        label: labelFor(value),
+        minWidth: minWidth,
+        onPressed: () async {
+          final box = context.findRenderObject() as RenderBox?;
+          final overlay =
+              Overlay.of(context).context.findRenderObject() as RenderBox?;
+          if (box == null || overlay == null) return;
+          final position = RelativeRect.fromRect(
+            Rect.fromPoints(
+              box.localToGlobal(
+                box.size.bottomLeft(Offset.zero),
+                ancestor: overlay,
+              ),
+              box.localToGlobal(
+                box.size.bottomRight(Offset.zero),
+                ancestor: overlay,
+              ),
+            ),
+            Offset.zero & overlay.size,
+          );
+          final selected = await showMenu<T>(
+            context: context,
+            position: position,
+            items: [
+              for (final item in items)
+                PopupMenuItem<T>(value: item, child: Text(labelFor(item))),
+            ],
+          );
+          if (selected != null) onChanged(selected);
+        },
+      ),
+    );
+  }
+}
+
+// --- secondary surfaces (dialogs) — functional, restyled triggers ---
 
 final class _ExcludedApplicationsButton extends StatelessWidget {
   const _ExcludedApplicationsButton({required this.viewModel});
@@ -666,8 +757,9 @@ final class _ExcludedApplicationsButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return OutlinedButton(
+    return SwarGhostButton(
       key: const Key('excluded-applications-button'),
+      label: 'Edit',
       onPressed: () async {
         final controller = TextEditingController(
           text: viewModel.settings.excludedApplications.join(', '),
@@ -706,7 +798,6 @@ final class _ExcludedApplicationsButton extends StatelessWidget {
           viewModel.setExcludedApplications(result.split(','));
         }
       },
-      child: const Text('Edit'),
     );
   }
 }
@@ -718,13 +809,13 @@ final class _VocabularyButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return OutlinedButton(
+    return SwarGhostButton(
       key: const Key('personal-vocabulary-button'),
+      label: 'Manage',
       onPressed: () => showDialog<void>(
         context: context,
         builder: (context) => _VocabularyDialog(viewModel: viewModel),
       ),
-      child: const Text('Manage'),
     );
   }
 }
@@ -838,66 +929,6 @@ final class _VocabularyDialogState extends State<_VocabularyDialog> {
   }
 }
 
-final class _SettingsScrollView extends StatelessWidget {
-  const _SettingsScrollView({
-    required this.title,
-    required this.children,
-    super.key,
-  });
-
-  final String title;
-  final List<Widget> children;
-
-  @override
-  Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final horizontal = constraints.maxWidth < 620 ? 22.0 : 58.0;
-        return ListView(
-          key: Key('${title.toLowerCase()}-settings-scroll'),
-          padding: EdgeInsets.fromLTRB(horizontal, 34, horizontal, 46),
-          children: [
-            Text(
-              title,
-              style: Theme.of(context).textTheme.displaySmall?.copyWith(
-                fontFamily: 'Georgia',
-                fontWeight: FontWeight.w400,
-              ),
-            ),
-            const SizedBox(height: 34),
-            ...children,
-          ],
-        );
-      },
-    );
-  }
-}
-
-final class _SettingsGroup extends StatelessWidget {
-  const _SettingsGroup({required this.children});
-
-  final List<Widget> children;
-
-  @override
-  Widget build(BuildContext context) {
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: SwarColors.panel,
-        borderRadius: BorderRadius.circular(18),
-      ),
-      child: Column(
-        children: [
-          for (var index = 0; index < children.length; index++) ...[
-            children[index],
-            if (index != children.length - 1)
-              const Divider(height: 1, indent: 22, endIndent: 22),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
 final class _ProviderSettingsButton extends StatelessWidget {
   const _ProviderSettingsButton({required this.viewModel});
 
@@ -905,10 +936,10 @@ final class _ProviderSettingsButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return OutlinedButton(
+    return SwarGhostButton(
       key: const Key('provider-settings-button'),
+      label: 'Configure',
       onPressed: () => _show(context),
-      child: const Text('Configure'),
     );
   }
 
@@ -1027,69 +1058,44 @@ final class _MicrophoneSelectorState extends State<_MicrophoneSelector> {
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: 260,
-      child: FutureBuilder<List<SwarMicrophone>>(
-        future: _microphones,
-        builder: (context, snapshot) {
-          final microphones = snapshot.data ?? const <SwarMicrophone>[];
-          if (snapshot.connectionState != ConnectionState.done) {
-            return const Align(
-              alignment: Alignment.center,
-              child: SizedBox.square(
-                dimension: 20,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              ),
-            );
-          }
-          if (microphones.isEmpty) {
-            return OutlinedButton.icon(
-              onPressed: _reload,
-              icon: const Icon(Icons.refresh_rounded, size: 18),
-              label: const Text('Check microphones'),
-            );
-          }
-
-          final savedId = widget.viewModel.settings.microphoneId;
-          final selected = microphones.where((item) => item.id == savedId);
-          final selectedId = selected.isNotEmpty
-              ? selected.first.id
-              : microphones
-                    .firstWhere(
-                      (item) => item.isBuiltIn,
-                      orElse: () => microphones.first,
-                    )
-                    .id;
-          return DropdownButtonFormField<String>(
-            key: ValueKey('microphone-$selectedId'),
-            initialValue: selectedId,
-            isExpanded: true,
-            decoration: const InputDecoration(
-              border: OutlineInputBorder(),
-              contentPadding: EdgeInsets.symmetric(
-                horizontal: 14,
-                vertical: 12,
-              ),
-            ),
-            items: microphones
-                .map(
-                  (microphone) => DropdownMenuItem(
-                    value: microphone.id,
-                    child: Text(
-                      microphone.isBuiltIn
-                          ? '${microphone.name} · Built-in'
-                          : microphone.name,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                )
-                .toList(growable: false),
-            onChanged: (value) {
-              if (value != null) widget.viewModel.setMicrophoneId(value);
-            },
+    return FutureBuilder<List<SwarMicrophone>>(
+      future: _microphones,
+      builder: (context, snapshot) {
+        final microphones = snapshot.data ?? const <SwarMicrophone>[];
+        if (snapshot.connectionState != ConnectionState.done) {
+          return const SizedBox.square(
+            dimension: 20,
+            child: CircularProgressIndicator(strokeWidth: 2),
           );
-        },
-      ),
+        }
+        if (microphones.isEmpty) {
+          return SwarGhostButton(
+            label: 'Check microphones',
+            icon: Icons.refresh_rounded,
+            onPressed: _reload,
+          );
+        }
+
+        final savedId = widget.viewModel.settings.microphoneId;
+        final selected = microphones.where((item) => item.id == savedId);
+        final active = selected.isNotEmpty
+            ? selected.first
+            : microphones.firstWhere(
+                (item) => item.isBuiltIn,
+                orElse: () => microphones.first,
+              );
+        return _MenuDropdown<String>(
+          fieldKey: ValueKey('microphone-${active.id}'),
+          value: active.id,
+          minWidth: 220,
+          items: microphones.map((m) => m.id).toList(growable: false),
+          labelFor: (id) {
+            final mic = microphones.firstWhere((m) => m.id == id);
+            return mic.name;
+          },
+          onChanged: widget.viewModel.setMicrophoneId,
+        );
+      },
     );
   }
 
@@ -1097,75 +1103,5 @@ final class _MicrophoneSelectorState extends State<_MicrophoneSelector> {
     setState(() {
       _microphones = widget.sessionViewModel.listMicrophones();
     });
-  }
-}
-
-final class _SettingRow extends StatelessWidget {
-  const _SettingRow({
-    required this.title,
-    required this.subtitle,
-    required this.trailing,
-  });
-
-  final String title;
-  final String subtitle;
-  final Widget trailing;
-
-  @override
-  Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final compact = constraints.maxWidth < 640;
-        final text = Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(title, style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 5),
-            Text(subtitle, style: Theme.of(context).textTheme.bodyMedium),
-          ],
-        );
-        return Padding(
-          padding: const EdgeInsets.all(22),
-          child: compact
-              ? Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [text, const SizedBox(height: 16), trailing],
-                )
-              : Row(
-                  children: [
-                    Expanded(child: text),
-                    const SizedBox(width: 24),
-                    trailing,
-                  ],
-                ),
-        );
-      },
-    );
-  }
-}
-
-final class _ToggleSettingRow extends StatelessWidget {
-  const _ToggleSettingRow({
-    required this.title,
-    required this.value,
-    required this.onChanged,
-    this.subtitle,
-    super.key,
-  });
-
-  final String title;
-  final String? subtitle;
-  final bool value;
-  final ValueChanged<bool> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return SwitchListTile(
-      contentPadding: const EdgeInsets.symmetric(horizontal: 22, vertical: 10),
-      title: Text(title, style: Theme.of(context).textTheme.titleMedium),
-      subtitle: subtitle == null ? null : Text(subtitle!),
-      value: value,
-      onChanged: onChanged,
-    );
   }
 }

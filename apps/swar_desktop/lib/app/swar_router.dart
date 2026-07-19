@@ -10,10 +10,14 @@ import 'package:swar_desktop/dictation/presentation/dictation_page.dart';
 import 'package:swar_desktop/dictation/presentation/dictation_session_view_model.dart';
 import 'package:swar_desktop/insights/presentation/insights_page.dart';
 import 'package:swar_desktop/insights/domain/insights_repository.dart';
+import 'package:swar_desktop/settings/presentation/settings_page.dart';
 import 'package:swar_desktop/settings/presentation/settings_view_model.dart';
 import 'package:swar_desktop/settings/presentation/personalization_view_model.dart';
 
 /// Router Composition. Application Layer.
+///
+/// Branch order is fixed: 0 Insights, 1 Activity (dictation), 2 Settings. The
+/// shell's nav pill maps those indices to the spec's visual order.
 GoRouter createSwarRouter({
   required DictationHistoryRepository dictationRepository,
   required InsightsRepository insightsRepository,
@@ -27,13 +31,7 @@ GoRouter createSwarRouter({
     routes: [
       StatefulShellRoute.indexedStack(
         builder: (context, state, navigationShell) {
-          return SwarShell(
-            navigationShell: navigationShell,
-            settingsViewModel: settingsViewModel,
-            diagnosticsGateway: diagnosticsGateway,
-            dictationSessionViewModel: dictationSessionViewModel,
-            personalizationViewModel: personalizationViewModel,
-          );
+          return SwarShell(navigationShell: navigationShell);
         },
         branches: [
           StatefulShellBranch(
@@ -54,6 +52,21 @@ GoRouter createSwarRouter({
                     repository: dictationRepository,
                     sessionViewModel: dictationSessionViewModel,
                     settingsViewModel: settingsViewModel,
+                  );
+                },
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: SwarRoutes.settings,
+                builder: (context, state) {
+                  return SwarSettingsPage(
+                    viewModel: settingsViewModel,
+                    diagnosticsGateway: diagnosticsGateway,
+                    dictationSessionViewModel: dictationSessionViewModel,
+                    personalizationViewModel: personalizationViewModel,
                   );
                 },
               ),
