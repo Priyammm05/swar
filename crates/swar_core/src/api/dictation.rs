@@ -409,9 +409,13 @@ fn finish_capture(capture: &mut ActiveCapture) -> Result<DictationCompletion, St
     if !transcript_contains_speech(&raw_text) {
         return Err(dictation_stage_error("transcription_empty"));
     }
+    // Transliterate to the mode's output script (Devanagari → Roman for Hinglish
+    // and Auto) before cleanup. `raw_text` is kept as the original Whisper output
+    // so history and the language split still classify by the spoken script.
+    let output_text = crate::language::to_output_script(&raw_text, &capture.config.language);
     record_dictation_stage("cleanup");
     transition_capture(capture, DictationState::Cleaning, "final transcript ready")?;
-    let personalized_raw = personalization::apply_vocabulary(&raw_text);
+    let personalized_raw = personalization::apply_vocabulary(&output_text);
     let clean_text =
         text_cleanup::clean_transcript(&personalized_raw, &capture.config.writing_mode);
     if clean_text.trim().is_empty() {
