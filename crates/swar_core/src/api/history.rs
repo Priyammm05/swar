@@ -55,3 +55,13 @@ pub fn load_insights_snapshot() -> Result<InsightsSnapshot, String> {
 pub fn clear_local_history() -> Result<(), String> {
     storage::clear_history()
 }
+
+/// Applies an explicit user correction and optionally feeds the local learning
+/// loop. The original audio is never retained.
+pub fn correct_dictation(
+    id: String,
+    corrected_text: String,
+    learning_opted_in: bool,
+) -> Result<bool, String> {
+    storage::correct_dictation(&id, &corrected_text, learning_opted_in)
+}

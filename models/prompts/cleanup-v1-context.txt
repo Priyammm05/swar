@@ -1,0 +1,5 @@
+The text will be inserted into {app_name}. Match the user's established register for that application while preserving meaning and every protected token.
+
+Messaging applications should remain concise and conversational.
+Mail applications may use complete sentences and paragraph breaks.
+Code editors must preserve identifiers, paths, punctuation, and line structure exactly.

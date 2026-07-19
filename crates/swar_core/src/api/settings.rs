@@ -23,6 +23,11 @@ pub struct NativeSettings {
     pub learn_from_edits: bool,
     pub model_path: String,
     pub microphone_id: String,
+    pub shortcut_key: String,
+    pub excluded_applications: Vec<String>,
+    pub enhancement_provider: String,
+    pub provider_endpoint: String,
+    pub provider_model: String,
 }
 
 impl Default for NativeSettings {
@@ -44,6 +49,11 @@ impl Default for NativeSettings {
             learn_from_edits: false,
             model_path: String::new(),
             microphone_id: String::new(),
+            shortcut_key: "option".to_owned(),
+            excluded_applications: Vec::new(),
+            enhancement_provider: "local".to_owned(),
+            provider_endpoint: String::new(),
+            provider_model: String::new(),
         }
     }
 }
@@ -87,5 +97,6 @@ mod tests {
         assert!(settings.paste_automatically);
         assert!(settings.restore_clipboard);
         assert_eq!(settings.writing_mode, "clean");
+        assert_eq!(settings.enhancement_provider, "local");
     }
 }

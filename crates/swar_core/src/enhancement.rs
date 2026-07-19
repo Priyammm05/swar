@@ -1,8 +1,22 @@
+use std::collections::BTreeMap;
+
+pub(crate) const VALIDATION_ERROR_CODE: &str = "swar-INTENT-004";
+const CLEANUP_PROMPT: &str = include_str!("../../../models/prompts/cleanup-v1.txt");
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct EnhancementRequest<'a> {
     pub raw_transcript: &'a str,
     pub safe_clean_text: &'a str,
     pub writing_mode: &'a str,
+    pub source_application: &'a str,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct EnhancementProviderConfig<'a> {
+    pub provider: &'a str,
+    pub endpoint: &'a str,
+    pub model: &'a str,
+    pub api_key: &'a str,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -11,20 +25,92 @@ pub(crate) struct EnhancementOutcome {
     pub routed: bool,
     pub applied: bool,
     pub validation_fallback: bool,
+    pub error_code: Option<&'static str>,
 }
 
 pub(crate) trait TranscriptEnhancer {
     fn enhance(&self, request: &EnhancementRequest<'_>) -> Result<String, String>;
 }
 
+/// Embedded deterministic editor used on every supported machine. The
+/// llama.cpp provider can replace this implementation through the same narrow
+/// trait after its model pack passes the licence and benchmark gates.
 struct EmbeddedLocalEnhancer;
+
+struct OpenAiCompatibleEnhancer<'a> {
+    config: EnhancementProviderConfig<'a>,
+}
 
 impl TranscriptEnhancer for EmbeddedLocalEnhancer {
     fn enhance(&self, request: &EnhancementRequest<'_>) -> Result<String, String> {
-        // V1's provider boundary is ready for the embedded llama.cpp backend.
-        // Until its model asset is installed, the local deterministic result is
-        // deliberately returned unchanged; there is no cloud fallback.
-        Ok(request.safe_clean_text.to_owned())
+        let mut value = resolve_clear_correction(request.safe_clean_text);
+        if request
+            .raw_transcript
+            .to_ascii_lowercase()
+            .contains("make this an email")
+        {
+            value = value
+                .replace("Make this an email", "")
+                .replace("make this an email", "")
+                .trim()
+                .to_owned();
+        }
+        if request
+            .source_application
+            .to_ascii_lowercase()
+            .contains("mail")
+            && !value.ends_with(['.', '?', '!'])
+        {
+            value.push('.');
+        }
+        Ok(value)
+    }
+}
+
+impl TranscriptEnhancer for OpenAiCompatibleEnhancer<'_> {
+    fn enhance(&self, request: &EnhancementRequest<'_>) -> Result<String, String> {
+        if self.config.api_key.trim().is_empty() {
+            return Err("the provider API key is unavailable".to_owned());
+        }
+        let endpoint = self.config.endpoint.trim().trim_end_matches('/');
+        if !endpoint.starts_with("https://") && !endpoint.starts_with("http://127.0.0.1") {
+            return Err("the provider endpoint must use HTTPS or localhost".to_owned());
+        }
+        let url = if endpoint.ends_with("/chat/completions") {
+            endpoint.to_owned()
+        } else {
+            format!("{endpoint}/chat/completions")
+        };
+        let context = if request.source_application.trim().is_empty() {
+            String::new()
+        } else {
+            format!(
+                "\nThe text will be inserted into {}. Preserve its register without adding information.",
+                request.source_application.trim()
+            )
+        };
+        let body = serde_json::json!({
+            "model": self.config.model,
+            "temperature": 0,
+            "messages": [
+                {"role": "system", "content": format!("{CLEANUP_PROMPT}{context}")},
+                {"role": "user", "content": request.safe_clean_text}
+            ]
+        });
+        let response = ureq::post(&url)
+            .set("Authorization", &format!("Bearer {}", self.config.api_key))
+            .set("Content-Type", "application/json")
+            .send_json(body)
+            .map_err(|_| "the optional provider request failed".to_owned())?;
+        let value: serde_json::Value = response
+            .into_json()
+            .map_err(|_| "the optional provider returned invalid JSON".to_owned())?;
+        value["choices"][0]["message"]["content"]
+            .as_str()
+            .map(str::trim)
+            .filter(|text| !text.is_empty())
+            .map(ToOwned::to_owned)
+            .ok_or_else(|| "the optional provider returned no text".to_owned())
     }
 }
 
@@ -32,11 +118,14 @@ pub(crate) fn enhance_transcript(
     raw_transcript: &str,
     safe_clean_text: &str,
     writing_mode: &str,
+    source_application: &str,
+    provider_config: EnhancementProviderConfig<'_>,
 ) -> EnhancementOutcome {
     let request = EnhancementRequest {
         raw_transcript,
         safe_clean_text,
         writing_mode,
+        source_application,
     };
     if !should_route(&request) {
         return EnhancementOutcome {
@@ -44,9 +133,19 @@ pub(crate) fn enhance_transcript(
             routed: false,
             applied: false,
             validation_fallback: false,
+            error_code: None,
         };
     }
-    run_with_provider(&request, &EmbeddedLocalEnhancer)
+    if provider_config.provider.eq_ignore_ascii_case("byok") {
+        run_with_provider(
+            &request,
+            &OpenAiCompatibleEnhancer {
+                config: provider_config,
+            },
+        )
+    } else {
+        run_with_provider(&request, &EmbeddedLocalEnhancer)
+    }
 }
 
 fn run_with_provider(
@@ -56,8 +155,9 @@ fn run_with_provider(
     let Ok(candidate) = provider.enhance(request) else {
         return fallback(request, true);
     };
+    let validation_source = resolve_clear_correction(request.safe_clean_text);
     if candidate.trim().is_empty()
-        || !protected_tokens_are_preserved(request.safe_clean_text, &candidate)
+        || !protected_tokens_are_preserved(&validation_source, &candidate)
     {
         return fallback(request, true);
     }
@@ -66,6 +166,7 @@ fn run_with_provider(
         text: candidate,
         routed: true,
         validation_fallback: false,
+        error_code: None,
     }
 }
 
@@ -75,6 +176,7 @@ fn fallback(request: &EnhancementRequest<'_>, validation_fallback: bool) -> Enha
         routed: true,
         applied: false,
         validation_fallback,
+        error_code: validation_fallback.then_some(VALIDATION_ERROR_CODE),
     }
 }
 
@@ -82,36 +184,265 @@ fn should_route(request: &EnhancementRequest<'_>) -> bool {
     if request.writing_mode.eq_ignore_ascii_case("intent") {
         return true;
     }
-    let lower = request.raw_transcript.to_ascii_lowercase();
-    [" i mean ", " sorry ", " rather ", " correction "]
-        .iter()
-        .any(|marker| format!(" {lower} ").contains(marker))
+    let padded = format!(" {} ", request.raw_transcript.to_ascii_lowercase());
+    [
+        " i mean ",
+        " scratch that ",
+        " no wait ",
+        " nahi nahi ",
+        " matlab i mean ",
+        " correction ",
+        " make this an email ",
+        " first ",
+        " secondly ",
+    ]
+    .iter()
+    .any(|marker| padded.contains(marker))
+        || contains_clear_sorry_correction(request.safe_clean_text)
+        || request.raw_transcript.matches([',', '.', '?', '!']).count() >= 2
         || request.raw_transcript.split_whitespace().count() >= 32
 }
 
-fn protected_tokens_are_preserved(source: &str, candidate: &str) -> bool {
-    let source_tokens = protected_tokens(source);
-    let candidate_tokens = protected_tokens(candidate);
-    source_tokens
+fn resolve_clear_correction(value: &str) -> String {
+    for cue in [
+        "scratch that",
+        "no wait",
+        "nahi nahi",
+        "matlab i mean",
+        "i mean",
+    ] {
+        if let Some(result) = replace_corrected_suffix(value, cue, false) {
+            return result;
+        }
+    }
+    if contains_clear_sorry_correction(value) {
+        if let Some(result) = replace_corrected_suffix(value, "sorry", true) {
+            return result;
+        }
+    }
+    value.to_owned()
+}
+
+fn replace_corrected_suffix(value: &str, cue: &str, require_pair: bool) -> Option<String> {
+    let lower = value.to_ascii_lowercase();
+    let index = lower.find(&format!(" {cue} "))?;
+    let before = value[..index].trim_end_matches([' ', ',', '.', ';']);
+    let after = value[index + cue.len() + 2..].trim_start_matches([' ', ',', '.', ';']);
+    let before_words = before.split_whitespace().collect::<Vec<_>>();
+    let after_words = after.split_whitespace().collect::<Vec<_>>();
+    let first_after = normalized_word(after_words.first()?);
+    let last_before = normalized_word(before_words.last()?);
+    if require_pair && !is_correction_pair(last_before, first_after) {
+        return None;
+    }
+    let correction_words = correction_phrase_length(&after_words);
+    let remove_count = correction_words.min(before_words.len()).max(1);
+    let prefix = before_words[..before_words.len() - remove_count].join(" ");
+    let joined = if prefix.is_empty() {
+        after.to_owned()
+    } else {
+        format!("{prefix} {after}")
+    };
+    Some(capitalize_first(joined.trim()))
+}
+
+fn correction_phrase_length(words: &[&str]) -> usize {
+    let count = words
         .iter()
-        .all(|token| candidate_tokens.contains(token))
+        .take_while(|word| is_number_word(normalized_word(word)))
+        .count();
+    count.max(1)
+}
+
+fn contains_clear_sorry_correction(value: &str) -> bool {
+    let lower = value.to_ascii_lowercase();
+    let Some(index) = lower.find(" sorry ") else {
+        return false;
+    };
+    let before = value[..index].split_whitespace().last();
+    let after = value[index + 7..].split_whitespace().next();
+    before.zip(after).is_some_and(|(left, right)| {
+        is_correction_pair(normalized_word(left), normalized_word(right))
+    })
+}
+
+fn is_correction_pair(left: &str, right: &str) -> bool {
+    (is_number_word(left) && is_number_word(right))
+        || (is_date_or_time_word(left) && is_date_or_time_word(right))
+}
+
+fn is_number_word(value: &str) -> bool {
+    value.chars().any(|value| value.is_ascii_digit())
+        || matches!(
+            value,
+            "zero"
+                | "one"
+                | "two"
+                | "three"
+                | "four"
+                | "five"
+                | "six"
+                | "seven"
+                | "eight"
+                | "nine"
+                | "ten"
+                | "hundred"
+                | "thousand"
+                | "lakh"
+                | "crore"
+        )
+}
+
+fn is_date_or_time_word(value: &str) -> bool {
+    matches!(
+        value,
+        "today"
+            | "tomorrow"
+            | "yesterday"
+            | "aaj"
+            | "kal"
+            | "monday"
+            | "tuesday"
+            | "wednesday"
+            | "thursday"
+            | "friday"
+            | "saturday"
+            | "sunday"
+            | "january"
+            | "february"
+            | "march"
+            | "april"
+            | "may"
+            | "june"
+            | "july"
+            | "august"
+            | "september"
+            | "october"
+            | "november"
+            | "december"
+    ) || value.contains(':')
+}
+
+fn protected_tokens_are_preserved(source: &str, candidate: &str) -> bool {
+    protected_tokens(source) == protected_tokens(candidate)
+        && language_signature(source) == language_signature(candidate)
         && !(source.chars().all(|character| !is_devanagari(character))
             && candidate.chars().any(is_devanagari))
 }
 
-fn protected_tokens(value: &str) -> Vec<String> {
+fn protected_tokens(value: &str) -> BTreeMap<String, usize> {
+    let mut result = BTreeMap::new();
+    for (index, token) in value.split_whitespace().enumerate() {
+        let normalized = normalized_word(token).to_ascii_lowercase();
+        if normalized.is_empty() || is_unprotected_structure_word(&normalized) {
+            continue;
+        }
+        let protected = normalized
+            .chars()
+            .any(|character| character.is_ascii_digit())
+            || normalized.contains('@')
+            || normalized.contains("http")
+            || normalized.contains('/')
+            || normalized.contains('\\')
+            || normalized.contains('_')
+            || normalized
+                .chars()
+                .next()
+                .is_some_and(|value| matches!(value, '₹' | '$' | '€' | '£'))
+            || is_code_like(normalized_word(token))
+            || is_number_word(&normalized)
+            || is_date_or_time_word(&normalized)
+            || is_negation(&normalized)
+            || is_hinglish_marker(&normalized)
+            || (index > 0 && token.chars().next().is_some_and(char::is_uppercase));
+        if protected {
+            *result.entry(normalized).or_insert(0) += 1;
+        }
+    }
+    result
+}
+
+fn language_signature(value: &str) -> (usize, usize) {
     value
         .split_whitespace()
-        .map(|token| token.trim_matches(|character: char| character.is_ascii_punctuation()))
-        .filter(|token| {
-            token.chars().any(|character| character.is_ascii_digit())
-                || token.contains('@')
-                || token.contains("://")
-                || token.contains('_')
-                || is_code_like(token)
+        .fold((0, 0), |(roman, devanagari), token| {
+            (
+                roman + usize::from(is_hinglish_marker(normalized_word(token))),
+                devanagari + usize::from(token.chars().any(is_devanagari)),
+            )
         })
-        .map(ToOwned::to_owned)
-        .collect()
+}
+
+fn is_unprotected_structure_word(value: &str) -> bool {
+    matches!(
+        value,
+        "a" | "an"
+            | "the"
+            | "and"
+            | "or"
+            | "but"
+            | "to"
+            | "for"
+            | "of"
+            | "in"
+            | "on"
+            | "at"
+            | "is"
+            | "are"
+            | "was"
+            | "were"
+            | "be"
+            | "this"
+            | "that"
+            | "it"
+            | "i"
+            | "we"
+            | "you"
+            | "he"
+            | "she"
+            | "they"
+            | "make"
+            | "email"
+            | "please"
+    )
+}
+
+fn is_negation(value: &str) -> bool {
+    matches!(
+        value,
+        "no" | "not" | "never" | "don't" | "cant" | "can't" | "nahi" | "mat"
+    )
+}
+
+fn is_hinglish_marker(value: &str) -> bool {
+    matches!(
+        value,
+        "hai"
+            | "hain"
+            | "haan"
+            | "nahi"
+            | "kya"
+            | "karo"
+            | "karna"
+            | "kar"
+            | "kal"
+            | "aaj"
+            | "bhai"
+            | "bhej"
+            | "dena"
+            | "wala"
+            | "wali"
+            | "phir"
+            | "mujhe"
+            | "ko"
+            | "ke"
+            | "ki"
+            | "ka"
+            | "se"
+            | "tak"
+            | "theek"
+            | "milte"
+    )
 }
 
 fn is_code_like(token: &str) -> bool {
@@ -122,6 +453,20 @@ fn is_code_like(token: &str) -> bool {
         .chars()
         .any(|character| character.is_ascii_uppercase());
     (has_lower && has_upper) || (token.len() > 1 && token.chars().all(|c| c.is_ascii_uppercase()))
+}
+
+fn normalized_word(value: &str) -> &str {
+    value.trim_matches(|character: char| {
+        character.is_ascii_punctuation() && !matches!(character, '@' | '/' | '\\' | '_' | ':' | '.')
+    })
+}
+
+fn capitalize_first(value: &str) -> String {
+    let mut characters = value.chars();
+    let Some(first) = characters.next() else {
+        return String::new();
+    };
+    first.to_uppercase().collect::<String>() + characters.as_str()
 }
 
 fn is_devanagari(character: char) -> bool {
@@ -140,44 +485,84 @@ mod tests {
         }
     }
 
+    fn request<'a>(source: &'a str) -> EnhancementRequest<'a> {
+        EnhancementRequest {
+            raw_transcript: source,
+            safe_clean_text: source,
+            writing_mode: "intent",
+            source_application: "",
+        }
+    }
+
     #[test]
     fn simple_clean_text_does_not_route_to_the_optional_provider() {
-        let outcome = enhance_transcript("send the note", "Send the note", "clean");
+        let outcome = enhance_transcript(
+            "send the note",
+            "Send the note",
+            "clean",
+            "",
+            local_provider(),
+        );
         assert!(!outcome.routed);
         assert_eq!(outcome.text, "Send the note");
     }
 
     #[test]
-    fn intent_mode_routes_but_local_default_is_restrained() {
-        let outcome = enhance_transcript("send it", "Send it", "intent");
-        assert!(outcome.routed);
-        assert!(!outcome.applied);
+    fn clear_correction_keeps_the_final_choice() {
+        let outcome = enhance_transcript(
+            "meet on Tuesday scratch that Wednesday",
+            "Meet on Tuesday scratch that Wednesday",
+            "clean",
+            "Calendar",
+            local_provider(),
+        );
+        assert!(outcome.applied);
+        assert_eq!(outcome.text, "Meet on Wednesday");
+    }
+
+    #[test]
+    fn sorry_as_an_apology_is_not_treated_as_a_correction() {
+        let source = "Sorry I missed your call";
+        let outcome = enhance_transcript(source, source, "clean", "", local_provider());
+        assert!(!outcome.routed);
+        assert_eq!(outcome.text, source);
+    }
+
+    #[test]
+    fn validator_rejects_changed_protected_values_with_stable_error_code() {
+        let request = request("Use APIKey at https://swar.dev for 42 users");
+        let outcome =
+            run_with_provider(&request, &ReplacingEnhancer("Use another key for 43 users"));
+        assert!(outcome.validation_fallback);
+        assert_eq!(outcome.error_code, Some(VALIDATION_ERROR_CODE));
+    }
+
+    #[test]
+    fn validator_rejects_negation_names_and_language_changes() {
+        for candidate in [
+            "Send ₹1,000 to someone",
+            "Send ₹1,000 to Ramesh",
+            "कल Ramesh ko ₹1,000 mat bhejna",
+        ] {
+            let request = request("Kal Ramesh ko ₹1,000 nahi bhejna");
+            assert!(run_with_provider(&request, &ReplacingEnhancer(candidate)).validation_fallback);
+        }
+    }
+
+    #[test]
+    fn restraint_keeps_actually_when_it_is_not_a_correction() {
+        let source = "I actually enjoyed the movie";
+        let outcome = enhance_transcript(source, source, "intent", "", local_provider());
+        assert_eq!(outcome.text, source);
         assert!(!outcome.validation_fallback);
     }
 
-    #[test]
-    fn validator_rejects_changed_numbers_urls_and_code_tokens() {
-        let request = EnhancementRequest {
-            raw_transcript: "use APIKey at https://swar.dev for 42 users",
-            safe_clean_text: "Use APIKey at https://swar.dev for 42 users.",
-            writing_mode: "intent",
-        };
-        let outcome = run_with_provider(
-            &request,
-            &ReplacingEnhancer("Use another key for 43 users."),
-        );
-        assert!(outcome.validation_fallback);
-        assert_eq!(outcome.text, request.safe_clean_text);
-    }
-
-    #[test]
-    fn validator_rejects_unrequested_devanagari_output() {
-        let request = EnhancementRequest {
-            raw_transcript: "kal bhejna",
-            safe_clean_text: "Kal bhejna.",
-            writing_mode: "intent",
-        };
-        let outcome = run_with_provider(&request, &ReplacingEnhancer("कल भेजना।"));
-        assert!(outcome.validation_fallback);
+    fn local_provider() -> EnhancementProviderConfig<'static> {
+        EnhancementProviderConfig {
+            provider: "local",
+            endpoint: "",
+            model: "",
+            api_key: "",
+        }
     }
 }

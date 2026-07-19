@@ -24,6 +24,10 @@ trait PasteAdapter {
     fn paste(&mut self) -> Result<(), String>;
 }
 
+trait DirectInsertionAdapter {
+    fn insert(&mut self, text: &str) -> Result<(), String>;
+}
+
 #[derive(Clone, Debug)]
 struct ClipboardOwnership {
     session_id: Option<String>,
@@ -72,6 +76,8 @@ impl ClipboardAdapter for SystemClipboard {
 
 struct SystemPaste;
 
+struct SystemDirectInsertion;
+
 impl PasteAdapter for SystemPaste {
     fn is_available(&self) -> bool {
         automatic_paste_is_available()
@@ -79,6 +85,12 @@ impl PasteAdapter for SystemPaste {
 
     fn paste(&mut self) -> Result<(), String> {
         paste_shortcut()
+    }
+}
+
+impl DirectInsertionAdapter for SystemDirectInsertion {
+    fn insert(&mut self, text: &str) -> Result<(), String> {
+        direct_insert(text)
     }
 }
 
@@ -95,6 +107,7 @@ pub(crate) fn insert_with_clipboard(
         paste_automatically,
         restore_clipboard,
         &mut SystemClipboard(clipboard),
+        &mut SystemDirectInsertion,
         &mut SystemPaste,
         &CLIPBOARD_OWNERSHIP,
         Duration::from_millis(120),
@@ -102,16 +115,23 @@ pub(crate) fn insert_with_clipboard(
 }
 
 #[allow(clippy::too_many_arguments)]
-fn insert_with_adapters<C: ClipboardAdapter, P: PasteAdapter>(
+fn insert_with_adapters<C: ClipboardAdapter, D: DirectInsertionAdapter, P: PasteAdapter>(
     session_id: &str,
     text: &str,
     paste_automatically: bool,
     restore_clipboard: bool,
     clipboard: &mut C,
+    direct: &mut D,
     paste: &mut P,
     ownership: &Mutex<ClipboardOwnership>,
     restoration_delay: Duration,
 ) -> Result<InsertionOutcome, String> {
+    if paste_automatically && direct.insert(text).is_ok() {
+        return Ok(InsertionOutcome {
+            status: "inserted",
+            method: "native_direct",
+        });
+    }
     let previous_text = restore_clipboard.then(|| clipboard.read_text()).flatten();
     clipboard.write_text(text)?;
     ownership
@@ -164,6 +184,110 @@ fn insert_with_adapters<C: ClipboardAdapter, P: PasteAdapter>(
         status: "inserted",
         method: "clipboard_paste",
     })
+}
+
+#[cfg(target_os = "macos")]
+fn direct_insert(text: &str) -> Result<(), String> {
+    use std::{ffi::c_void, ptr};
+
+    type AXUIElementRef = *const c_void;
+    type CFTypeRef = *const c_void;
+    type CFStringRef = *const c_void;
+    #[link(name = "ApplicationServices", kind = "framework")]
+    unsafe extern "C" {
+        fn AXIsProcessTrusted() -> bool;
+        fn AXUIElementCreateSystemWide() -> AXUIElementRef;
+        fn AXUIElementCopyAttributeValue(
+            element: AXUIElementRef,
+            attribute: CFStringRef,
+            value: *mut CFTypeRef,
+        ) -> i32;
+        fn AXUIElementSetAttributeValue(
+            element: AXUIElementRef,
+            attribute: CFStringRef,
+            value: CFTypeRef,
+        ) -> i32;
+    }
+    #[link(name = "CoreFoundation", kind = "framework")]
+    unsafe extern "C" {
+        fn CFStringCreateWithBytes(
+            allocator: *const c_void,
+            bytes: *const u8,
+            count: isize,
+            encoding: u32,
+            external_representation: bool,
+        ) -> CFStringRef;
+        fn CFRelease(value: CFTypeRef);
+    }
+
+    const UTF8: u32 = 0x0800_0100;
+    // SAFETY: every CoreFoundation object created or copied here is released on
+    // all paths after use, and the UTF-8 byte slice remains valid for the call.
+    unsafe {
+        if !AXIsProcessTrusted() {
+            return Err("accessibility insertion is unavailable".to_owned());
+        }
+        let system = AXUIElementCreateSystemWide();
+        if system.is_null() {
+            return Err("the system accessibility element is unavailable".to_owned());
+        }
+        let focused_attribute =
+            CFStringCreateWithBytes(ptr::null(), b"AXFocusedUIElement".as_ptr(), 18, UTF8, false);
+        let selected_text_attribute =
+            CFStringCreateWithBytes(ptr::null(), b"AXSelectedText".as_ptr(), 14, UTF8, false);
+        if focused_attribute.is_null() || selected_text_attribute.is_null() {
+            if !focused_attribute.is_null() {
+                CFRelease(focused_attribute);
+            }
+            if !selected_text_attribute.is_null() {
+                CFRelease(selected_text_attribute);
+            }
+            CFRelease(system);
+            return Err("accessibility attributes are unavailable".to_owned());
+        }
+        let mut focused: CFTypeRef = ptr::null();
+        let focused_result = AXUIElementCopyAttributeValue(system, focused_attribute, &mut focused);
+        if focused_result != 0 || focused.is_null() {
+            CFRelease(focused_attribute);
+            CFRelease(selected_text_attribute);
+            CFRelease(system);
+            return Err("the focused text control is unavailable".to_owned());
+        }
+        let value = CFStringCreateWithBytes(
+            ptr::null(),
+            text.as_bytes().as_ptr(),
+            text.len() as isize,
+            UTF8,
+            false,
+        );
+        if value.is_null() {
+            CFRelease(focused_attribute);
+            CFRelease(selected_text_attribute);
+            CFRelease(focused);
+            CFRelease(system);
+            return Err("the dictated text could not be encoded".to_owned());
+        }
+        let result = AXUIElementSetAttributeValue(focused, selected_text_attribute, value);
+        CFRelease(value);
+        CFRelease(focused_attribute);
+        CFRelease(selected_text_attribute);
+        CFRelease(focused);
+        CFRelease(system);
+        (result == 0)
+            .then_some(())
+            .ok_or_else(|| "the focused control rejected direct insertion".to_owned())
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn direct_insert(text: &str) -> Result<(), String> {
+    let mut enigo = Enigo::new(&Settings::default()).map_err(|error| error.to_string())?;
+    enigo.text(text).map_err(|error| error.to_string())
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
+fn direct_insert(_text: &str) -> Result<(), String> {
+    Err("native direct insertion is unavailable".to_owned())
 }
 
 #[cfg(target_os = "macos")]
@@ -229,6 +353,14 @@ mod tests {
         change_clipboard_to: Option<(Arc<SharedMutex<Option<String>>>, String)>,
     }
 
+    struct FakeDirectInsertion(Result<(), String>);
+
+    impl DirectInsertionAdapter for FakeDirectInsertion {
+        fn insert(&mut self, _text: &str) -> Result<(), String> {
+            self.0.clone()
+        }
+    }
+
     impl PasteAdapter for FakePaste {
         fn is_available(&self) -> bool {
             self.available
@@ -261,6 +393,7 @@ mod tests {
             true,
             true,
             &mut clipboard,
+            &mut FakeDirectInsertion(Err("unavailable".to_owned())),
             &mut paste,
             &ownership(),
             Duration::ZERO,
@@ -289,6 +422,7 @@ mod tests {
             true,
             true,
             &mut clipboard,
+            &mut FakeDirectInsertion(Err("unavailable".to_owned())),
             &mut paste,
             &ownership(),
             Duration::ZERO,
@@ -316,6 +450,7 @@ mod tests {
             true,
             true,
             &mut clipboard,
+            &mut FakeDirectInsertion(Err("unavailable".to_owned())),
             &mut paste,
             &ownership(),
             Duration::ZERO,
@@ -326,6 +461,34 @@ mod tests {
         assert_eq!(
             shared.lock().expect("fake clipboard lock").as_deref(),
             Some("dictated")
+        );
+    }
+
+    #[test]
+    fn direct_insertion_does_not_touch_the_clipboard() {
+        let shared = Arc::new(SharedMutex::new(Some("before".to_owned())));
+        let mut clipboard = FakeClipboard(shared.clone());
+        let mut paste = FakePaste {
+            available: true,
+            result: Ok(()),
+            change_clipboard_to: None,
+        };
+        let outcome = insert_with_adapters(
+            "one",
+            "dictated",
+            true,
+            true,
+            &mut clipboard,
+            &mut FakeDirectInsertion(Ok(())),
+            &mut paste,
+            &ownership(),
+            Duration::ZERO,
+        )
+        .expect("direct insertion succeeds");
+        assert_eq!(outcome.method, "native_direct");
+        assert_eq!(
+            shared.lock().expect("fake clipboard lock").as_deref(),
+            Some("before")
         );
     }
 }

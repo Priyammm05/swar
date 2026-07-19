@@ -4,8 +4,9 @@ use std::{
     sync::{Mutex, OnceLock},
 };
 
-use directories::ProjectDirs;
+use directories::{ProjectDirs, UserDirs};
 use rusqlite::{params, Connection};
+use serde::Serialize;
 
 use crate::api::history::{HistoryPage, InsightsSnapshot, StoredDictation};
 
@@ -22,6 +23,14 @@ pub(crate) struct StoredVoiceProfile {
     pub average_sentence_words: f64,
     pub contraction_ratio: f64,
     pub lowercase_start_ratio: f64,
+}
+
+#[derive(Serialize)]
+struct LearningExample {
+    raw_text: String,
+    model_output: String,
+    user_corrected_text: String,
+    created_at_ms: i64,
 }
 
 static STORE: OnceLock<Mutex<HistoryStore>> = OnceLock::new();
@@ -142,6 +151,28 @@ pub(crate) fn voice_profile() -> Result<StoredVoiceProfile, String> {
     guard.voice_profile().map_err(|error| error.to_string())
 }
 
+pub(crate) fn export_learning_examples() -> Result<String, String> {
+    let guard = store()?
+        .lock()
+        .map_err(|_| "history store lock poisoned".to_owned())?;
+    guard
+        .export_learning_examples()
+        .map_err(|error| error.to_string())
+}
+
+pub(crate) fn correct_dictation(
+    id: &str,
+    corrected: &str,
+    learning_opted_in: bool,
+) -> Result<bool, String> {
+    let guard = store()?
+        .lock()
+        .map_err(|_| "history store lock poisoned".to_owned())?;
+    guard
+        .correct_dictation(id, corrected, learning_opted_in)
+        .map_err(|error| error.to_string())
+}
+
 fn store() -> Result<&'static Mutex<HistoryStore>, String> {
     if let Some(store) = STORE.get() {
         return Ok(store);
@@ -207,6 +238,7 @@ impl HistoryStore {
                  asr_model_id TEXT NOT NULL,
                  insertion_status TEXT NOT NULL,
                  insertion_method TEXT NOT NULL,
+                 was_user_edited INTEGER NOT NULL DEFAULT 0,
                  is_deleted INTEGER NOT NULL DEFAULT 0
              );
              CREATE VIRTUAL TABLE IF NOT EXISTS dictations_fts USING fts5(
@@ -248,9 +280,33 @@ impl HistoryStore {
              INSERT OR IGNORE INTO voice_style_profile (
                  id, sample_count, average_sentence_words,
                  contraction_ratio, lowercase_start_ratio
-             ) VALUES (1, 0, 0, 0, 0);",
+             ) VALUES (1, 0, 0, 0, 0);
+             CREATE TABLE IF NOT EXISTS learning_examples (
+                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+                 raw_text TEXT NOT NULL,
+                 model_output TEXT NOT NULL,
+                 user_corrected_text TEXT NOT NULL,
+                 created_at INTEGER NOT NULL
+             );",
         )?;
+        if !self.has_column("dictations", "was_user_edited")? {
+            self.connection.execute(
+                "ALTER TABLE dictations ADD COLUMN was_user_edited INTEGER NOT NULL DEFAULT 0",
+                [],
+            )?;
+        }
+        self.connection.pragma_update(None, "user_version", 2)?;
         Ok(())
+    }
+
+    fn has_column(&self, table: &str, column: &str) -> rusqlite::Result<bool> {
+        let mut statement = self
+            .connection
+            .prepare(&format!("PRAGMA table_info({table})"))?;
+        let names = statement
+            .query_map([], |row| row.get::<_, String>(1))?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        Ok(names.iter().any(|name| name == column))
     }
 
     fn save_dictation(&self, record: NewDictation<'_>) -> rusqlite::Result<()> {
@@ -460,6 +516,12 @@ impl HistoryStore {
     }
 
     fn record_user_edit(&self, original: &str, corrected: &str) -> rusqlite::Result<()> {
+        self.connection.execute(
+            "INSERT INTO learning_examples (
+                 raw_text, model_output, user_corrected_text, created_at
+             ) VALUES (?1, ?1, ?2, unixepoch('subsec') * 1000)",
+            params![original, corrected],
+        )?;
         for (spoken, written) in infer_token_replacements(original, corrected) {
             self.upsert_vocabulary(&spoken, &written)?;
         }
@@ -490,6 +552,68 @@ impl HistoryStore {
             params![words, contraction_ratio, lowercase_start],
         )?;
         Ok(())
+    }
+
+    fn correct_dictation(
+        &self,
+        id: &str,
+        corrected: &str,
+        learning_opted_in: bool,
+    ) -> rusqlite::Result<bool> {
+        let original = self.connection.query_row(
+            "SELECT final_text FROM dictations WHERE id = ?1 AND is_deleted = 0",
+            [id],
+            |row| row.get::<_, String>(0),
+        )?;
+        let corrected = corrected.trim();
+        if corrected.is_empty() || original.trim() == corrected {
+            return Ok(false);
+        }
+        self.connection.execute(
+            "UPDATE dictations SET final_text = ?2, cleaned_text = ?2,
+                 word_count = ?3, was_user_edited = 1,
+                 updated_at = unixepoch('subsec') * 1000
+             WHERE id = ?1 AND is_deleted = 0",
+            params![id, corrected, corrected.split_whitespace().count() as u32],
+        )?;
+        if learning_opted_in {
+            self.record_user_edit(&original, corrected)?;
+        }
+        Ok(true)
+    }
+
+    fn export_learning_examples(&self) -> Result<String, Box<dyn std::error::Error>> {
+        let mut statement = self.connection.prepare(
+            "SELECT raw_text, model_output, user_corrected_text, created_at
+             FROM learning_examples ORDER BY created_at ASC, id ASC",
+        )?;
+        let examples = statement
+            .query_map([], |row| {
+                Ok(LearningExample {
+                    raw_text: row.get(0)?,
+                    model_output: row.get(1)?,
+                    user_corrected_text: row.get(2)?,
+                    created_at_ms: row.get(3)?,
+                })
+            })?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        let user = UserDirs::new().ok_or("user directories are unavailable")?;
+        let directory = user
+            .download_dir()
+            .map(Path::to_path_buf)
+            .unwrap_or_else(|| user.home_dir().to_path_buf());
+        fs::create_dir_all(&directory)?;
+        let timestamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)?
+            .as_secs();
+        let path = directory.join(format!("swar-learning-export-{timestamp}.jsonl"));
+        let mut output = String::new();
+        for example in examples {
+            output.push_str(&serde_json::to_string(&example)?);
+            output.push('\n');
+        }
+        fs::write(&path, output)?;
+        Ok(path.to_string_lossy().into_owned())
     }
 
     fn voice_profile(&self) -> rusqlite::Result<StoredVoiceProfile> {
@@ -611,5 +735,47 @@ mod tests {
         assert_eq!(profile.sample_count, 1);
         assert_eq!(profile.average_sentence_words, 3.0);
         assert_eq!(profile.lowercase_start_ratio, 1.0);
+    }
+
+    #[test]
+    fn migrates_a_legacy_database_and_tracks_schema_version() {
+        let connection = Connection::open_in_memory().expect("legacy connection");
+        connection
+            .execute_batch(
+                "CREATE TABLE dictations (
+                    id TEXT PRIMARY KEY,
+                    created_at INTEGER NOT NULL,
+                    updated_at INTEGER NOT NULL,
+                    raw_text TEXT NOT NULL,
+                    cleaned_text TEXT NOT NULL,
+                    final_text TEXT NOT NULL,
+                    language_mode TEXT NOT NULL,
+                    writing_mode TEXT NOT NULL,
+                    source_app_name TEXT NOT NULL,
+                    audio_duration_ms INTEGER NOT NULL,
+                    speech_duration_ms INTEGER NOT NULL,
+                    processing_duration_ms INTEGER NOT NULL,
+                    word_count INTEGER NOT NULL,
+                    asr_engine TEXT NOT NULL,
+                    asr_model_id TEXT NOT NULL,
+                    insertion_status TEXT NOT NULL,
+                    insertion_method TEXT NOT NULL,
+                    is_deleted INTEGER NOT NULL DEFAULT 0
+                );",
+            )
+            .expect("legacy schema");
+        let store = HistoryStore {
+            connection,
+            path: PathBuf::from(":memory:"),
+        };
+        store.migrate().expect("migration");
+        assert!(store
+            .has_column("dictations", "was_user_edited")
+            .expect("column query"));
+        let version: u32 = store
+            .connection
+            .pragma_query_value(None, "user_version", |row| row.get(0))
+            .expect("schema version");
+        assert_eq!(version, 2);
     }
 }

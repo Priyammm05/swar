@@ -66,6 +66,12 @@ pub fn get_voice_style_profile() -> Result<VoiceStyleSnapshot, String> {
     })
 }
 
+/// Writes opted-in correction triples to a user-owned JSONL file. This is an
+/// explicit action and never uploads data.
+pub fn export_learning_examples() -> Result<String, String> {
+    storage::export_learning_examples()
+}
+
 pub(crate) fn apply_vocabulary(value: &str) -> String {
     let Ok(entries) = storage::vocabulary_entries() else {
         return value.to_owned();
