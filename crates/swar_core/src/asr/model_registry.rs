@@ -53,6 +53,59 @@ struct LoadedModel {
     context: WhisperContext,
 }
 
+/// Number of warm Whisper contexts kept resident. 2 lets a common language pair
+/// (e.g. English/Auto + Hindi) both stay warm so alternating dictations do not
+/// reload a ~190 MB model on every switch (CPU/thermal spike).
+const MAX_WARM_CONTEXTS: usize = 2;
+
+/// A tiny most-recently-used cache of warm Whisper contexts owned by the single
+/// ASR worker thread.
+struct ModelCache {
+    entries: Vec<LoadedModel>,
+}
+
+impl ModelCache {
+    fn new() -> Self {
+        Self {
+            entries: Vec::new(),
+        }
+    }
+
+    /// Ensures the model at `model_path` is warm. Returns `true` if it was
+    /// already resident (no reload), `false` if it was just loaded.
+    fn ensure(&mut self, model_path: &str) -> Result<bool, String> {
+        if let Some(index) = self
+            .entries
+            .iter()
+            .position(|model| model.path == model_path)
+        {
+            let entry = self.entries.remove(index);
+            self.entries.insert(0, entry);
+            return Ok(true);
+        }
+        let context =
+            WhisperContext::new_with_params(model_path, WhisperContextParameters::default())
+                .map_err(|error| format!("could not load offline model: {error}"))?;
+        self.entries.insert(
+            0,
+            LoadedModel {
+                path: model_path.to_owned(),
+                context,
+            },
+        );
+        self.entries.truncate(MAX_WARM_CONTEXTS);
+        Ok(false)
+    }
+
+    fn get(&self, model_path: &str) -> Option<&LoadedModel> {
+        self.entries.iter().find(|model| model.path == model_path)
+    }
+
+    fn clear(&mut self) {
+        self.entries.clear();
+    }
+}
+
 struct ModelRegistry {
     commands: Sender<ModelCommand>,
 }
@@ -180,7 +233,7 @@ fn run_worker(receiver: Receiver<ModelCommand>) {
     // it into whisper-rs' disabled-by-default hooks so release logs can never
     // contain a user's dictation.
     whisper_rs::install_logging_hooks();
-    let mut loaded: Option<LoadedModel> = None;
+    let mut cache = ModelCache::new();
     while let Ok(command) = receiver.recv() {
         match command {
             ModelCommand::Prepare {
@@ -188,11 +241,12 @@ fn run_worker(receiver: Receiver<ModelCommand>) {
                 response,
             } => {
                 let outcome = panic::catch_unwind(AssertUnwindSafe(|| {
-                    ensure_loaded(&mut loaded, &model_path)
+                    cache
+                        .ensure(&model_path)
                         .map(|already_loaded| ModelStatus { already_loaded })
                 }));
                 let result = outcome.unwrap_or_else(|_| {
-                    loaded = None;
+                    cache.clear();
                     Err("the offline model failed while loading".to_owned())
                 });
                 let _ = response.send(result);
@@ -207,11 +261,11 @@ fn run_worker(receiver: Receiver<ModelCommand>) {
                 // A panic inside whisper.cpp would otherwise unwind through the
                 // C frame (undefined behaviour) and kill this single worker,
                 // permanently disabling all future dictation. Catch it, drop the
-                // possibly-corrupt context, and reply with a recoverable error.
+                // possibly-corrupt contexts, and reply with a recoverable error.
                 let outcome = panic::catch_unwind(AssertUnwindSafe(|| {
-                    ensure_loaded(&mut loaded, &model_path).and_then(|_| {
-                        let model = loaded
-                            .as_ref()
+                    cache.ensure(&model_path).and_then(|_| {
+                        let model = cache
+                            .get(&model_path)
                             .ok_or_else(|| "the offline model did not remain loaded".to_owned())?;
                         transcribe_with_context(
                             &model.context,
@@ -223,33 +277,17 @@ fn run_worker(receiver: Receiver<ModelCommand>) {
                     })
                 }));
                 let result = outcome.unwrap_or_else(|_| {
-                    loaded = None;
+                    cache.clear();
                     Err("the offline model failed during transcription".to_owned())
                 });
                 let _ = response.send(result);
             }
             ModelCommand::Unload { response } => {
-                loaded = None;
+                cache.clear();
                 let _ = response.send(());
             }
         }
     }
-}
-
-fn ensure_loaded(loaded: &mut Option<LoadedModel>, model_path: &str) -> Result<bool, String> {
-    if loaded
-        .as_ref()
-        .is_some_and(|model| model.path == model_path)
-    {
-        return Ok(true);
-    }
-    let context = WhisperContext::new_with_params(model_path, WhisperContextParameters::default())
-        .map_err(|error| format!("could not load offline model: {error}"))?;
-    *loaded = Some(LoadedModel {
-        path: model_path.to_owned(),
-        context,
-    });
-    Ok(false)
 }
 
 fn transcribe_with_context(
