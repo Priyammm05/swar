@@ -95,7 +95,7 @@ pub struct DictationEvent {
     pub partial_text: Option<String>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct DictationSessionConfig {
     pub model_path: String,
     pub microphone_id: String,
@@ -110,6 +110,36 @@ pub struct DictationSessionConfig {
     pub provider_endpoint: String,
     pub provider_model: String,
     pub provider_api_key: String,
+}
+
+// Manual Debug so a stray `{:?}` (in a log line or panic message) can never leak
+// the BYOK provider key. Every other field is shown as usual.
+impl std::fmt::Debug for DictationSessionConfig {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("DictationSessionConfig")
+            .field("model_path", &self.model_path)
+            .field("microphone_id", &self.microphone_id)
+            .field("language", &self.language)
+            .field("writing_mode", &self.writing_mode)
+            .field("source_application", &self.source_application)
+            .field("paste_automatically", &self.paste_automatically)
+            .field("restore_clipboard", &self.restore_clipboard)
+            .field("maximum_seconds", &self.maximum_seconds)
+            .field("enable_live_preview", &self.enable_live_preview)
+            .field("enhancement_provider", &self.enhancement_provider)
+            .field("provider_endpoint", &self.provider_endpoint)
+            .field("provider_model", &self.provider_model)
+            .field(
+                "provider_api_key",
+                &if self.provider_api_key.is_empty() {
+                    "<none>"
+                } else {
+                    "<redacted>"
+                },
+            )
+            .finish()
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -316,7 +346,7 @@ pub fn finish_dictation_session(session_id: String) -> Result<DictationCompletio
 fn finish_capture(capture: &mut ActiveCapture) -> Result<DictationCompletion, String> {
     record_dictation_stage("capture");
     stop_preview(capture);
-    let captured = capture_engine::finish_capture(
+    let mut captured = capture_engine::finish_capture(
         &capture.id,
         capture.dropped_samples_at_start,
         capture.stream_errors_at_start,
@@ -328,6 +358,10 @@ fn finish_capture(capture: &mut ActiveCapture) -> Result<DictationCompletion, St
 
     let processing_started = Instant::now();
     let mono_16khz = resample::to_sample_rate(&captured, capture.sample_rate, 16_000);
+    // The raw capture buffer holds up to several minutes of dictation PCM and is
+    // not needed after resampling. Scrub it now rather than waiting for the
+    // allocator to hand the pages to another process (privacy guarantee).
+    captured.iter_mut().for_each(|sample| *sample = 0.0);
     record_dictation_stage("speech_detection");
     let speech = speech::retain_probable_speech(&mono_16khz, 16_000);
     if speech.samples.is_empty() {
@@ -744,6 +778,32 @@ mod tests {
     fn speech_markers_filter_known_blank_tokens() {
         assert!(!transcript_contains_speech("[BLANK_AUDIO]"));
         assert!(transcript_contains_speech("hello"));
+    }
+
+    #[test]
+    fn debug_output_redacts_the_provider_api_key() {
+        let config = DictationSessionConfig {
+            model_path: "model.bin".to_owned(),
+            microphone_id: "mic".to_owned(),
+            language: "english".to_owned(),
+            writing_mode: "clean".to_owned(),
+            source_application: "app".to_owned(),
+            paste_automatically: true,
+            restore_clipboard: false,
+            maximum_seconds: 30,
+            enable_live_preview: false,
+            enhancement_provider: "byok".to_owned(),
+            provider_endpoint: "https://example.test".to_owned(),
+            provider_model: "gpt".to_owned(),
+            provider_api_key: "super-secret-key".to_owned(),
+        };
+        let rendered = format!("{config:?}");
+        assert!(
+            !rendered.contains("super-secret-key"),
+            "the API key must never appear in Debug output"
+        );
+        assert!(rendered.contains("<redacted>"));
+        assert!(rendered.contains("https://example.test"));
     }
 
     // Serialised in one test: the coordinator exposes a single global slot, so

@@ -44,6 +44,23 @@ struct CaptureAccumulator {
     level_window: usize,
 }
 
+impl Drop for ActiveBuffer {
+    fn drop(&mut self) {
+        // Dropping a Vec only frees memory; it does not scrub dictation audio
+        // from the heap. Overwrite the captured PCM first (privacy guarantee).
+        self.samples.iter_mut().for_each(|sample| *sample = 0.0);
+    }
+}
+
+impl Drop for CaptureAccumulator {
+    fn drop(&mut self) {
+        // Scrub the rolling pre-roll — a few hundred ms of continuously captured
+        // microphone audio — when the engine is torn down. The active buffer, if
+        // any, scrubs itself through ActiveBuffer::drop.
+        self.pre_roll.iter_mut().for_each(|sample| *sample = 0.0);
+    }
+}
+
 impl CaptureAccumulator {
     fn new(sample_rate: u32) -> Self {
         Self {
@@ -103,7 +120,7 @@ impl CaptureAccumulator {
     }
 
     fn finish(&mut self, session_id: &str) -> Result<Vec<f32>, String> {
-        let active = self
+        let mut active = self
             .active
             .take()
             .ok_or_else(|| "no microphone capture is active".to_owned())?;
@@ -111,7 +128,9 @@ impl CaptureAccumulator {
             self.active = Some(active);
             return Err("the requested microphone capture is not active".to_owned());
         }
-        Ok(active.samples)
+        // Move the samples out so the caller owns them; the now-empty ActiveBuffer
+        // scrubs nothing on drop, and the caller scrubs the buffer after use.
+        Ok(std::mem::take(&mut active.samples))
     }
 
     fn cancel(&mut self, session_id: &str) -> Result<(), String> {
