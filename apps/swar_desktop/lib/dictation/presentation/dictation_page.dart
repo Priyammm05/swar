@@ -139,17 +139,8 @@ final class _Toolbar extends StatelessWidget {
               '${viewModel.totalCount} '
               '${viewModel.totalCount == 1 ? 'entry' : 'entries'}',
         ),
-        const SizedBox(width: 14),
-        Expanded(child: _SearchField(viewModel: viewModel)),
-        const SizedBox(width: 14),
-        SwarIconButton(
-          icon: Icons.tune_rounded,
-          iconSize: 17,
-          size: 38,
-          round: true,
-          semanticLabel: 'Filter',
-          onPressed: () {},
-        ),
+        const Spacer(),
+        SizedBox(width: 280, child: _SearchField(viewModel: viewModel)),
       ],
     );
   }
