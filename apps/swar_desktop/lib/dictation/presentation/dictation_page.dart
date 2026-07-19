@@ -574,12 +574,6 @@ final class _RowActions extends StatelessWidget {
         ),
         const SizedBox(width: 2),
         SwarIconButton(
-          icon: Icons.keyboard_return_rounded,
-          semanticLabel: 'Reinsert',
-          onPressed: () => Clipboard.setData(ClipboardData(text: text)),
-        ),
-        const SizedBox(width: 2),
-        SwarIconButton(
           icon: Icons.more_horiz_rounded,
           semanticLabel: 'More',
           onPressed: onEdit,
