@@ -5,7 +5,7 @@ set -eu
 project_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 # Dock / app icon: white background with the spruce brand mark centered.
 app_icon_source="$project_root/apps/logo/svar_dock_white_green.svg"
-menu_icon_source="$project_root/apps/logo/svar_logo_mark_black_centered.svg"
+menu_icon_source="$project_root/apps/logo/svar_menu_mark_template.svg"
 mac_app_icon_dir="$project_root/apps/swar_desktop/macos/Runner/Assets.xcassets/AppIcon.appiconset"
 mac_menu_icon_dir="$project_root/apps/swar_desktop/macos/Runner/Assets.xcassets/MenuBarIcon.imageset"
 windows_icon="$project_root/apps/swar_desktop/windows/runner/resources/app_icon.ico"
@@ -25,8 +25,10 @@ for size in 16 32 64 128 256 512 1024; do
     -o "$mac_app_icon_dir/app_icon_${size}.png"
 done
 
-rsvg-convert -w 41 -h 15 "$menu_icon_source" -o "$mac_menu_icon_dir/menu_bar_icon.png"
-rsvg-convert -w 82 -h 30 "$menu_icon_source" -o "$mac_menu_icon_dir/menu_bar_icon@2x.png"
+# Menu bar template mark: square, matching the circular brand mark. macOS tints
+# the template for light/dark, so only the alpha shape matters here.
+rsvg-convert -w 18 -h 18 "$menu_icon_source" -o "$mac_menu_icon_dir/menu_bar_icon.png"
+rsvg-convert -w 36 -h 36 "$menu_icon_source" -o "$mac_menu_icon_dir/menu_bar_icon@2x.png"
 
 icon_work_dir=$(mktemp -d "${TMPDIR:-/tmp}/swar-icons.XXXXXX")
 trap 'rm -rf "$icon_work_dir"' EXIT HUP INT TERM

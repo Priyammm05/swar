@@ -32,7 +32,7 @@ class AppDelegate: FlutterAppDelegate {
 
     if let button = item.button, let image = NSImage(named: "MenuBarIcon") {
       image.isTemplate = true
-      image.size = NSSize(width: 32, height: 12)
+      image.size = NSSize(width: 18, height: 18)
       button.image = image
       button.imagePosition = .imageOnly
       button.toolTip = "Swar"
