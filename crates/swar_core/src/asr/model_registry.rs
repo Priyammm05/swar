@@ -399,19 +399,20 @@ fn language_decoding(language: &str) -> LanguageDecoding {
             detect_language: false,
         },
         "hinglish" => LanguageDecoding {
-            whisper_language: None,
-            initial_prompt: Some(
-                "Write Hindi and English exactly as spoken using Roman script. Kal meeting hai. Deployment ready hai kya?",
-            ),
-            // A null language asks whisper.cpp to auto-detect and continue.
-            // Its detect_language flag is detection-only and returns before
-            // decoding any transcript segments.
+            // Decode as Hindi, never free auto-detect: a null language lets
+            // whisper.cpp misidentify short or accented Hindi as Urdu/Arabic and
+            // emit a completely different script. Hindi decoding is reliable for
+            // Hindi and code-switched English; the Devanagari it returns is then
+            // transliterated to Roman by the language stage after transcription.
+            whisper_language: Some("hi"),
+            initial_prompt: None,
             detect_language: false,
         },
+        // Auto: also decode as Hindi rather than free auto-detect, so spoken
+        // Hindi is recognised reliably (and later romanised) instead of being
+        // misdetected. Pure-English users should pick the English mode.
         _ => LanguageDecoding {
-            whisper_language: None,
-            // A vocabulary prompt can bias Whisper's language detector toward
-            // English. Auto mode intentionally detects from speech alone.
+            whisper_language: Some("hi"),
             initial_prompt: None,
             detect_language: false,
         },
@@ -424,7 +425,11 @@ fn vad_model_next_to(model_path: &Path) -> Option<std::path::PathBuf> {
 }
 
 fn model_path_for_language(model_path: &Path, language: &str) -> std::path::PathBuf {
-    if language.trim().eq_ignore_ascii_case("hindi") {
+    // The Indic-tuned model recognises Hindi (and code-switched English) best, so
+    // the Hindi-centric modes use it. Auto stays on the general multilingual model
+    // for a better balance when the speaker switches to full English.
+    let lower = language.trim().to_ascii_lowercase();
+    if lower == "hindi" || lower == "hinglish" {
         if let Some(parent) = model_path.parent() {
             let hindi = parent.join("ggml-hi-small.bin");
             if hindi.is_file() {
@@ -478,18 +483,27 @@ mod tests {
     }
 
     #[test]
-    fn language_modes_preserve_the_requested_script_contract() {
+    fn language_modes_force_a_concrete_decode_never_free_auto_detect() {
+        // English decodes as English; every Hindi-capable mode decodes as Hindi
+        // rather than null auto-detect (which misidentifies short/accented Hindi
+        // as Urdu/Arabic). Roman output is produced by the later transliteration
+        // stage, not by the decoder, so no mode leaves the language null.
         assert_eq!(language_decoding("english").whisper_language, Some("en"));
         assert_eq!(language_decoding("hindi").whisper_language, Some("hi"));
+        assert_eq!(language_decoding("hinglish").whisper_language, Some("hi"));
+        assert_eq!(language_decoding("automatic").whisper_language, Some("hi"));
 
-        let hinglish = language_decoding("hinglish");
-        assert_eq!(hinglish.whisper_language, None);
-        assert!(hinglish
-            .initial_prompt
-            .is_some_and(|prompt| prompt.contains("Roman script")));
-        assert_eq!(language_decoding("automatic").whisper_language, None);
-        assert!(!hinglish.detect_language);
-        assert!(!language_decoding("automatic").detect_language);
+        for mode in ["english", "hindi", "hinglish", "automatic"] {
+            let decoding = language_decoding(mode);
+            assert!(
+                !decoding.detect_language,
+                "{mode} must not use detection-only mode"
+            );
+            assert!(
+                decoding.initial_prompt.is_none(),
+                "{mode} must not bias the decoder with a prompt"
+            );
+        }
     }
 
     #[test]
