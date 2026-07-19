@@ -70,23 +70,4 @@ abstract final class SwarColors {
 
   // Shared status.
   static const danger = Color(0xFFC24A4A);
-
-  // --- Legacy compatibility shim ---
-  // The core-diagnostics view (outside the three spec screens) still reads the
-  // pre-redesign names. These alias onto the light token set so the app keeps
-  // compiling during the UI migration; remove once diagnostics adopts
-  // SwarTokens.
-  static const ink = lightInk;
-  static const mutedInk = lightInkMuted;
-  static const canvas = lightBgPage;
-  static const chrome = lightSurfaceSunken;
-  static const surface = lightSurfaceCard;
-  static const panel = lightSurfaceSunken;
-  static const surfaceVariant = lightSurfaceSunken2;
-  static const border = lightBorder;
-  static const leaf = spruce;
-  static const leafMid = spruceMid;
-  static const leafLight = spruceSoft;
-  static const leafPale = spruceBorder;
-  static const leafSoft = lightSpruceTint;
 }

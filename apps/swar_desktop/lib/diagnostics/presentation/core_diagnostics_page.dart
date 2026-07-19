@@ -98,7 +98,7 @@ class _Wordmark extends StatelessWidget {
           width: 32,
           height: 32,
           decoration: const BoxDecoration(
-            color: SwarColors.leaf,
+            color: SwarColors.spruce,
             borderRadius: BorderRadius.all(Radius.circular(10)),
           ),
           child: const Icon(
@@ -130,7 +130,7 @@ class _PrivacyCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Icon(Icons.lock_outline_rounded, color: SwarColors.leaf),
+            const Icon(Icons.lock_outline_rounded, color: SwarColors.spruce),
             const SizedBox(height: SwarSpacing.md),
             Text(
               'Local by design',

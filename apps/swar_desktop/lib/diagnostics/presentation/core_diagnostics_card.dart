@@ -46,7 +46,7 @@ final class _CoreDiagnosticsCardState extends State<CoreDiagnosticsCard> {
           children: [
             Icon(
               isReady ? Icons.check_circle_rounded : Icons.memory_rounded,
-              color: isReady ? SwarColors.leaf : SwarColors.mutedInk,
+              color: isReady ? SwarColors.spruce : SwarColors.lightInkMuted,
             ),
             const SizedBox(height: SwarSpacing.md),
             Text(
