@@ -9,8 +9,8 @@ import 'package:swar_desktop/design_system/swar_typography.dart';
 
 const _desktopNavigationBreakpoint = 760.0;
 
-/// Branch indices in [createSwarRouter]. The nav pill renders them in the spec
-/// order (Activity, Insights, Settings) regardless of branch declaration order.
+/// Branch indices in [createSwarRouter]. The nav pill renders Insights first,
+/// then Activity, then Settings, regardless of branch declaration order.
 const _insightsBranch = 0;
 const _activityBranch = 1;
 const _settingsBranch = 2;
@@ -69,7 +69,7 @@ final class _TopNav extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       key: const Key('top-navigation'),
-      padding: const EdgeInsets.fromLTRB(32, 26, 32, 4),
+      padding: const EdgeInsets.fromLTRB(32, 26, 32, 28),
       alignment: Alignment.topCenter,
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 1040),
@@ -78,7 +78,7 @@ final class _TopNav extends StatelessWidget {
             const Expanded(
               child: Align(
                 alignment: Alignment.centerLeft,
-                child: SwarLogo(showWordmark: false, markSize: 52),
+                child: SwarLogo(showWordmark: false, markSize: 72),
               ),
             ),
             _NavPill(selectedIndex: selectedIndex, onSelected: onSelected),
@@ -117,19 +117,19 @@ final class _NavPill extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           _NavItem(
-            key: const Key('top-dictation-nav'),
-            label: 'Activity',
-            icon: Icons.grid_view_rounded,
-            selected: selectedIndex == _activityBranch,
-            onPressed: () => onSelected(_activityBranch),
-          ),
-          const SizedBox(width: 4),
-          _NavItem(
             key: const Key('top-insights-nav'),
             label: 'Insights',
             icon: Icons.bar_chart_rounded,
             selected: selectedIndex == _insightsBranch,
             onPressed: () => onSelected(_insightsBranch),
+          ),
+          const SizedBox(width: 4),
+          _NavItem(
+            key: const Key('top-dictation-nav'),
+            label: 'Activity',
+            icon: Icons.grid_view_rounded,
+            selected: selectedIndex == _activityBranch,
+            onPressed: () => onSelected(_activityBranch),
           ),
           const SizedBox(width: 4),
           _NavItem(
@@ -214,18 +214,18 @@ final class _CompactNavigation extends StatelessWidget {
         child: Row(
           children: [
             _CompactDestination(
-              key: const Key('compact-dictation-nav'),
-              label: 'Activity',
-              icon: Icons.grid_view_rounded,
-              selected: selectedIndex == _activityBranch,
-              onPressed: () => onSelected(_activityBranch),
-            ),
-            _CompactDestination(
               key: const Key('compact-insights-nav'),
               label: 'Insights',
               icon: Icons.bar_chart_rounded,
               selected: selectedIndex == _insightsBranch,
               onPressed: () => onSelected(_insightsBranch),
+            ),
+            _CompactDestination(
+              key: const Key('compact-dictation-nav'),
+              label: 'Activity',
+              icon: Icons.grid_view_rounded,
+              selected: selectedIndex == _activityBranch,
+              onPressed: () => onSelected(_activityBranch),
             ),
             _CompactDestination(
               key: const Key('compact-settings-nav'),
