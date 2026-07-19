@@ -1,13 +1,17 @@
 // apps/swar_desktop/test/swar_shell_test.dart
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:swar_desktop/app/swar_app.dart';
 import 'package:swar_desktop/diagnostics/domain/core_diagnostics_gateway.dart';
 import 'package:swar_desktop/dictation/data/fake_dictation_history_repository.dart';
 import 'package:swar_desktop/dictation/domain/dictation_engine_gateway.dart';
+import 'package:swar_desktop/dictation/domain/desktop_shortcut_gateway.dart';
 import 'package:swar_desktop/insights/data/fake_insights_repository.dart';
 import 'package:swar_desktop/settings/data/in_memory_settings_repository.dart';
+import 'package:swar_desktop/settings/domain/swar_settings.dart';
 
 void main() {
   testWidgets('wide shell opens Insights first and navigates to Dictation', (
@@ -66,6 +70,56 @@ void main() {
     expect(find.byKey(const Key('dictation-list')), findsOneWidget);
   });
 
+  testWidgets('native coordinator states drive the desktop overlay', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1200, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final engine = _EventDictationEngineGateway();
+    final desktop = _RecordingDesktopShortcutGateway();
+    await tester.pumpWidget(
+      SwarApp(
+        diagnosticsGateway: const _SilentDiagnosticsGateway(),
+        dictationRepository: FakeDictationHistoryRepository(),
+        insightsRepository: const FakeInsightsRepository(),
+        dictationEngineGateway: engine,
+        desktopShortcutGateway: desktop,
+        settingsRepository: InMemorySettingsRepository(
+          initial: const SwarSettings(modelPath: '/test/model.bin'),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    desktop.emit(DesktopShortcutEventKind.toggle);
+    await tester.pump();
+    engine.emit(
+      const DictationEngineEvent(
+        sessionId: 'overlay-session',
+        kind: DictationEngineEventKind.recording,
+        previousState: DictationLifecycleState.preparing,
+        currentState: DictationLifecycleState.recording,
+        timestampMilliseconds: 1,
+        reason: 'microphone ready',
+      ),
+    );
+    await tester.pump();
+    expect(desktop.lastState, DesktopOverlayState.recording);
+
+    engine.emit(
+      const DictationEngineEvent(
+        sessionId: 'overlay-session',
+        kind: DictationEngineEventKind.finalising,
+        previousState: DictationLifecycleState.finalising,
+        currentState: DictationLifecycleState.transcribing,
+        timestampMilliseconds: 2,
+        reason: 'audio drained',
+      ),
+    );
+    await tester.pump();
+    expect(desktop.lastState, DesktopOverlayState.finalising);
+  });
+
   testWidgets('settings repository preserves changes across navigation', (
     tester,
   ) async {
@@ -104,7 +158,7 @@ void main() {
   testWidgets('settings test dictation explains the missing local model', (
     tester,
   ) async {
-    await tester.binding.setSurfaceSize(const Size(1200, 850));
+    await tester.binding.setSurfaceSize(const Size(1200, 1000));
     addTearDown(() => tester.binding.setSurfaceSize(null));
     await tester.pumpWidget(_buildApp());
     await tester.pumpAndSettle();
@@ -122,7 +176,8 @@ void main() {
           )
           .first,
     );
-    await tester.tap(testButton);
+    final button = tester.widget<ButtonStyleButton>(testButton);
+    button.onPressed!.call();
     await tester.pump();
 
     expect(
@@ -199,6 +254,12 @@ final class _FakeDictationEngineGateway implements DictationEngineGateway {
   Future<void> cancel(String sessionId) async {}
 
   @override
+  Future<bool> prepare(String modelPath) async => true;
+
+  @override
+  Future<void> release() async {}
+
+  @override
   Future<DictationEngineCompletion> finish(String sessionId) async =>
       const DictationEngineCompletion(
         finalText: 'Test dictation',
@@ -207,7 +268,12 @@ final class _FakeDictationEngineGateway implements DictationEngineGateway {
 
   @override
   Future<List<SwarMicrophone>> listMicrophones() async => const [
-    SwarMicrophone(id: 'default', name: 'Default microphone', isDefault: true),
+    SwarMicrophone(
+      id: 'default',
+      name: 'Default microphone',
+      isDefault: true,
+      isBuiltIn: true,
+    ),
   ];
 
   @override
@@ -228,4 +294,80 @@ final class _FakeDictationEngineGateway implements DictationEngineGateway {
   @override
   Stream<DictationEngineEvent> start(DictationEngineConfig config) =>
       const Stream<DictationEngineEvent>.empty();
+}
+
+final class _EventDictationEngineGateway implements DictationEngineGateway {
+  final _events = StreamController<DictationEngineEvent>.broadcast();
+
+  void emit(DictationEngineEvent event) => _events.add(event);
+
+  @override
+  Future<void> cancel(String sessionId) async {}
+
+  @override
+  Future<DictationEngineCompletion> finish(String sessionId) async =>
+      const DictationEngineCompletion(
+        finalText: 'Done',
+        insertionStatus: 'inserted',
+      );
+
+  @override
+  Future<OfflineModelInstallation> installRecommendedModel() async =>
+      recommendedModelStatus();
+
+  @override
+  Future<List<SwarMicrophone>> listMicrophones() async => const [];
+
+  @override
+  bool modelIsReady(String modelPath) => true;
+
+  @override
+  Future<bool> prepare(String modelPath) async => true;
+
+  @override
+  OfflineModelInstallation recommendedModelStatus() =>
+      const OfflineModelInstallation(
+        path: '/test/model.bin',
+        installed: true,
+        sizeBytes: 1,
+      );
+
+  @override
+  Future<void> release() async {
+    await _events.close();
+  }
+
+  @override
+  Stream<DictationEngineEvent> start(DictationEngineConfig config) =>
+      _events.stream;
+}
+
+final class _RecordingDesktopShortcutGateway implements DesktopShortcutGateway {
+  final _events = StreamController<DesktopShortcutEvent>.broadcast();
+  DesktopOverlayState? lastState;
+
+  void emit(DesktopShortcutEventKind kind) =>
+      _events.add(DesktopShortcutEvent(kind));
+
+  @override
+  Stream<DesktopShortcutEvent> get events => _events.stream;
+
+  @override
+  Future<void> dispose() => _events.close();
+
+  @override
+  Future<void> hideOverlay() async => lastState = null;
+
+  @override
+  Future<bool> initialize() async => true;
+
+  @override
+  Future<bool> requestInsertionPermission() async => true;
+
+  @override
+  Future<void> updateOverlay({
+    required DesktopOverlayState state,
+    required double audioLevel,
+    required bool isLatched,
+  }) async => lastState = state;
 }

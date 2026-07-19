@@ -11,6 +11,7 @@ void main() {
     await viewModel.start(
       const DictationEngineConfig(
         modelPath: '',
+        microphoneId: '',
         language: 'automatic',
         writingMode: 'clean',
         pasteAutomatically: true,
@@ -18,7 +19,7 @@ void main() {
       ),
     );
 
-    expect(viewModel.state, DictationSessionState.failed);
+    expect(viewModel.state, DictationLifecycleState.failed);
     expect(viewModel.message, contains('offline Whisper model'));
     expect(gateway.startCalls, 0);
   });
@@ -31,6 +32,7 @@ void main() {
     await viewModel.start(
       const DictationEngineConfig(
         modelPath: '/test/model.bin',
+        microphoneId: 'built-in',
         language: 'english',
         writingMode: 'clean',
         pasteAutomatically: true,
@@ -38,22 +40,77 @@ void main() {
       ),
     );
     await Future<void>.delayed(Duration.zero);
-    expect(viewModel.state, DictationSessionState.recording);
+    expect(viewModel.state, DictationLifecycleState.recording);
 
     await viewModel.finish();
-    expect(viewModel.state, DictationSessionState.idle);
+    expect(viewModel.state, DictationLifecycleState.idle);
     expect(viewModel.message, 'Dictation copied to the clipboard.');
   });
+
+  test(
+    'keeps tentative preview separate while following exact core states',
+    () async {
+      final gateway = _EngineGateway(
+        modelReady: true,
+        events: const [
+          DictationEngineEvent(
+            sessionId: 'session-1',
+            kind: DictationEngineEventKind.partialTranscript,
+            previousState: DictationLifecycleState.recording,
+            currentState: DictationLifecycleState.recording,
+            timestampMilliseconds: 2,
+            reason: 'tentative local preview',
+            partialText: 'Tentative words',
+          ),
+          DictationEngineEvent(
+            sessionId: 'session-1',
+            kind: DictationEngineEventKind.finalising,
+            previousState: DictationLifecycleState.finalising,
+            currentState: DictationLifecycleState.cleaning,
+            timestampMilliseconds: 3,
+            reason: 'final transcript ready',
+          ),
+        ],
+      );
+      final viewModel = DictationSessionViewModel(gateway: gateway);
+      addTearDown(viewModel.dispose);
+
+      await viewModel.start(
+        const DictationEngineConfig(
+          modelPath: '/test/model.bin',
+          microphoneId: 'built-in',
+          language: 'english',
+          writingMode: 'clean',
+          pasteAutomatically: true,
+          restoreClipboard: true,
+          enableLivePreview: true,
+        ),
+      );
+      await Future<void>.delayed(Duration.zero);
+
+      expect(viewModel.partialText, 'Tentative words');
+      expect(viewModel.state, DictationLifecycleState.cleaning);
+      expect(viewModel.message, 'Cleaning the transcript…');
+      expect(viewModel.completionRevision, 0);
+    },
+  );
 }
 
 final class _EngineGateway implements DictationEngineGateway {
-  _EngineGateway({required this.modelReady});
+  _EngineGateway({required this.modelReady, this.events});
 
   final bool modelReady;
+  final List<DictationEngineEvent>? events;
   int startCalls = 0;
 
   @override
   Future<void> cancel(String sessionId) async {}
+
+  @override
+  Future<bool> prepare(String modelPath) async => modelReady;
+
+  @override
+  Future<void> release() async {}
 
   @override
   Future<DictationEngineCompletion> finish(String sessionId) async =>
@@ -82,11 +139,18 @@ final class _EngineGateway implements DictationEngineGateway {
   @override
   Stream<DictationEngineEvent> start(DictationEngineConfig config) {
     startCalls += 1;
-    return Stream<DictationEngineEvent>.fromIterable(const [
-      DictationEngineEvent(
-        sessionId: 'session-1',
-        kind: DictationEngineEventKind.recording,
-      ),
-    ]);
+    return Stream<DictationEngineEvent>.fromIterable(
+      events ??
+          const [
+            DictationEngineEvent(
+              sessionId: 'session-1',
+              kind: DictationEngineEventKind.recording,
+              previousState: DictationLifecycleState.preparing,
+              currentState: DictationLifecycleState.recording,
+              timestampMilliseconds: 1,
+              reason: 'microphone ready',
+            ),
+          ],
+    );
   }
 }
