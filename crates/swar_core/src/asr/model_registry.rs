@@ -1,15 +1,25 @@
 use std::{
+    panic::{self, AssertUnwindSafe},
     path::Path,
     sync::{
-        mpsc::{self, Receiver, Sender},
+        mpsc::{self, Receiver, RecvTimeoutError, Sender},
         LazyLock,
     },
     thread,
+    time::Duration,
 };
 
 use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters};
 
 static MODEL_REGISTRY: LazyLock<ModelRegistry> = LazyLock::new(ModelRegistry::spawn);
+
+// Watchdog ceilings for the single ASR worker. They are deliberately generous —
+// real decodes finish far sooner — and exist only so a wedged whisper.cpp call
+// can never hang the caller (and, through it, the reserved coordinator) forever.
+const MODEL_LOAD_TIMEOUT: Duration = Duration::from_secs(120);
+const FINAL_DECODE_TIMEOUT: Duration = Duration::from_secs(300);
+const PREVIEW_DECODE_TIMEOUT: Duration = Duration::from_secs(60);
+const UNLOAD_TIMEOUT: Duration = Duration::from_secs(30);
 
 enum ModelCommand {
     Prepare {
@@ -61,9 +71,7 @@ impl ModelRegistry {
                 response,
             })
             .map_err(|_| "the ASR worker is unavailable".to_owned())?;
-        result
-            .recv()
-            .map_err(|_| "the ASR worker stopped while loading the model".to_owned())?
+        await_worker_response(&result, MODEL_LOAD_TIMEOUT, "loading the model")?
     }
 
     fn transcribe(
@@ -83,9 +91,7 @@ impl ModelRegistry {
                 response,
             })
             .map_err(|_| "the ASR worker is unavailable".to_owned())?;
-        result
-            .recv()
-            .map_err(|_| "the ASR worker stopped during transcription".to_owned())?
+        await_worker_response(&result, FINAL_DECODE_TIMEOUT, "transcribing")?
     }
 
     fn transcribe_preview(
@@ -105,9 +111,7 @@ impl ModelRegistry {
                 response,
             })
             .map_err(|_| "the ASR worker is unavailable".to_owned())?;
-        result
-            .recv()
-            .map_err(|_| "the ASR worker stopped during preview".to_owned())?
+        await_worker_response(&result, PREVIEW_DECODE_TIMEOUT, "generating a preview")?
     }
 
     fn unload(&self) -> Result<(), String> {
@@ -115,10 +119,21 @@ impl ModelRegistry {
         self.commands
             .send(ModelCommand::Unload { response })
             .map_err(|_| "the ASR worker is unavailable".to_owned())?;
-        result
-            .recv()
-            .map_err(|_| "the ASR worker stopped while unloading the model".to_owned())
+        await_worker_response(&result, UNLOAD_TIMEOUT, "unloading the model")
     }
+}
+
+/// Waits for the ASR worker's reply with a watchdog. A timeout or a dropped
+/// sender both surface as a recoverable error instead of blocking indefinitely.
+fn await_worker_response<T>(
+    result: &Receiver<T>,
+    timeout: Duration,
+    action: &'static str,
+) -> Result<T, String> {
+    result.recv_timeout(timeout).map_err(|error| match error {
+        RecvTimeoutError::Timeout => format!("the ASR worker timed out while {action}"),
+        RecvTimeoutError::Disconnected => format!("the ASR worker stopped while {action}"),
+    })
 }
 
 pub(crate) fn prepare(model_path: &str) -> Result<ModelStatus, String> {
@@ -167,8 +182,14 @@ fn run_worker(receiver: Receiver<ModelCommand>) {
                 model_path,
                 response,
             } => {
-                let result = ensure_loaded(&mut loaded, &model_path)
-                    .map(|already_loaded| ModelStatus { already_loaded });
+                let outcome = panic::catch_unwind(AssertUnwindSafe(|| {
+                    ensure_loaded(&mut loaded, &model_path)
+                        .map(|already_loaded| ModelStatus { already_loaded })
+                }));
+                let result = outcome.unwrap_or_else(|_| {
+                    loaded = None;
+                    Err("the offline model failed while loading".to_owned())
+                });
                 let _ = response.send(result);
             }
             ModelCommand::Transcribe {
@@ -178,17 +199,27 @@ fn run_worker(receiver: Receiver<ModelCommand>) {
                 preview,
                 response,
             } => {
-                let result = ensure_loaded(&mut loaded, &model_path).and_then(|_| {
-                    let model = loaded
-                        .as_ref()
-                        .ok_or_else(|| "the offline model did not remain loaded".to_owned())?;
-                    transcribe_with_context(
-                        &model.context,
-                        Path::new(&model.path),
-                        &language,
-                        &samples,
-                        preview,
-                    )
+                // A panic inside whisper.cpp would otherwise unwind through the
+                // C frame (undefined behaviour) and kill this single worker,
+                // permanently disabling all future dictation. Catch it, drop the
+                // possibly-corrupt context, and reply with a recoverable error.
+                let outcome = panic::catch_unwind(AssertUnwindSafe(|| {
+                    ensure_loaded(&mut loaded, &model_path).and_then(|_| {
+                        let model = loaded
+                            .as_ref()
+                            .ok_or_else(|| "the offline model did not remain loaded".to_owned())?;
+                        transcribe_with_context(
+                            &model.context,
+                            Path::new(&model.path),
+                            &language,
+                            &samples,
+                            preview,
+                        )
+                    })
+                }));
+                let result = outcome.unwrap_or_else(|_| {
+                    loaded = None;
+                    Err("the offline model failed during transcription".to_owned())
                 });
                 let _ = response.send(result);
             }
@@ -383,5 +414,24 @@ mod tests {
     fn final_dictation_does_not_apply_a_second_vad_pass() {
         assert!(!uses_whisper_vad(false));
         assert!(uses_whisper_vad(true));
+    }
+
+    #[test]
+    fn worker_response_times_out_instead_of_blocking_forever() {
+        // The sender stays alive but never replies, so only the watchdog can
+        // unblock the caller.
+        let (_sender, receiver) = mpsc::channel::<Result<String, String>>();
+        let error = await_worker_response(&receiver, Duration::from_millis(10), "transcribing")
+            .expect_err("a silent worker must time out");
+        assert!(error.contains("timed out"), "unexpected error: {error}");
+    }
+
+    #[test]
+    fn worker_response_reports_a_stopped_worker() {
+        let (sender, receiver) = mpsc::channel::<Result<String, String>>();
+        drop(sender);
+        let error = await_worker_response(&receiver, Duration::from_secs(1), "transcribing")
+            .expect_err("a dropped sender must surface a stopped worker");
+        assert!(error.contains("stopped"), "unexpected error: {error}");
     }
 }

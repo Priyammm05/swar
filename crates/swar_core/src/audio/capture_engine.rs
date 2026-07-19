@@ -156,7 +156,7 @@ impl PersistentAudioEngine {
         let dropped_samples = Arc::new(AtomicU64::new(0));
         let stream_errors = Arc::new(AtomicU64::new(0));
         let running = Arc::new(AtomicBool::new(true));
-        let worker = spawn_worker(consumer, accumulator.clone(), running.clone());
+        let worker = spawn_worker(consumer, accumulator.clone(), running.clone())?;
         let stream = build_input_stream(
             device,
             &config,
@@ -319,7 +319,7 @@ fn spawn_worker(
     mut consumer: Consumer<f32>,
     accumulator: Arc<Mutex<CaptureAccumulator>>,
     running: Arc<AtomicBool>,
-) -> thread::JoinHandle<()> {
+) -> Result<thread::JoinHandle<()>, String> {
     thread::Builder::new()
         .name("swar-audio-worker".to_owned())
         .spawn(move || loop {
@@ -341,7 +341,7 @@ fn spawn_worker(
                 thread::sleep(Duration::from_millis(4));
             }
         })
-        .expect("the dedicated audio worker must start")
+        .map_err(|error| error.to_string())
 }
 
 fn build_input_stream(

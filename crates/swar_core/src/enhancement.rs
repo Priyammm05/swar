@@ -1,6 +1,11 @@
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, time::Duration};
 
 pub(crate) const VALIDATION_ERROR_CODE: &str = "swar-INTENT-004";
+
+// Bounds the optional BYOK request so a slow or half-open provider can never
+// hang the dictation pipeline (and the reserved coordinator) in `Enhancing`.
+const PROVIDER_CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
+const PROVIDER_IO_TIMEOUT: Duration = Duration::from_secs(30);
 const CLEANUP_PROMPT: &str = include_str!("../../../models/prompts/cleanup-v1.txt");
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -97,7 +102,13 @@ impl TranscriptEnhancer for OpenAiCompatibleEnhancer<'_> {
                 {"role": "user", "content": request.safe_clean_text}
             ]
         });
-        let response = ureq::post(&url)
+        let agent = ureq::AgentBuilder::new()
+            .timeout_connect(PROVIDER_CONNECT_TIMEOUT)
+            .timeout_read(PROVIDER_IO_TIMEOUT)
+            .timeout_write(PROVIDER_IO_TIMEOUT)
+            .build();
+        let response = agent
+            .post(&url)
             .set("Authorization", &format!("Bearer {}", self.config.api_key))
             .set("Content-Type", "application/json")
             .send_json(body)

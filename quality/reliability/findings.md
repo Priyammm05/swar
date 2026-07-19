@@ -7,7 +7,12 @@ Fix in priority order. IDs are stable — reference them in commits and regressi
 ## Fix status
 
 - **FIXED (commit 1 — coordinator reservation safety):** R-001, R-002, R-005, R-020, R-028. An RAII `ReservationGuard` now releases the coordinator slot on every exit path (early `?`, error, or panic) via a new infallible `DictationCoordinator::abandon`; the release path recovers a poisoned lock instead of no-oping (R-028); the preview-worker spawn returns `Result` and degrades to no-preview instead of `.expect`-panicking under the `ACTIVE_CAPTURE` guard (R-002). Regression tests: `coordinator::abandon_frees_the_slot_from_any_phase`, `abandon_is_idempotent_and_ignores_unknown_sessions`, `api::dictation::reservation_guard_releases_on_drop_and_holds_when_disarmed`.
-- **OPEN:** everything else. R-011 (audio-worker spawn `.expect`) moved to commit 2 with the other `capture_engine` timeout work.
+- **FIXED (commit 2 — cross-boundary timeouts + FFI safety):** R-003, R-008, R-009, R-011, and the ASR half of R-007. ASR `prepare`/`transcribe`/`preview`/`unload` now use `recv_timeout` watchdogs (120/300/60/30 s), so a wedged whisper.cpp call surfaces a recoverable error instead of hanging the caller and the reserved coordinator (R-003; the coordinator then releases via the commit-1 guard). The ASR worker wraps each decode/load in `catch_unwind`, so a panic can no longer unwind into C or kill the single worker — it drops the context and replies with an error (R-008). The BYOK request uses an agent with connect/read/write timeouts (R-009). The audio worker spawn propagates its error as `Result` instead of `.expect` (R-011). Regression tests: `model_registry::worker_response_times_out_instead_of_blocking_forever`, `worker_response_reports_a_stopped_worker`.
+- **STILL OPEN (deferred with reason):**
+  - R-006 (tight-bound preview `join`) and R-014 (audio-worker `join` in `Drop`): `std` has no timed join; both now self-terminate within the ASR watchdog window (≤ preview 60 s) rather than never, but a hard bound needs a detach-on-timeout `exited` flag — follow-up.
+  - R-013 (device-open timeout): a clean timeout is blocked by cpal `Stream: !Send` (cannot build the stream on a helper thread and return it); needs platform-aware design — follow-up.
+  - R-007 insertion half (paste never acknowledged): addressed alongside R-004 in commit 3.
+  - Everything else: R-004, R-010, R-012, R-015..R-030.
 
 ## Automated framework baseline (real run, this audit)
 
