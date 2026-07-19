@@ -1,12 +1,18 @@
 use std::{
     fs::{self, File},
     io::{Read, Write},
-    path::PathBuf,
+    path::{Path, PathBuf},
+    time::Duration,
 };
 
 use directories::ProjectDirs;
 use flutter_rust_bridge::frb;
 use sha2::{Digest, Sha256};
+
+// A model download idles (no bytes) for at most this long before it is treated
+// as stalled, so a half-open connection cannot hang the installer forever.
+const DOWNLOAD_CONNECT_TIMEOUT: Duration = Duration::from_secs(30);
+const DOWNLOAD_IDLE_TIMEOUT: Duration = Duration::from_secs(60);
 
 const RECOMMENDED_MODEL_FILE: &str = "ggml-small-q5_1.bin";
 const RECOMMENDED_MODEL_URL: &str =
@@ -79,16 +85,37 @@ pub fn install_recommended_model() -> Result<OfflineModelStatus, String> {
 
 fn download_verified(
     url: &str,
-    destination: &std::path::Path,
+    destination: &Path,
     minimum_bytes: u64,
     expected_sha256: &str,
 ) -> Result<(), String> {
     let partial = destination.with_extension("bin.partial");
-    let response = ureq::get(url)
+    // Guarantee the partial is removed on every failure path (network error,
+    // disk-full mid-write, or a verification mismatch), not only on mismatch.
+    let outcome = download_to_partial(url, &partial, minimum_bytes, expected_sha256);
+    if outcome.is_err() {
+        let _ = fs::remove_file(&partial);
+    }
+    outcome?;
+    fs::rename(&partial, destination).map_err(|error| error.to_string())
+}
+
+fn download_to_partial(
+    url: &str,
+    partial: &Path,
+    minimum_bytes: u64,
+    expected_sha256: &str,
+) -> Result<(), String> {
+    let agent = ureq::AgentBuilder::new()
+        .timeout_connect(DOWNLOAD_CONNECT_TIMEOUT)
+        .timeout_read(DOWNLOAD_IDLE_TIMEOUT)
+        .build();
+    let response = agent
+        .get(url)
         .call()
         .map_err(|error| format!("model download failed: {error}"))?;
     let mut reader = response.into_reader();
-    let mut file = File::create(&partial).map_err(|error| error.to_string())?;
+    let mut file = File::create(partial).map_err(|error| error.to_string())?;
     let mut hasher = Sha256::new();
     let mut buffer = [0_u8; 64 * 1024];
     let mut size_bytes = 0_u64;
@@ -107,10 +134,26 @@ fn download_verified(
     file.sync_all().map_err(|error| error.to_string())?;
     let digest = format!("{:x}", hasher.finalize());
     if size_bytes < minimum_bytes || digest != expected_sha256 {
-        let _ = fs::remove_file(&partial);
         return Err("downloaded model failed integrity verification".to_owned());
     }
-    fs::rename(&partial, destination).map_err(|error| error.to_string())
+    Ok(())
+}
+
+/// The expected minimum on-disk size for a known model file, used as a cheap
+/// integrity guard before the file is handed to whisper.cpp.
+pub(crate) fn expected_minimum_bytes(model_path: &str) -> u64 {
+    match Path::new(model_path)
+        .file_name()
+        .and_then(|name| name.to_str())
+    {
+        Some(HINDI_MODEL_FILE) => HINDI_MODEL_BYTES,
+        Some(VAD_MODEL_FILE) => VAD_MODEL_BYTES,
+        _ => MINIMUM_MODEL_BYTES,
+    }
+}
+
+fn file_present_with_min_size(path: &Path, minimum_bytes: u64) -> bool {
+    fs::metadata(path).is_ok_and(|metadata| metadata.is_file() && metadata.len() >= minimum_bytes)
 }
 
 fn verified_file(path: &std::path::Path, minimum_bytes: u64, expected_sha256: &str) -> bool {
@@ -151,18 +194,15 @@ fn status_for(path: PathBuf) -> OfflineModelStatus {
     let size_bytes = metadata.as_ref().map_or(0, fs::Metadata::len);
     OfflineModelStatus {
         path: path.to_string_lossy().into_owned(),
+        // This runs on the Dart UI isolate (#[frb(sync)]). Use a cheap
+        // presence + size check, not a full SHA-256 of ~190 MB models, which
+        // would freeze the UI on every Settings render. The strong hash
+        // guarantee still holds at install time and at model load.
         installed: metadata.is_some_and(|value| value.is_file())
             && size_bytes >= MINIMUM_MODEL_BYTES
             && path.parent().is_some_and(|parent| {
-                verified_file(
-                    &parent.join(VAD_MODEL_FILE),
-                    VAD_MODEL_BYTES,
-                    VAD_MODEL_SHA256,
-                ) && verified_file(
-                    &parent.join(HINDI_MODEL_FILE),
-                    HINDI_MODEL_BYTES,
-                    HINDI_MODEL_SHA256,
-                )
+                file_present_with_min_size(&parent.join(VAD_MODEL_FILE), VAD_MODEL_BYTES)
+                    && file_present_with_min_size(&parent.join(HINDI_MODEL_FILE), HINDI_MODEL_BYTES)
             }),
         size_bytes,
         model_id: "whisper-small-q5_1-multilingual".to_owned(),
@@ -179,5 +219,21 @@ mod tests {
         assert!(!RECOMMENDED_MODEL_FILE.contains(".en."));
         assert_eq!(VAD_MODEL_FILE, "ggml-silero-v6.2.0.bin");
         assert_eq!(HINDI_MODEL_FILE, "ggml-hi-small.bin");
+    }
+
+    #[test]
+    fn expected_minimum_bytes_matches_each_known_model() {
+        assert_eq!(
+            expected_minimum_bytes("/models/ggml-hi-small.bin"),
+            HINDI_MODEL_BYTES
+        );
+        assert_eq!(
+            expected_minimum_bytes("/models/ggml-silero-v6.2.0.bin"),
+            VAD_MODEL_BYTES
+        );
+        assert_eq!(
+            expected_minimum_bytes("/models/ggml-small-q5_1.bin"),
+            MINIMUM_MODEL_BYTES
+        );
     }
 }

@@ -398,11 +398,23 @@ fn model_path_for_language(model_path: &Path, language: &str) -> std::path::Path
 }
 
 fn ensure_model_file(model_path: &str) -> Result<(), String> {
-    if model_path.trim().is_empty() || !Path::new(model_path).is_file() {
-        Err("model_not_installed: choose an offline Whisper model in Settings".to_owned())
-    } else {
-        Ok(())
+    let path = Path::new(model_path);
+    if model_path.trim().is_empty() || !path.is_file() {
+        return Err("model_not_installed: choose an offline Whisper model in Settings".to_owned());
     }
+    // Cheap size re-check before the file reaches whisper.cpp. A model that
+    // passed SHA-256 at install but was later truncated (disk-full, interrupted
+    // OS update) would otherwise be handed to native decoding and could abort.
+    let length = std::fs::metadata(path)
+        .map(|metadata| metadata.len())
+        .unwrap_or(0);
+    if length < crate::api::models::expected_minimum_bytes(model_path) {
+        return Err(
+            "model_incomplete: the offline model file is incomplete; reinstall it in Settings"
+                .to_owned(),
+        );
+    }
+    Ok(())
 }
 
 fn available_threads() -> i32 {
