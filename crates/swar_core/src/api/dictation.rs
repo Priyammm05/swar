@@ -1,39 +1,83 @@
 use std::{
     path::Path,
     sync::{
-        Arc, Mutex,
-        atomic::{AtomicBool, AtomicU64, Ordering},
+        atomic::{AtomicBool, Ordering},
+        Arc, LazyLock, Mutex,
     },
     thread,
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
-use cpal::{
-    Device, SampleFormat, Stream, StreamConfig,
-    traits::{DeviceTrait, HostTrait, StreamTrait},
-};
-use flutter_rust_bridge::frb;
-use rtrb::{Consumer, Producer, RingBuffer};
-use uuid::Uuid;
-use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters};
-
 use crate::{
+    api::personalization,
+    asr::model_registry,
+    audio::capture_engine,
+    dictation::{
+        coordinator::DictationCoordinator,
+        state_machine::{DictationState, DictationStateMachine, DictationTransition},
+    },
+    enhancement,
     frb_generated::StreamSink,
     insertion,
     storage::{self, NewDictation},
     text_cleanup,
 };
+use cpal::{
+    traits::{DeviceTrait, HostTrait},
+    Device,
+};
+use flutter_rust_bridge::frb;
+use uuid::Uuid;
 
 static ACTIVE_CAPTURE: Mutex<Option<ActiveCapture>> = Mutex::new(None);
+static COORDINATOR: LazyLock<Mutex<DictationCoordinator>> =
+    LazyLock::new(|| Mutex::new(DictationCoordinator::default()));
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum DictationLifecycleState {
+    Idle,
+    Preparing,
+    Recording,
+    Finalising,
+    Transcribing,
+    Cleaning,
+    Enhancing,
+    Inserting,
+    CopiedFallback,
+    Completed,
+    Cancelled,
+    Failed,
+}
+
+impl From<DictationState> for DictationLifecycleState {
+    fn from(value: DictationState) -> Self {
+        match value {
+            DictationState::Idle => Self::Idle,
+            DictationState::Preparing => Self::Preparing,
+            DictationState::Recording => Self::Recording,
+            DictationState::Finalising => Self::Finalising,
+            DictationState::Transcribing => Self::Transcribing,
+            DictationState::Cleaning => Self::Cleaning,
+            DictationState::Enhancing => Self::Enhancing,
+            DictationState::Inserting => Self::Inserting,
+            DictationState::CopiedFallback => Self::CopiedFallback,
+            DictationState::Completed => Self::Completed,
+            DictationState::Cancelled => Self::Cancelled,
+            DictationState::Failed => Self::Failed,
+        }
+    }
+}
 
 #[derive(Clone, Debug)]
 pub enum DictationEventKind {
+    StateChanged,
     Preparing,
     Recording,
     AudioLevel,
     Finalising,
     Cancelled,
     Failed,
+    PartialTranscript,
 }
 
 #[derive(Clone, Debug)]
@@ -42,6 +86,11 @@ pub struct DictationEvent {
     pub kind: DictationEventKind,
     pub audio_level: Option<f64>,
     pub message: Option<String>,
+    pub timestamp_ms: u64,
+    pub previous_state: DictationLifecycleState,
+    pub current_state: DictationLifecycleState,
+    pub reason: String,
+    pub partial_text: Option<String>,
 }
 
 #[derive(Clone, Debug)]
@@ -54,6 +103,7 @@ pub struct DictationSessionConfig {
     pub paste_automatically: bool,
     pub restore_clipboard: bool,
     pub maximum_seconds: u32,
+    pub enable_live_preview: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -80,10 +130,11 @@ struct ActiveCapture {
     config: DictationSessionConfig,
     sample_rate: u32,
     started_at: Instant,
-    running: Arc<AtomicBool>,
-    dropped_samples: Arc<AtomicU64>,
-    stream: Stream,
-    worker: thread::JoinHandle<Vec<f32>>,
+    dropped_samples_at_start: u64,
+    preview_running: Arc<AtomicBool>,
+    preview_worker: Option<thread::JoinHandle<()>>,
+    sink: StreamSink<DictationEvent>,
+    lifecycle: DictationStateMachine,
 }
 
 /// Lists the audio inputs visible to CoreAudio/WASAPI through CPAL.
@@ -126,77 +177,132 @@ pub fn start_dictation_session(
     if config.model_path.trim().is_empty() || !Path::new(&config.model_path).is_file() {
         return Err("model_not_installed: choose an offline Whisper model in Settings".to_owned());
     }
+    model_registry::prepare(&config.model_path)?;
 
     let session_id = Uuid::new_v4().to_string();
-    let _ = sink.add(DictationEvent {
-        session_id: session_id.clone(),
-        kind: DictationEventKind::Preparing,
-        audio_level: None,
-        message: None,
-    });
+    COORDINATOR
+        .lock()
+        .map_err(|_| "dictation coordinator lock poisoned".to_owned())?
+        .reserve_recording(&session_id)?;
+    let mut lifecycle = DictationStateMachine::new();
+    let preparing = lifecycle
+        .transition(DictationState::Preparing, "shortcut activated")
+        .map_err(|error| error.to_string())?;
+    emit_transition(&sink, &session_id, preparing, None);
 
     let host = cpal::default_host();
-    let device = select_input_device(&host, &config.microphone_id)?;
-    let supported = device
-        .default_input_config()
-        .map_err(|error| error.to_string())?;
-    let sample_format = supported.sample_format();
-    let stream_config: StreamConfig = supported.into();
-    let sample_rate = stream_config.sample_rate;
-    let channels = usize::from(stream_config.channels);
-    let capacity = sample_rate as usize * config.maximum_seconds.clamp(5, 300) as usize;
-    let (producer, consumer) = RingBuffer::<f32>::new(capacity);
-    let running = Arc::new(AtomicBool::new(true));
-    let dropped_samples = Arc::new(AtomicU64::new(0));
-    let worker = spawn_audio_worker(
-        consumer,
-        running.clone(),
-        sample_rate,
-        sink,
-        session_id.clone(),
-    );
-    let stream = build_input_stream(
+    let device = match select_input_device(&host, &config.microphone_id) {
+        Ok(device) => device,
+        Err(error) => {
+            fail_start(&mut lifecycle, &sink, &session_id, &error);
+            release_recording_reservation(&session_id);
+            return Err(error);
+        }
+    };
+    let device_id = device
+        .id()
+        .map(|id| id.to_string())
+        .unwrap_or_else(|_| device.to_string());
+    let level_sink = sink.clone();
+    let level_session_id = session_id.clone();
+    let capture_start = match capture_engine::begin_capture(
         &device,
-        &stream_config,
-        sample_format,
-        channels,
-        producer,
-        dropped_samples.clone(),
-    )?;
-    stream.play().map_err(|error| error.to_string())?;
+        device_id,
+        session_id.clone(),
+        config.maximum_seconds,
+        Arc::new(move |rms| {
+            let _ = level_sink.add(DictationEvent {
+                session_id: level_session_id.clone(),
+                kind: DictationEventKind::AudioLevel,
+                audio_level: Some(rms),
+                message: None,
+                timestamp_ms: monotonic_timestamp_ms(),
+                previous_state: DictationState::Recording.into(),
+                current_state: DictationState::Recording.into(),
+                reason: "audio meter".to_owned(),
+                partial_text: None,
+            });
+        }),
+    ) {
+        Ok(start) => start,
+        Err(error) => {
+            fail_start(&mut lifecycle, &sink, &session_id, &error);
+            release_recording_reservation(&session_id);
+            return Err(error);
+        }
+    };
+    let recording = lifecycle
+        .transition(DictationState::Recording, "microphone ready")
+        .map_err(|error| error.to_string())?;
+    emit_transition(&sink, &session_id, recording, None);
+    let preview_running = Arc::new(AtomicBool::new(config.enable_live_preview));
+    let preview_worker = config.enable_live_preview.then(|| {
+        spawn_preview_worker(
+            session_id.clone(),
+            config.model_path.clone(),
+            config.language.clone(),
+            sink.clone(),
+            preview_running.clone(),
+        )
+    });
 
     *active = Some(ActiveCapture {
         id: session_id.clone(),
         config,
-        sample_rate,
+        sample_rate: capture_start.sample_rate,
         started_at: Instant::now(),
-        running,
-        dropped_samples,
-        stream,
-        worker,
+        dropped_samples_at_start: capture_start.dropped_samples_at_start,
+        preview_running,
+        preview_worker,
+        sink,
+        lifecycle,
     });
     Ok(session_id)
 }
 
 /// Stops capture, transcribes locally with whisper.cpp, cleans, inserts, and persists.
 pub fn finish_dictation_session(session_id: String) -> Result<DictationCompletion, String> {
-    let capture = take_capture(&session_id)?;
-    capture.running.store(false, Ordering::Release);
-    drop(capture.stream);
-    let captured = capture
-        .worker
-        .join()
-        .map_err(|_| "audio worker stopped unexpectedly".to_owned())?;
-    if capture.dropped_samples.load(Ordering::Relaxed) > 0 {
-        return Err("audio buffer overflowed; shorten the dictation and try again".to_owned());
+    let mut capture = take_capture(&session_id)?;
+    COORDINATOR
+        .lock()
+        .map_err(|_| "dictation coordinator lock poisoned".to_owned())?
+        .begin_post_processing(&session_id)?;
+    transition_capture(
+        &mut capture,
+        DictationState::Finalising,
+        "shortcut released",
+    )?;
+    let result = finish_capture(&mut capture);
+    match result {
+        Ok(completion) => {
+            transition_capture(&mut capture, DictationState::Completed, "history committed")?;
+            transition_capture(&mut capture, DictationState::Idle, "session released")?;
+            complete_coordinator_session(&session_id);
+            Ok(completion)
+        }
+        Err(error) => {
+            let _ = transition_capture(&mut capture, DictationState::Failed, error.clone());
+            complete_coordinator_session(&session_id);
+            Err(error)
+        }
     }
+}
+
+fn finish_capture(capture: &mut ActiveCapture) -> Result<DictationCompletion, String> {
+    stop_preview(capture);
+    let captured = capture_engine::finish_capture(&capture.id, capture.dropped_samples_at_start)?;
     if captured.is_empty() {
         return Err("no microphone audio was captured".to_owned());
     }
 
     let processing_started = Instant::now();
     let mono_16khz = resample_linear(&captured, capture.sample_rate, 16_000);
-    let raw_text = transcribe(
+    transition_capture(
+        capture,
+        DictationState::Transcribing,
+        "audio drained and resampled",
+    )?;
+    let raw_text = model_registry::transcribe(
         &capture.config.model_path,
         &capture.config.language,
         &mono_16khz,
@@ -204,15 +310,46 @@ pub fn finish_dictation_session(session_id: String) -> Result<DictationCompletio
     if !transcript_contains_speech(&raw_text) {
         return Err("speech was not detected".to_owned());
     }
-    let final_text = text_cleanup::clean_transcript(&raw_text, &capture.config.writing_mode);
-    if final_text.trim().is_empty() {
+    transition_capture(capture, DictationState::Cleaning, "final transcript ready")?;
+    let personalized_raw = personalization::apply_vocabulary(&raw_text);
+    let clean_text =
+        text_cleanup::clean_transcript(&personalized_raw, &capture.config.writing_mode);
+    if clean_text.trim().is_empty() {
         return Err("speech was not detected".to_owned());
     }
+    let enhancement = enhancement::enhance_transcript(
+        &personalized_raw,
+        &clean_text,
+        &capture.config.writing_mode,
+    );
+    if enhancement.routed {
+        transition_capture(
+            capture,
+            DictationState::Enhancing,
+            if enhancement.validation_fallback {
+                "enhancement rejected by protected-token validator"
+            } else if enhancement.applied {
+                "local enhancement applied"
+            } else {
+                "local enhancement kept deterministic text"
+            },
+        )?;
+    }
+    let final_text = enhancement.text;
+    transition_capture(capture, DictationState::Inserting, "cleanup completed")?;
     let insertion = insertion::insert_with_clipboard(
+        &capture.id,
         &final_text,
         capture.config.paste_automatically,
         capture.config.restore_clipboard,
     )?;
+    if insertion.status != "inserted" && capture.config.paste_automatically {
+        transition_capture(
+            capture,
+            DictationState::CopiedFallback,
+            "automatic insertion unavailable",
+        )?;
+    }
     let processing_duration_ms = processing_started.elapsed().as_millis() as u64;
     let audio_duration_ms = capture.started_at.elapsed().as_millis() as u64;
     let created_at_ms = SystemTime::now()
@@ -242,7 +379,7 @@ pub fn finish_dictation_session(session_id: String) -> Result<DictationCompletio
     })?;
 
     Ok(DictationCompletion {
-        session_id,
+        session_id: capture.id.clone(),
         raw_text,
         final_text,
         audio_duration_ms,
@@ -254,16 +391,32 @@ pub fn finish_dictation_session(session_id: String) -> Result<DictationCompletio
 
 /// Cancels the active capture and discards all PCM without writing history.
 pub fn cancel_dictation_session(session_id: String) -> Result<(), String> {
-    let capture = take_capture(&session_id)?;
-    capture.running.store(false, Ordering::Release);
-    drop(capture.stream);
-    let _ = capture.worker.join();
+    let mut capture = take_capture(&session_id)?;
+    transition_capture(&mut capture, DictationState::Cancelled, "user cancelled")?;
+    stop_preview(&mut capture);
+    capture_engine::cancel_capture(&session_id)?;
+    COORDINATOR
+        .lock()
+        .map_err(|_| "dictation coordinator lock poisoned".to_owned())?
+        .cancel_recording(&session_id)?;
+    transition_capture(&mut capture, DictationState::Idle, "session released")?;
     Ok(())
 }
 
 #[frb(sync)]
 pub fn offline_model_is_ready(model_path: String) -> bool {
     !model_path.trim().is_empty() && Path::new(&model_path).is_file()
+}
+
+/// Loads the selected model on the dedicated ASR worker before the first dictation.
+pub fn prepare_dictation_engine(model_path: String) -> Result<bool, String> {
+    model_registry::prepare(&model_path).map(|status| status.already_loaded)
+}
+
+/// Releases the warm model without stopping the dedicated ASR worker.
+pub fn release_dictation_engine() -> Result<(), String> {
+    model_registry::unload()?;
+    capture_engine::release()
 }
 
 fn take_capture(session_id: &str) -> Result<ActiveCapture, String> {
@@ -280,113 +433,143 @@ fn take_capture(session_id: &str) -> Result<ActiveCapture, String> {
     Ok(capture)
 }
 
-fn spawn_audio_worker(
-    mut consumer: Consumer<f32>,
-    running: Arc<AtomicBool>,
-    sample_rate: u32,
-    sink: StreamSink<DictationEvent>,
+fn spawn_preview_worker(
     session_id: String,
-) -> thread::JoinHandle<Vec<f32>> {
-    thread::spawn(move || {
-        let _ = sink.add(DictationEvent {
-            session_id: session_id.clone(),
-            kind: DictationEventKind::Recording,
-            audio_level: None,
-            message: None,
-        });
-        let mut samples = Vec::new();
-        let level_window = (sample_rate / 20).max(1) as usize;
-        let mut level_sum = 0.0_f64;
-        let mut level_count = 0_usize;
-        loop {
-            let mut drained = false;
-            while let Ok(sample) = consumer.pop() {
-                drained = true;
-                samples.push(sample);
-                level_sum += f64::from(sample * sample);
-                level_count += 1;
-                if level_count >= level_window {
-                    let rms = (level_sum / level_count as f64).sqrt().clamp(0.0, 1.0);
-                    let _ = sink.add(DictationEvent {
-                        session_id: session_id.clone(),
-                        kind: DictationEventKind::AudioLevel,
-                        audio_level: Some(rms),
-                        message: None,
-                    });
-                    level_sum = 0.0;
-                    level_count = 0;
+    model_path: String,
+    language: String,
+    sink: StreamSink<DictationEvent>,
+    running: Arc<AtomicBool>,
+) -> thread::JoinHandle<()> {
+    thread::Builder::new()
+        .name(format!("swar-preview-{session_id}"))
+        .spawn(move || {
+            let mut elapsed = Duration::ZERO;
+            let mut previous = String::new();
+            while running.load(Ordering::Acquire) {
+                thread::sleep(Duration::from_millis(100));
+                elapsed += Duration::from_millis(100);
+                if elapsed < Duration::from_millis(1_000) {
+                    continue;
                 }
+                elapsed = Duration::ZERO;
+                let Ok((samples, sample_rate)) = capture_engine::snapshot(&session_id) else {
+                    break;
+                };
+                if samples.len() < sample_rate as usize * 4 / 5 {
+                    continue;
+                }
+                let mono_16khz = resample_linear(&samples, sample_rate, 16_000);
+                let Ok(partial) =
+                    model_registry::transcribe_preview(&model_path, &language, &mono_16khz)
+                else {
+                    continue;
+                };
+                if partial.is_empty()
+                    || partial == previous
+                    || !transcript_contains_speech(&partial)
+                {
+                    continue;
+                }
+                previous.clone_from(&partial);
+                let _ = sink.add(DictationEvent {
+                    session_id: session_id.clone(),
+                    kind: DictationEventKind::PartialTranscript,
+                    audio_level: None,
+                    message: None,
+                    timestamp_ms: monotonic_timestamp_ms(),
+                    previous_state: DictationState::Recording.into(),
+                    current_state: DictationState::Recording.into(),
+                    reason: "tentative local preview".to_owned(),
+                    partial_text: Some(partial),
+                });
             }
-            if !running.load(Ordering::Acquire) && !drained {
-                break;
-            }
-            if !drained {
-                thread::sleep(Duration::from_millis(4));
-            }
-        }
-        let _ = sink.add(DictationEvent {
-            session_id,
-            kind: DictationEventKind::Finalising,
-            audio_level: None,
-            message: None,
-        });
-        samples
-    })
+        })
+        .expect("the optional preview worker must start")
 }
 
-fn build_input_stream(
-    device: &Device,
-    config: &StreamConfig,
-    format: SampleFormat,
-    channels: usize,
-    producer: Producer<f32>,
-    dropped: Arc<AtomicU64>,
-) -> Result<Stream, String> {
-    match format {
-        SampleFormat::F32 => {
-            build_typed_stream(device, config, channels, producer, dropped, |x: f32| x)
-        }
-        SampleFormat::I16 => {
-            build_typed_stream(device, config, channels, producer, dropped, |x: i16| {
-                f32::from(x) / 32_768.0
-            })
-        }
-        SampleFormat::U16 => {
-            build_typed_stream(device, config, channels, producer, dropped, |x: u16| {
-                (f32::from(x) - 32_768.0) / 32_768.0
-            })
-        }
-        _ => Err(format!("unsupported microphone sample format: {format:?}")),
+fn stop_preview(capture: &mut ActiveCapture) {
+    capture.preview_running.store(false, Ordering::Release);
+    if let Some(worker) = capture.preview_worker.take() {
+        let _ = worker.join();
     }
 }
 
-fn build_typed_stream<T, F>(
-    device: &Device,
-    config: &StreamConfig,
-    channels: usize,
-    mut producer: Producer<f32>,
-    dropped: Arc<AtomicU64>,
-    convert: F,
-) -> Result<Stream, String>
-where
-    T: cpal::SizedSample + Copy,
-    F: Fn(T) -> f32 + Send + 'static + Copy,
-{
-    device
-        .build_input_stream(
-            *config,
-            move |data: &[T], _| {
-                for frame in data.chunks(channels) {
-                    let mono = frame.iter().copied().map(convert).sum::<f32>() / frame.len() as f32;
-                    if producer.push(mono).is_err() {
-                        dropped.fetch_add(1, Ordering::Relaxed);
-                    }
-                }
-            },
-            move |_error| {},
-            None,
-        )
-        .map_err(|error| error.to_string())
+fn transition_capture(
+    capture: &mut ActiveCapture,
+    state: DictationState,
+    reason: impl Into<String>,
+) -> Result<(), String> {
+    let transition = capture
+        .lifecycle
+        .transition(state, reason)
+        .map_err(|error| error.to_string())?;
+    emit_transition(&capture.sink, &capture.id, transition, None);
+    Ok(())
+}
+
+fn emit_transition(
+    sink: &StreamSink<DictationEvent>,
+    session_id: &str,
+    transition: DictationTransition,
+    message: Option<String>,
+) {
+    let kind = event_kind_for_state(transition.current);
+    let _ = sink.add(DictationEvent {
+        session_id: session_id.to_owned(),
+        kind,
+        audio_level: None,
+        message,
+        timestamp_ms: monotonic_timestamp_ms(),
+        previous_state: transition.previous.into(),
+        current_state: transition.current.into(),
+        reason: transition.reason,
+        partial_text: None,
+    });
+}
+
+fn event_kind_for_state(state: DictationState) -> DictationEventKind {
+    match state {
+        DictationState::Preparing => DictationEventKind::Preparing,
+        DictationState::Recording => DictationEventKind::Recording,
+        DictationState::Finalising
+        | DictationState::Transcribing
+        | DictationState::Cleaning
+        | DictationState::Enhancing
+        | DictationState::Inserting
+        | DictationState::CopiedFallback
+        | DictationState::Completed
+        | DictationState::Idle => DictationEventKind::Finalising,
+        DictationState::Cancelled => DictationEventKind::Cancelled,
+        DictationState::Failed => DictationEventKind::Failed,
+    }
+}
+
+fn fail_start(
+    lifecycle: &mut DictationStateMachine,
+    sink: &StreamSink<DictationEvent>,
+    session_id: &str,
+    message: &str,
+) {
+    if let Ok(transition) = lifecycle.transition(DictationState::Failed, message) {
+        emit_transition(sink, session_id, transition, Some(message.to_owned()));
+    }
+}
+
+fn release_recording_reservation(session_id: &str) {
+    if let Ok(mut coordinator) = COORDINATOR.lock() {
+        let _ = coordinator.cancel_recording(session_id);
+    }
+}
+
+fn complete_coordinator_session(session_id: &str) {
+    if let Ok(mut coordinator) = COORDINATOR.lock() {
+        let _ = coordinator.complete(session_id);
+    }
+}
+
+fn monotonic_timestamp_ms() -> u64 {
+    static ORIGIN: std::sync::OnceLock<Instant> = std::sync::OnceLock::new();
+    ORIGIN.get_or_init(Instant::now).elapsed().as_millis() as u64
 }
 
 fn resample_linear(input: &[f32], source_rate: u32, target_rate: u32) -> Vec<f32> {
@@ -407,44 +590,6 @@ fn resample_linear(input: &[f32], source_rate: u32, target_rate: u32) -> Vec<f32
             input[lower] * (1.0 - fraction) + input[upper] * fraction
         })
         .collect()
-}
-
-fn transcribe(model_path: &str, language: &str, samples: &[f32]) -> Result<String, String> {
-    let context = WhisperContext::new_with_params(model_path, WhisperContextParameters::default())
-        .map_err(|error| format!("could not load offline model: {error}"))?;
-    let mut state = context.create_state().map_err(|error| error.to_string())?;
-    // Beam search materially improves short-form dictation accuracy over the
-    // previous single greedy candidate without injecting vocabulary or
-    // rewriting recognized words after transcription.
-    let mut params = FullParams::new(SamplingStrategy::BeamSearch {
-        beam_size: 5,
-        patience: -1.0,
-    });
-    params.set_translate(false);
-    params.set_print_progress(false);
-    params.set_print_realtime(false);
-    params.set_print_timestamps(false);
-    // Dictation only needs text. Disabling timestamp tokens prevents short
-    // push-to-talk captures from entering whisper.cpp's timestamp-only discard
-    // branch after it has already recognized valid words.
-    params.set_no_timestamps(true);
-    params.set_single_segment(true);
-    params.set_n_threads(available_threads());
-    match language.to_ascii_lowercase().as_str() {
-        "english" => params.set_language(Some("en")),
-        "hindi" => params.set_language(Some("hi")),
-        _ => params.set_language(None),
-    }
-    state
-        .full(params, samples)
-        .map_err(|error| error.to_string())?;
-    Ok(state
-        .as_iter()
-        .map(|segment| segment.to_string())
-        .collect::<Vec<_>>()
-        .join(" ")
-        .trim()
-        .to_owned())
 }
 
 fn transcript_contains_speech(value: &str) -> bool {
@@ -499,12 +644,6 @@ fn is_builtin_microphone_name(name: &str) -> bool {
         || (name.contains("macbook") && name.contains("microphone"))
 }
 
-fn available_threads() -> i32 {
-    thread::available_parallelism()
-        .map(|count| count.get().saturating_sub(1).clamp(1, 8) as i32)
-        .unwrap_or(2)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -514,10 +653,8 @@ mod tests {
         let input = vec![0.5_f32; 48_000];
         let output = resample_linear(&input, 48_000, 16_000);
         assert_eq!(output.len(), 16_000);
-        assert!(
-            output
-                .iter()
-                .all(|sample| (*sample - 0.5).abs() < f32::EPSILON)
-        );
+        assert!(output
+            .iter()
+            .all(|sample| (*sample - 0.5).abs() < f32::EPSILON));
     }
 }
