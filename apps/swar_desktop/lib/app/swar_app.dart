@@ -211,6 +211,8 @@ final class _SwarAppState extends State<SwarApp> {
       // the app never follows the system into dark mode.
       theme: SwarTheme.light(),
       themeMode: ThemeMode.light,
+      // Scroll without a visible scrollbar track (design feedback).
+      scrollBehavior: const _SwarScrollBehavior(),
       routerConfig: _router,
       builder: (context, child) => RepaintBoundary(
         key: const Key('swar-app-capture-boundary'),
@@ -218,4 +220,17 @@ final class _SwarAppState extends State<SwarApp> {
       ),
     );
   }
+}
+
+/// App-wide scroll behavior that hides the scrollbar track. Swar's pages still
+/// scroll (wheel, trackpad, drag); only the visible scrollbar is suppressed.
+class _SwarScrollBehavior extends MaterialScrollBehavior {
+  const _SwarScrollBehavior();
+
+  @override
+  Widget buildScrollbar(
+    BuildContext context,
+    Widget child,
+    ScrollableDetails details,
+  ) => child;
 }
