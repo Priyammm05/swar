@@ -443,15 +443,23 @@ private final class DictationOverlayView: NSView {
 
   override func updateTrackingAreas() {
     super.updateTrackingAreas()
-    if let trackingArea { removeTrackingArea(trackingArea) }
-    let area = NSTrackingArea(
-      rect: bounds,
-      options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
-      owner: self,
-      userInfo: nil
-    )
-    addTrackingArea(area)
-    trackingArea = area
+    // No hover tracking: the idle capsule must never expand on hover, and the
+    // surrounding transparent panel area must never react. The mouse is handled
+    // only on the active capsule (cancel/stop), gated by hitTest below.
+    if let trackingArea {
+      removeTrackingArea(trackingArea)
+      self.trackingArea = nil
+    }
+  }
+
+  override func hitTest(_ point: NSPoint) -> NSView? {
+    // Interactive area is exactly the visible capsule, and only while active
+    // (recording) for its cancel/stop buttons. At rest, and anywhere outside the
+    // capsule, clicks pass straight through so nothing accidentally starts
+    // dictation. Dictation is started with the global shortcut key.
+    guard state != "idle" else { return nil }
+    let local = convert(point, from: nil)
+    return activeControlRect.contains(local) ? self : nil
   }
 
   override func mouseEntered(with event: NSEvent) {
@@ -469,14 +477,15 @@ private final class DictationOverlayView: NSView {
 
   private func drawIdlePill(opacity: CGFloat) {
     guard opacity > 0.001 else { return }
-    // Spec state 1: one empty dark capsule, clearly visible at rest (not a
-    // hairline). It morphs in place into every other state.
-    let pill = NSRect(x: bounds.midX - 34, y: 3, width: 68, height: 22)
+    // Spec state 1: a small empty dark capsule at rest. It morphs in place into
+    // every other state. Kept compact (matching the original bar) so it stays
+    // unobtrusive; it is passive (ignores mouse) so it never expands on hover.
+    let pill = NSRect(x: bounds.midX - 22, y: 0, width: 44, height: 7)
       .insetBy(dx: 0.5, dy: 0.5)
-    OverlayPalette.pillBg.withAlphaComponent(0.95 * opacity).setFill()
-    NSBezierPath(roundedRect: pill, xRadius: 11, yRadius: 11).fill()
-    NSColor(calibratedWhite: 1, alpha: 0.22 * opacity).setStroke()
-    let border = NSBezierPath(roundedRect: pill, xRadius: 11, yRadius: 11)
+    OverlayPalette.pillBg.withAlphaComponent(0.92 * opacity).setFill()
+    NSBezierPath(roundedRect: pill, xRadius: 6, yRadius: 6).fill()
+    NSColor(calibratedWhite: 1, alpha: 0.28 * opacity).setStroke()
+    let border = NSBezierPath(roundedRect: pill, xRadius: 6, yRadius: 6)
     border.lineWidth = 0.75
     border.stroke()
   }
