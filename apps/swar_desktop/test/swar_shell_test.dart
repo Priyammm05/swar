@@ -257,6 +257,9 @@ final class _FakeDictationEngineGateway implements DictationEngineGateway {
   Future<bool> prepare(String modelPath) async => true;
 
   @override
+  Future<void> prepareAudio(String microphoneId) async {}
+
+  @override
   Future<void> release() async {}
 
   @override
@@ -325,6 +328,9 @@ final class _EventDictationEngineGateway implements DictationEngineGateway {
   Future<bool> prepare(String modelPath) async => true;
 
   @override
+  Future<void> prepareAudio(String microphoneId) async {}
+
+  @override
   OfflineModelInstallation recommendedModelStatus() =>
       const OfflineModelInstallation(
         path: '/test/model.bin',
@@ -362,12 +368,19 @@ final class _RecordingDesktopShortcutGateway implements DesktopShortcutGateway {
   Future<bool> initialize() async => true;
 
   @override
+  Future<bool> configureShortcut(String shortcutKey) async => true;
+
+  @override
   Future<bool> requestInsertionPermission() async => true;
+
+  @override
+  Future<String> foregroundApplication() async => 'Test';
 
   @override
   Future<void> updateOverlay({
     required DesktopOverlayState state,
     required double audioLevel,
     required bool isLatched,
+    required String shortcutKey,
   }) async => lastState = state;
 }

@@ -41,7 +41,8 @@ trap 'rm -f "$run_log"' EXIT HUP INT TERM
 run_status=0
 flutter test \
   integration_test/synthetic_user_journey_test.dart \
-  -d "$target" > "$run_log" 2>&1 || run_status=$?
+  -d "$target" \
+  --timeout 3m > "$run_log" 2>&1 || run_status=$?
 
 cat "$run_log"
 
@@ -65,6 +66,7 @@ if [ -z "$evidence_path" ] || [ ! -d "$evidence_path" ]; then
 fi
 
 output_path="$project_root/apps/swar_desktop/build/user-testing/synthetic-user"
+rm -rf "$output_path"
 mkdir -p "$output_path"
 cp -R "$evidence_path/." "$output_path"
 

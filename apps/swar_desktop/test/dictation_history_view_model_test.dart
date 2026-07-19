@@ -25,4 +25,37 @@ void main() {
       );
     },
   );
+
+  test('loads activity in pages of fifty and removes the more state', () async {
+    final viewModel = DictationHistoryViewModel(
+      repository: FakeDictationHistoryRepository(totalRecordCount: 60),
+    );
+    addTearDown(viewModel.dispose);
+
+    await viewModel.load();
+    expect(viewModel.records, hasLength(50));
+    expect(viewModel.hasMore, isTrue);
+
+    await viewModel.loadMore();
+    expect(viewModel.records, hasLength(60));
+    expect(viewModel.hasMore, isFalse);
+  });
+
+  test('a successful correction refreshes the visible history', () async {
+    final viewModel = DictationHistoryViewModel(
+      repository: FakeDictationHistoryRepository(totalRecordCount: 1),
+    );
+    addTearDown(viewModel.dispose);
+    await viewModel.load();
+
+    expect(
+      await viewModel.correct(
+        viewModel.records.single,
+        'Corrected locally',
+        learningOptedIn: true,
+      ),
+      isTrue,
+    );
+    expect(viewModel.records, hasLength(1));
+  });
 }

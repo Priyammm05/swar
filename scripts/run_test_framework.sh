@@ -43,6 +43,7 @@ fi
 cd "$repo_dir"
 cargo fmt --all -- --check
 cargo check --workspace
+cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace --all-targets
 ./scripts/verify_flutter_boundaries.sh
 ./scripts/verify_user_testing_framework.sh
@@ -59,6 +60,7 @@ if [ "$mode" = full ]; then
   cd "$repo_dir/apps/swar_desktop"
   case "$(uname -s)" in
     Darwin)
+      "$repo_dir/scripts/run_asr_benchmark_suite.sh"
       flutter test integration_test/core_bridge_test.dart -d macos
       "$repo_dir/scripts/run_synthetic_user_test.sh" macos
       ;;

@@ -110,6 +110,9 @@ final class _EngineGateway implements DictationEngineGateway {
   Future<bool> prepare(String modelPath) async => modelReady;
 
   @override
+  Future<void> prepareAudio(String microphoneId) async {}
+
+  @override
   Future<void> release() async {}
 
   @override
