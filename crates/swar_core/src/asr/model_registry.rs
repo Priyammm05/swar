@@ -21,6 +21,11 @@ const FINAL_DECODE_TIMEOUT: Duration = Duration::from_secs(300);
 const PREVIEW_DECODE_TIMEOUT: Duration = Duration::from_secs(60);
 const UNLOAD_TIMEOUT: Duration = Duration::from_secs(30);
 
+// Upper bound handed to whisper.cpp (10 minutes at 16 kHz). Capture already
+// clamps dictation length; this is a defensive ceiling against a degenerate
+// buffer reaching native decoding.
+const MAX_DECODE_SAMPLES: usize = 16_000 * 600;
+
 enum ModelCommand {
     Prepare {
         model_path: String,
@@ -254,6 +259,13 @@ fn transcribe_with_context(
     samples: &[f32],
     preview: bool,
 ) -> Result<String, String> {
+    // Degenerate input (empty, over-long, or NaN/Inf from an upstream resample)
+    // can make whisper.cpp abort or return nothing useful. An empty transcript
+    // is the correct, safe result for a buffer with no decodable audio.
+    let Some(samples) = prepared_decode_input(samples) else {
+        return Ok(String::new());
+    };
+    let samples = samples.as_ref();
     let mut state = context.create_state().map_err(|error| error.to_string())?;
     let mut params = if preview {
         FullParams::new(SamplingStrategy::Greedy { best_of: 1 })
@@ -304,6 +316,26 @@ fn transcribe_with_context(
 
 fn uses_whisper_vad(preview: bool) -> bool {
     preview
+}
+
+/// Returns decode-ready samples, or `None` when the buffer is empty. NaN/Inf are
+/// neutralised and the length is capped so nothing degenerate reaches the FFI.
+fn prepared_decode_input(samples: &[f32]) -> Option<std::borrow::Cow<'_, [f32]>> {
+    use std::borrow::Cow;
+    if samples.is_empty() {
+        return None;
+    }
+    let too_long = samples.len() > MAX_DECODE_SAMPLES;
+    let has_non_finite = samples.iter().any(|sample| !sample.is_finite());
+    if !too_long && !has_non_finite {
+        return Some(Cow::Borrowed(samples));
+    }
+    let cleaned = samples
+        .iter()
+        .take(MAX_DECODE_SAMPLES)
+        .map(|sample| if sample.is_finite() { *sample } else { 0.0 })
+        .collect::<Vec<f32>>();
+    Some(Cow::Owned(cleaned))
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -433,5 +465,23 @@ mod tests {
         let error = await_worker_response(&receiver, Duration::from_secs(1), "transcribing")
             .expect_err("a dropped sender must surface a stopped worker");
         assert!(error.contains("stopped"), "unexpected error: {error}");
+    }
+
+    #[test]
+    fn decode_input_rejects_empty_and_sanitises_non_finite_samples() {
+        assert!(prepared_decode_input(&[]).is_none());
+
+        // A clean buffer is borrowed, not copied.
+        let clean = [0.1_f32, -0.2, 0.3];
+        assert!(matches!(
+            prepared_decode_input(&clean),
+            Some(std::borrow::Cow::Borrowed(_))
+        ));
+
+        // NaN/Inf are replaced with silence so nothing degenerate reaches the FFI.
+        let dirty = [0.1_f32, f32::NAN, f32::INFINITY, -0.3];
+        let prepared = prepared_decode_input(&dirty).expect("non-empty input");
+        assert!(prepared.iter().all(|sample| sample.is_finite()));
+        assert_eq!(prepared.len(), dirty.len());
     }
 }

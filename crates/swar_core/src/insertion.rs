@@ -9,6 +9,18 @@ use enigo::{
 
 static CLIPBOARD_OWNERSHIP: Mutex<ClipboardOwnership> = Mutex::new(ClipboardOwnership::empty());
 
+/// Locks the clipboard-ownership record, recovering it if a prior panic
+/// poisoned the mutex. The record is a small, self-consistent bookkeeping value,
+/// so a single poisoned lock must never permanently disable every future
+/// insertion (leaving dictation able to transcribe but never insert).
+fn lock_ownership(
+    ownership: &Mutex<ClipboardOwnership>,
+) -> std::sync::MutexGuard<'_, ClipboardOwnership> {
+    ownership
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
 #[derive(Clone, Debug)]
 pub(crate) struct InsertionOutcome {
     pub status: &'static str,
@@ -152,10 +164,7 @@ fn insert_with_adapters<C: ClipboardAdapter, D: DirectInsertionAdapter, P: Paste
         .then(|| clipboard.read_text())
         .flatten();
     clipboard.write_text(text)?;
-    ownership
-        .lock()
-        .map_err(|_| "clipboard ownership lock poisoned".to_owned())?
-        .claim(session_id, text);
+    lock_ownership(ownership).claim(session_id, text);
 
     if !paste_automatically {
         return Ok(InsertionOutcome {
@@ -189,20 +198,14 @@ fn insert_with_adapters<C: ClipboardAdapter, D: DirectInsertionAdapter, P: Paste
             thread::sleep(restoration_delay);
         }
         let current_text = clipboard.read_text();
-        let still_owned = ownership
-            .lock()
-            .map_err(|_| "clipboard ownership lock poisoned".to_owned())?
-            .still_owns(session_id, current_text.as_deref());
+        let still_owned = lock_ownership(ownership).still_owns(session_id, current_text.as_deref());
         if still_owned {
             if let Some(previous_text) = previous_text {
                 // Restoration is best-effort and must never turn a completed
                 // paste into a failed dictation transaction.
                 let _ = clipboard.write_text(&previous_text);
             }
-            ownership
-                .lock()
-                .map_err(|_| "clipboard ownership lock poisoned".to_owned())?
-                .release(session_id);
+            lock_ownership(ownership).release(session_id);
         }
     }
 
