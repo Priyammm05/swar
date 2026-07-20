@@ -30,6 +30,16 @@ const HINDI_MODEL_URL: &str =
     "https://huggingface.co/ukta-app/indic-whisper-ggml/resolve/main/ggml-hi-small.bin";
 const HINDI_MODEL_SHA256: &str = "6813fed7ffa6c3fa14490c1f1788d2d8b6e3b7badf59a2f75fb4c5c21cf00f3f";
 const HINDI_MODEL_BYTES: u64 = 190_085_487;
+// The Hinglish-tuned pack (Oriserve Hindi2Hinglish "Apex", ggml q5_0). It emits
+// romanised Latin directly, so Hinglish/Auto recover code-switched English at the
+// source ("complete", not "kanplit"). Larger and slower than the small model —
+// selected only for the Hinglish/Auto routes.
+const HINGLISH_MODEL_FILE: &str = "ggml-apex-hinglish-q5_0.bin";
+const HINGLISH_MODEL_URL: &str =
+    "https://huggingface.co/Marquestra/Whisper-Hindi2Hinglish-Apex-GGML/resolve/main/ggml-apex-hinglish-q5_0.bin";
+const HINGLISH_MODEL_SHA256: &str =
+    "9d877151b15cec1feb9110cfbc0a3162cf377bcc0ab1935174226f461cf60f13";
+const HINGLISH_MODEL_BYTES: u64 = 574_041_195;
 
 #[derive(Clone, Debug)]
 pub struct OfflineModelStatus {
@@ -78,6 +88,19 @@ pub fn install_recommended_model() -> Result<OfflineModelStatus, String> {
             &hindi_destination,
             HINDI_MODEL_BYTES,
             HINDI_MODEL_SHA256,
+        )?;
+    }
+    let hinglish_destination = parent.join(HINGLISH_MODEL_FILE);
+    if !verified_file(
+        &hinglish_destination,
+        HINGLISH_MODEL_BYTES,
+        HINGLISH_MODEL_SHA256,
+    ) {
+        download_verified(
+            HINGLISH_MODEL_URL,
+            &hinglish_destination,
+            HINGLISH_MODEL_BYTES,
+            HINGLISH_MODEL_SHA256,
         )?;
     }
     Ok(status_for(destination))
@@ -147,6 +170,7 @@ pub(crate) fn expected_minimum_bytes(model_path: &str) -> u64 {
         .and_then(|name| name.to_str())
     {
         Some(HINDI_MODEL_FILE) => HINDI_MODEL_BYTES,
+        Some(HINGLISH_MODEL_FILE) => HINGLISH_MODEL_BYTES,
         Some(VAD_MODEL_FILE) => VAD_MODEL_BYTES,
         _ => MINIMUM_MODEL_BYTES,
     }

@@ -353,7 +353,20 @@ fn transcribe_with_context(
         params.set_entropy_thold(2.4);
         params.set_logprob_thold(-1.0);
     }
-    let decoding = language_decoding(language);
+    // The Hinglish pack is trained for `-l auto` and emits romanised Latin
+    // directly, so it always auto-detects regardless of the selected mode; the
+    // per-mode decode table only applies to the general/Indic models.
+    let is_hinglish_model =
+        model_path.file_name().and_then(|name| name.to_str()) == Some(HINGLISH_MODEL_FILE);
+    let decoding = if is_hinglish_model {
+        LanguageDecoding {
+            whisper_language: None,
+            initial_prompt: None,
+            detect_language: false,
+        }
+    } else {
+        language_decoding(language)
+    };
     params.set_language(decoding.whisper_language);
     params.set_detect_language(decoding.detect_language);
     // Bias the decoder toward the user's own vocabulary so proper nouns are
@@ -459,29 +472,46 @@ fn language_decoding(language: &str) -> LanguageDecoding {
     }
 }
 
+/// The Hinglish-tuned ASR pack (Oriserve Hindi2Hinglish "Apex", ggml q5_0). It
+/// hears code-switched speech and emits romanised Latin directly ("complete", not
+/// "kanplit"), so it fixes the Hinglish word-recovery problem at the source.
+const HINGLISH_MODEL_FILE: &str = "ggml-apex-hinglish-q5_0.bin";
+const HINDI_MODEL_FILE: &str = "ggml-hi-small.bin";
+
 fn vad_model_next_to(model_path: &Path) -> Option<std::path::PathBuf> {
     let candidate = model_path.parent()?.join("ggml-silero-v6.2.0.bin");
     candidate.is_file().then_some(candidate)
 }
 
+fn sibling_model(model_path: &Path, file: &str) -> Option<std::path::PathBuf> {
+    let candidate = model_path.parent()?.join(file);
+    candidate.is_file().then_some(candidate)
+}
+
 /// Only explicit Hindi mode uses the monolingual Indic fine-tune (accurate
-/// Devanagari). Hinglish and Auto MUST stay on the general multilingual model:
-/// the Hindi-only model has almost no English vocabulary, so code-switched words
-/// like "complete" get forced into the nearest Hindi syllables ("kanplit"). See
-/// docs/models.md and the local bake-off (multilingual Hinglish 17.4% WER vs the
-/// Hindi-only model at 42.9%). Kept as a pure predicate so the routing is locked
-/// by a regression test independent of which model files happen to be installed.
+/// Devanagari). Kept as a pure predicate so routing is locked by a regression
+/// test independent of which model files happen to be installed.
 fn uses_hindi_model(language: &str) -> bool {
     language.trim().eq_ignore_ascii_case("hindi")
 }
 
+/// Hinglish and Auto prefer the Hinglish-tuned pack (native Roman output). English
+/// stays on the fast multilingual model; explicit Hindi uses the Indic model.
+fn uses_hinglish_model(language: &str) -> bool {
+    let lower = language.trim().to_ascii_lowercase();
+    lower == "hinglish" || lower == "automatic" || lower.is_empty()
+}
+
 fn model_path_for_language(model_path: &Path, language: &str) -> std::path::PathBuf {
     if uses_hindi_model(language) {
-        if let Some(parent) = model_path.parent() {
-            let hindi = parent.join("ggml-hi-small.bin");
-            if hindi.is_file() {
-                return hindi;
-            }
+        if let Some(hindi) = sibling_model(model_path, HINDI_MODEL_FILE) {
+            return hindi;
+        }
+    } else if uses_hinglish_model(language) {
+        // Prefer Apex when installed; fall back to whatever multilingual model the
+        // user selected so Hinglish/Auto still work before the pack is downloaded.
+        if let Some(apex) = sibling_model(model_path, HINGLISH_MODEL_FILE) {
+            return apex;
         }
     }
     model_path.to_owned()
@@ -578,17 +608,28 @@ mod tests {
     }
 
     #[test]
-    fn non_hindi_modes_keep_the_selected_model_path() {
-        // Whatever multilingual model the user picked is passed through untouched
-        // for Hinglish/Auto/English (the Indic file may or may not exist on disk).
-        let selected = Path::new("/models/ggml-small-q5_1.bin");
-        for mode in ["hinglish", "automatic", "english"] {
-            assert_eq!(
-                model_path_for_language(selected, mode),
-                selected.to_owned(),
-                "{mode} must not be re-routed to another model"
-            );
-        }
+    fn hinglish_and_auto_prefer_the_apex_pack_when_installed() {
+        use std::fs;
+        let dir = std::env::temp_dir().join(format!("swar-apex-route-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).expect("temp dir");
+        let selected = dir.join("ggml-small-q5_1.bin");
+        fs::write(&selected, b"x").expect("write base");
+
+        // Before the pack is installed, Hinglish/Auto fall back to the selected
+        // multilingual model so dictation still works.
+        assert_eq!(model_path_for_language(&selected, "hinglish"), selected);
+        assert_eq!(model_path_for_language(&selected, "automatic"), selected);
+
+        // Once the Apex pack sits next to it, Hinglish and Auto route to it (the
+        // "kanplit" fix at the source). English never does.
+        let apex = dir.join(HINGLISH_MODEL_FILE);
+        fs::write(&apex, b"x").expect("write apex");
+        assert_eq!(model_path_for_language(&selected, "hinglish"), apex);
+        assert_eq!(model_path_for_language(&selected, "automatic"), apex);
+        assert_eq!(model_path_for_language(&selected, "english"), selected);
+
+        let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]
