@@ -86,11 +86,12 @@ impl ModelCache {
             self.entries.insert(0, entry);
             return Ok(true);
         }
+        // NOTE: flash attention was tried here for a Metal decode speedup but it
+        // corrupted the q5_0 Apex decode — output collapsed into repetition loops
+        // and long foreign-script token runs — so it stays OFF. The dynamic audio
+        // context in transcribe_with_context is the safe speed win instead.
         let mut context_params = WhisperContextParameters::default();
-        // Flash attention is a substantial decode speedup on Metal with a
-        // negligible accuracy change, and it is what lets the final decode afford
-        // the wide, most-accurate beam-5 (see transcribe_with_context).
-        context_params.use_gpu(true).flash_attn(true);
+        context_params.use_gpu(true);
         let context = WhisperContext::new_with_params(model_path, context_params)
             .map_err(|error| format!("could not load offline model: {error}"))?;
         self.entries.insert(
@@ -324,15 +325,16 @@ fn transcribe_with_context(
     // Both Hinglish packs (Apex/Swift) are `-l auto` romanised-output models.
     let is_hinglish_model = is_romanized_hinglish_pack(model_file);
     let mut state = context.create_state().map_err(|error| error.to_string())?;
-    // Beam-5 is the most accurate practical setting. The old narrow beam-2 traded
-    // accuracy for speed on the large Apex pack; that trade is no longer needed
-    // because flash attention (at context load) plus the dynamic audio context
-    // (below) cut decode cost enough to keep the wide, accurate beam within budget.
+    // Beam-2 on the large Apex pack matches the previously accepted
+    // (Wispr-comparable) quality while keeping decode fast. Beam-5 was tried for
+    // extra accuracy but its added decode cost made dictation slower overall for
+    // no clear quality gain, so it was reverted. The dynamic audio context below
+    // is the real speed win and does not touch decode quality.
     let mut params = if preview {
         FullParams::new(SamplingStrategy::Greedy { best_of: 1 })
     } else {
         FullParams::new(SamplingStrategy::BeamSearch {
-            beam_size: 5,
+            beam_size: 2,
             patience: -1.0,
         })
     };
