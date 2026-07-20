@@ -8,5 +8,7 @@ mod enhancement;
 mod frb_generated;
 mod insertion;
 mod language;
+#[cfg(feature = "embedded-llm")]
+mod llm;
 mod storage;
 mod text_cleanup;

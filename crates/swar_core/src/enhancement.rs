@@ -46,6 +46,38 @@ struct OpenAiCompatibleEnhancer<'a> {
     config: EnhancementProviderConfig<'a>,
 }
 
+/// The in-process llama.cpp enhancer. Present only when the `embedded-llm`
+/// feature is built in; it uses `config.model` as the path to the local GGUF.
+#[cfg(feature = "embedded-llm")]
+struct EmbeddedLlamaEnhancer<'a> {
+    config: EnhancementProviderConfig<'a>,
+}
+
+/// The cleanup system prompt plus optional target-application context. Shared by
+/// every LLM backend so their instructions are identical.
+fn cleanup_system_prompt(source_application: &str) -> String {
+    let application = source_application.trim();
+    if application.is_empty() {
+        CLEANUP_PROMPT.to_owned()
+    } else {
+        format!(
+            "{CLEANUP_PROMPT}\nThe text will be inserted into {application}. Preserve its register without adding information."
+        )
+    }
+}
+
+#[cfg(feature = "embedded-llm")]
+impl TranscriptEnhancer for EmbeddedLlamaEnhancer<'_> {
+    fn enhance(&self, request: &EnhancementRequest<'_>) -> Result<String, String> {
+        let model_path = self.config.model.trim();
+        if model_path.is_empty() {
+            return Err("no embedded LLM model is installed".to_owned());
+        }
+        let system = cleanup_system_prompt(request.source_application);
+        crate::llm::generate(model_path, &system, request.safe_clean_text)
+    }
+}
+
 impl TranscriptEnhancer for EmbeddedLocalEnhancer {
     fn enhance(&self, request: &EnhancementRequest<'_>) -> Result<String, String> {
         let mut value = resolve_clear_correction(request.safe_clean_text);
@@ -91,19 +123,11 @@ impl TranscriptEnhancer for OpenAiCompatibleEnhancer<'_> {
         } else {
             format!("{endpoint}/chat/completions")
         };
-        let context = if request.source_application.trim().is_empty() {
-            String::new()
-        } else {
-            format!(
-                "\nThe text will be inserted into {}. Preserve its register without adding information.",
-                request.source_application.trim()
-            )
-        };
         let body = serde_json::json!({
             "model": self.config.model,
             "temperature": 0,
             "messages": [
-                {"role": "system", "content": format!("{CLEANUP_PROMPT}{context}")},
+                {"role": "system", "content": cleanup_system_prompt(request.source_application)},
                 {"role": "user", "content": request.safe_clean_text}
             ]
         });
@@ -144,13 +168,15 @@ pub(crate) fn enhance_transcript(
         writing_mode,
         source_application,
     };
-    // A local LLM is free and offline, so — like Wispr — it cleans up every
-    // non-trivial dictation, not only ones with explicit correction cues. Remote
-    // BYOK and the embedded editor keep the conservative gate.
-    let uses_llm_server = provider_config.provider.eq_ignore_ascii_case("byok")
-        || provider_config.provider.eq_ignore_ascii_case("local-llm");
-    let local_llm = provider_config.provider.eq_ignore_ascii_case("local-llm");
-    let route = should_route(&request) || (local_llm && has_cleanable_content(&request));
+    let provider = provider_config.provider;
+    let is_byok = provider.eq_ignore_ascii_case("byok");
+    let is_local_llm = provider.eq_ignore_ascii_case("local-llm");
+    let is_embedded_llm = provider.eq_ignore_ascii_case("embedded-llm");
+    // A local or embedded LLM is free and offline, so — like Wispr — it cleans up
+    // every non-trivial dictation, not only ones with explicit correction cues.
+    // Remote BYOK and the deterministic editor keep the conservative gate.
+    let liberal = (is_local_llm || is_embedded_llm) && has_cleanable_content(&request);
+    let route = should_route(&request) || liberal;
     if !route {
         return EnhancementOutcome {
             text: safe_clean_text.to_owned(),
@@ -160,16 +186,37 @@ pub(crate) fn enhance_transcript(
             error_code: None,
         };
     }
-    if uses_llm_server {
+    if is_byok || is_local_llm {
         run_with_provider(
             &request,
             &OpenAiCompatibleEnhancer {
                 config: provider_config,
             },
         )
+    } else if is_embedded_llm {
+        run_embedded_llm(&request, provider_config)
     } else {
         run_with_provider(&request, &EmbeddedLocalEnhancer)
     }
+}
+
+/// Routes to the in-process llama.cpp enhancer when the `embedded-llm` feature is
+/// built in; otherwise degrades gracefully to the deterministic editor so a
+/// build without the feature still produces safe text.
+#[cfg(feature = "embedded-llm")]
+fn run_embedded_llm(
+    request: &EnhancementRequest<'_>,
+    config: EnhancementProviderConfig<'_>,
+) -> EnhancementOutcome {
+    run_with_provider(request, &EmbeddedLlamaEnhancer { config })
+}
+
+#[cfg(not(feature = "embedded-llm"))]
+fn run_embedded_llm(
+    request: &EnhancementRequest<'_>,
+    _config: EnhancementProviderConfig<'_>,
+) -> EnhancementOutcome {
+    run_with_provider(request, &EmbeddedLocalEnhancer)
 }
 
 /// Enough words to be worth an LLM pass. Skips one- or two-word snippets so a

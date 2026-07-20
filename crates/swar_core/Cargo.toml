@@ -22,5 +22,16 @@ ureq = { version = "=2.12.1", default-features = false, features = ["tls", "json
 uuid = { version = "=1.18.1", features = ["v4"] }
 whisper-rs = "=0.16.0"
 
+# Optional in-process LLM for offline transcript cleanup (embedded llama.cpp).
+# Gated behind the `embedded-llm` feature so the default build stays small and
+# fast and the low-end hardware floor is never forced to link a native LLM.
+# Metal accelerates it on Apple Silicon; OpenMP is disabled (macOS clang ships no
+# OpenMP runtime by default).
+llama-cpp-2 = { version = "=0.1.151", optional = true, default-features = false, features = ["metal"] }
+
+[features]
+default = []
+embedded-llm = ["dep:llama-cpp-2"]
+
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(frb_expand)'] }
