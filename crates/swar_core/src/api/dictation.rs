@@ -12,7 +12,7 @@ use std::{
 use crate::{
     api::personalization,
     asr::model_registry,
-    audio::{capture_engine, resample, speech},
+    audio::{capture_engine, gain, resample, speech},
     dictation::{
         coordinator::DictationCoordinator,
         state_machine::{DictationState, DictationStateMachine, DictationTransition},
@@ -389,6 +389,11 @@ fn finish_capture(capture: &mut ActiveCapture) -> Result<DictationCompletion, St
     // not needed after resampling. Scrub it now rather than waiting for the
     // allocator to hand the pages to another process (privacy guarantee).
     captured.iter_mut().for_each(|sample| *sample = 0.0);
+    // Present the model a consistent level (swar.md §4): quiet input gets dropped
+    // words, hot input gets garbled. Normalize toward -20 dBFS RMS with a soft
+    // peak limiter before VAD. `gain_metrics` are privacy-safe diagnostics.
+    let (mono_16khz, gain_metrics) = gain::normalize(&mono_16khz);
+    record_dictation_levels(&gain_metrics);
     record_dictation_stage("speech_detection");
     let speech = speech::retain_probable_speech(&mono_16khz, 16_000);
     if speech.samples.is_empty() {
@@ -524,6 +529,22 @@ fn record_dictation_stage(stage: &'static str) {
     };
     let path = directories.data_local_dir().join("last_dictation_stage");
     let _ = fs::write(path, stage.as_bytes());
+}
+
+/// Writes the four §4 gain metrics for the last utterance to a privacy-safe
+/// diagnostics file. It holds only levels (peak/RMS dBFS, clipped %, applied
+/// gain) — never audio, text, or clipboard — so an "audio quality" report can be
+/// triaged against swar.md §0 without ever storing what was said.
+fn record_dictation_levels(metrics: &crate::audio::gain::GainMetrics) {
+    let Some(directories) = ProjectDirs::from("dev", "Swar", "Swar") else {
+        return;
+    };
+    let path = directories.data_local_dir().join("last_dictation_levels");
+    let line = format!(
+        "peak_dbfs={:.1} rms_dbfs={:.1} clipped_pct={:.2} applied_gain_db={:.1}",
+        metrics.peak_dbfs, metrics.rms_dbfs, metrics.clipped_pct, metrics.applied_gain_db
+    );
+    let _ = fs::write(path, line.as_bytes());
 }
 
 /// Cancels the active capture and discards all PCM without writing history.

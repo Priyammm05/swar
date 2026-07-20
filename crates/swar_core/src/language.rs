@@ -263,10 +263,9 @@ fn delete_schwas(units: &mut [Unit]) {
             None => vowel_count > 1,
             Some(n1) => {
                 let next2 = (n1 + 1..units.len()).find(|&k| !units[k].dropped());
-                let left_ok =
-                    j >= 2 && is_consonant(&units[j - 1]) && units[j - 2].is_vowel;
-                let right_ok = is_consonant(&units[n1])
-                    && next2.is_some_and(|n2| units[n2].is_vowel);
+                let left_ok = j >= 2 && is_consonant(&units[j - 1]) && units[j - 2].is_vowel;
+                let right_ok =
+                    is_consonant(&units[n1]) && next2.is_some_and(|n2| units[n2].is_vowel);
                 left_ok && right_ok
             }
         };
@@ -411,7 +410,10 @@ mod tests {
     #[test]
     fn non_roman_modes_return_the_input_unchanged() {
         assert_eq!(to_output_script("कल क्या होगा?", "hindi"), "कल क्या होगा?");
-        assert_eq!(to_output_script("Please review", "english"), "Please review");
+        assert_eq!(
+            to_output_script("Please review", "english"),
+            "Please review"
+        );
     }
 
     #[test]
