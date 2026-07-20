@@ -28,13 +28,13 @@ final class ShortcutGestureTransition {
 /// Pure reducer for hold-to-talk, double-tap lock, and explicit toggle input.
 final class ShortcutGestureMachine {
   ShortcutGestureMachine({
-    // A first press shorter than this counts as a tap (a candidate for the
-    // double-tap lock); anything longer is a deliberate press-and-hold that
-    // finishes immediately on release. Kept SHORT so ordinary push-to-talk holds
-    // are never misread as taps and accidentally latched into hands-free mode —
-    // only a genuine quick double-tap locks. (Was 350ms, which merged normal
-    // holds and consecutive dictations into an unwanted lock.)
-    this.holdThreshold = const Duration(milliseconds: 160),
+    // A press SHORTER than this is a tap: on its own it records nothing (a lone
+    // tap is discarded; two taps latch the hands-free lock). A press held LONGER
+    // is a deliberate push-to-talk that records while held and transcribes on
+    // release. Kept generous so an ordinary quick click is treated as a tap and
+    // never decoded — decoding a sub-second, near-silent blip from a stray click
+    // is what made whisper hallucinate garbage. Only an intentional hold records.
+    this.holdThreshold = const Duration(milliseconds: 500),
   });
 
   final Duration holdThreshold;
@@ -77,6 +77,13 @@ final class ShortcutGestureMachine {
             ShortcutGestureAction.notifyModeChanged,
           ]);
         } else if (_state == ShortcutGestureState.idle) {
+          // Clear any stale release-suppression before arming a fresh gesture. A
+          // latch-stopping press sets suppression expecting its own release, but
+          // that release can be swallowed upstream while the previous result is
+          // still transcribing. Without this reset the flag would leak into the
+          // next press and suppress its release, leaving a recording that never
+          // finishes (a stuck "recording" with no way to stop it).
+          _suppressNextRelease = false;
           _state = ShortcutGestureState.holding;
           _pressedAtMilliseconds = nowMilliseconds;
           actions.addAll(const [
@@ -128,10 +135,14 @@ final class ShortcutGestureMachine {
         }
       case ShortcutGestureInput.doubleTapWindowElapsed:
         if (_state == ShortcutGestureState.waitingForSecondTap) {
+          // A lone tap that never became a double-tap: DISCARD it, never decode
+          // it. A single quick tap captures only a near-silent blip, and feeding
+          // that to whisper is what produced hallucinated garbage. Cancelling
+          // throws the capture away; finishing would transcribe it.
           _reset();
           actions.addAll(const [
+            ShortcutGestureAction.cancel,
             ShortcutGestureAction.notifyModeChanged,
-            ShortcutGestureAction.finish,
           ]);
         }
       case ShortcutGestureInput.startFailed:
