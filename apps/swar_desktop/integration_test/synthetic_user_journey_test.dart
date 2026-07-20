@@ -173,6 +173,17 @@ final class _SyntheticDictationEngineGateway implements DictationEngineGateway {
       recommendedModelStatus();
 
   @override
+  OfflineModelInstallation indicPackStatus() => const OfflineModelInstallation(
+    path: '/test/indic-conformer',
+    installed: false,
+    sizeBytes: 0,
+  );
+
+  @override
+  Future<OfflineModelInstallation> installIndicModels() async =>
+      indicPackStatus();
+
+  @override
   Future<List<SwarMicrophone>> listMicrophones() async => const [];
 
   @override

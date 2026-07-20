@@ -124,6 +124,17 @@ final class _ShotEngine implements DictationEngineGateway {
   @override
   Future<OfflineModelInstallation> installRecommendedModel() async =>
       recommendedModelStatus();
+
+  @override
+  OfflineModelInstallation indicPackStatus() => const OfflineModelInstallation(
+    path: '/test/indic-conformer',
+    installed: false,
+    sizeBytes: 0,
+  );
+
+  @override
+  Future<OfflineModelInstallation> installIndicModels() async =>
+      indicPackStatus();
   @override
   Future<List<SwarMicrophone>> listMicrophones() async => const [
     SwarMicrophone(

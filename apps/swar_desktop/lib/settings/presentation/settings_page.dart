@@ -219,6 +219,7 @@ final class _GeneralSettings extends StatelessWidget {
   Widget build(BuildContext context) {
     final settings = viewModel.settings;
     final modelInstalled = sessionViewModel.recommendedModelStatus.installed;
+    final indicInstalled = sessionViewModel.indicPackStatus.installed;
     return _SettingsScaffold(
       title: 'General',
       section: section,
@@ -313,6 +314,30 @@ final class _GeneralSettings extends StatelessWidget {
                   final path = await sessionViewModel.installRecommendedModel();
                   if (path != null) viewModel.setModelPath(path);
                 },
+              ),
+            ),
+            _SettingRow(
+              title: 'Indian languages',
+              descriptionWidget: Text(
+                indicInstalled
+                    ? 'Fast Hindi, Hinglish, and 9 more Indian languages installed.'
+                    : 'Add fast Hindi, Hinglish, and 9 more Indian languages (~670 MB). English works without it.',
+                style: SwarType.description.copyWith(
+                  color: context.tokens.inkSecondary,
+                ),
+              ),
+              trailing: SwarPrimaryButton(
+                key: const Key('install-indian-languages-button'),
+                label: indicInstalled ? 'Installed' : 'Download pack',
+                icon: indicInstalled
+                    ? Icons.check_circle_outline_rounded
+                    : Icons.download_rounded,
+                busy: sessionViewModel.isInstallingLanguagePack,
+                onPressed: indicInstalled
+                    ? null
+                    : () async {
+                        await sessionViewModel.installIndicModels();
+                      },
               ),
             ),
             _SettingRow(

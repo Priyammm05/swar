@@ -14,6 +14,7 @@ final class DictationSessionViewModel extends ChangeNotifier {
   String? _message;
   double _audioLevel = 0;
   bool _isInstallingModel = false;
+  bool _isInstallingLanguagePack = false;
   int _completionRevision = 0;
   bool _keepModelsWarm = true;
   String? _partialText;
@@ -32,11 +33,14 @@ final class DictationSessionViewModel extends ChangeNotifier {
     _ => false,
   };
   bool get isInstallingModel => _isInstallingModel;
+  bool get isInstallingLanguagePack => _isInstallingLanguagePack;
   int get completionRevision => _completionRevision;
   String? get partialText => _partialText;
 
   OfflineModelInstallation get recommendedModelStatus =>
       _gateway.recommendedModelStatus();
+
+  OfflineModelInstallation get indicPackStatus => _gateway.indicPackStatus();
 
   Future<List<SwarMicrophone>> listMicrophones() => _gateway.listMicrophones();
 
@@ -112,6 +116,30 @@ final class DictationSessionViewModel extends ChangeNotifier {
       return null;
     } finally {
       _isInstallingModel = false;
+      notifyListeners();
+    }
+  }
+
+  /// Downloads the optional Indian-languages pack (~670 MB). Returns true when it
+  /// is installed and ready. Until then Hindi/Hinglish/Indian speech uses the
+  /// whisper fallback; English keeps using the fast Parakeet engine.
+  Future<bool> installIndicModels() async {
+    if (_isInstallingLanguagePack) return false;
+    _isInstallingLanguagePack = true;
+    _message = 'Downloading the Indian languages pack…';
+    notifyListeners();
+    try {
+      final installation = await _gateway.installIndicModels();
+      _message = installation.installed
+          ? 'Indian languages ready.'
+          : 'The Indian languages pack could not be installed.';
+      return installation.installed;
+    } catch (error) {
+      _message =
+          'Indian languages download failed. Check your connection and try again.';
+      return false;
+    } finally {
+      _isInstallingLanguagePack = false;
       notifyListeners();
     }
   }

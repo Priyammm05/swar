@@ -6,7 +6,7 @@
 import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `abandon_coordinator_session`, `dictation_stage_error`, `disarm`, `emit_transition`, `event_kind_for_state`, `fail_start`, `finish_capture`, `is_builtin_microphone_name`, `monotonic_timestamp_ms`, `new`, `record_dictation_levels`, `record_dictation_stage`, `select_input_device`, `spawn_preview_worker`, `stop_preview`, `take_capture`, `transcript_contains_speech`, `transition_capture`
+// These functions are ignored because they are not marked as `pub`: `abandon_coordinator_session`, `dictation_stage_error`, `disarm`, `emit_transition`, `event_kind_for_state`, `fail_start`, `finish_capture`, `is_builtin_microphone_name`, `monotonic_timestamp_ms`, `new`, `record_dictation_levels`, `record_dictation_stage`, `select_input_device`, `should_write_history`, `spawn_preview_worker`, `stop_preview`, `take_capture`, `transcript_contains_speech`, `transition_capture`
 // These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `ActiveCapture`, `ReservationGuard`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_receiver_is_total_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `drop`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`
 
