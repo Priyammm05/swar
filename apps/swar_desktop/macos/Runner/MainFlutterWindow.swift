@@ -396,6 +396,10 @@ private final class DictationOverlayView: NSView {
   private var hoverProgress: CGFloat = 0
   private var activeProgress: CGFloat = 0
   private var processingProgress: CGFloat = 0
+  // The waveform's own fade, driven only by the recording state. Kept separate
+  // from processingProgress so the waveform cannot reappear while the spinner
+  // fades out toward idle (the post-release flicker).
+  private var waveProgress: CGFloat = 0
   private var trackingArea: NSTrackingArea?
   private var longPressTimer: Timer?
   private var pointerIsDown = false
@@ -599,7 +603,7 @@ private final class DictationOverlayView: NSView {
     let border = NSBezierPath(roundedRect: capsule, xRadius: 15, yRadius: 15)
     border.lineWidth = 0.75
     border.stroke()
-    let recordingOpacity = opacity * (1 - processingProgress)
+    let recordingOpacity = opacity * waveProgress
     if recordingOpacity > 0.001 {
       // The cancel (✗) and confirm (✓) buttons only appear in the locked
       // (double-press) state, where no key is held and the user ends dictation
@@ -718,17 +722,23 @@ private final class DictationOverlayView: NSView {
       let activeTarget: CGFloat = self.state == "idle" ? 0 : 1
       let processingTarget: CGFloat =
         self.state == "finalising" || self.state == "preparing" ? 1 : 0
+      // The waveform belongs to the recording state alone. Fading it on its own
+      // target (not on 1 - processingProgress) stops it from briefly reappearing
+      // as the spinner fades out on the way to idle.
+      let waveTarget: CGFloat = self.state == "recording" ? 1 : 0
       self.hoverProgress += (hoverTarget - self.hoverProgress) * 0.20
       self.activeProgress += (activeTarget - self.activeProgress) * 0.20
       self.processingProgress += (processingTarget - self.processingProgress) * 0.20
+      self.waveProgress += (waveTarget - self.waveProgress) * 0.20
       self.needsDisplay = true
       if self.state == "idle", !self.isHovering,
          self.hoverProgress < 0.002, self.activeProgress < 0.002,
-         self.processingProgress < 0.002
+         self.processingProgress < 0.002, self.waveProgress < 0.002
       {
         self.hoverProgress = 0
         self.activeProgress = 0
         self.processingProgress = 0
+        self.waveProgress = 0
         self.stopAnimating()
       }
     }
