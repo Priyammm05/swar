@@ -39,6 +39,13 @@ final class PlatformDesktopShortcutGateway implements DesktopShortcutGateway {
   }
 
   @override
+  Future<bool> focusedFieldIsSecure() async {
+    // Native returns null when Accessibility is unavailable/unreadable; default
+    // to non-sensitive so dictation still works, and the caller can log coverage.
+    return await _channel.invokeMethod<bool>('focusedFieldIsSecure') ?? false;
+  }
+
+  @override
   Future<bool> configureShortcut(String shortcutKey) async {
     return await _channel.invokeMethod<bool>('configureGlobalShortcut', {
           'shortcutKey': shortcutKey,

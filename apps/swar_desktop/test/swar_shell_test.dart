@@ -426,6 +426,9 @@ final class _RecordingDesktopShortcutGateway implements DesktopShortcutGateway {
   Future<String> foregroundApplication() async => 'Test';
 
   @override
+  Future<bool> focusedFieldIsSecure() async => false;
+
+  @override
   Future<void> updateOverlay({
     required DesktopOverlayState state,
     required double audioLevel,

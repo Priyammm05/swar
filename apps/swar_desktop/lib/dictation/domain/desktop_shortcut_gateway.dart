@@ -19,6 +19,10 @@ abstract interface class DesktopShortcutGateway {
 
   Future<String> foregroundApplication();
 
+  /// Whether the currently focused field is a secure/password field. Used to
+  /// suppress history storage for that dictation (privacy P0).
+  Future<bool> focusedFieldIsSecure();
+
   Future<void> updateOverlay({
     required DesktopOverlayState state,
     required double audioLevel,
@@ -48,6 +52,9 @@ final class NoopDesktopShortcutGateway implements DesktopShortcutGateway {
 
   @override
   Future<String> foregroundApplication() async => '';
+
+  @override
+  Future<bool> focusedFieldIsSecure() async => false;
 
   @override
   Future<void> updateOverlay({

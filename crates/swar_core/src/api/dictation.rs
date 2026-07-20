@@ -119,6 +119,9 @@ pub struct DictationSessionConfig {
     pub provider_endpoint: String,
     pub provider_model: String,
     pub provider_api_key: String,
+    /// True when the focused field is a secure/password field. The dictation
+    /// still runs and inserts, but nothing is written to history (privacy P0).
+    pub is_sensitive: bool,
 }
 
 // Manual Debug so a stray `{:?}` (in a log line or panic message) can never leak
@@ -147,6 +150,7 @@ impl std::fmt::Debug for DictationSessionConfig {
                     "<redacted>"
                 },
             )
+            .field("is_sensitive", &self.is_sensitive)
             .finish()
     }
 }
@@ -478,32 +482,40 @@ fn finish_capture(capture: &mut ActiveCapture) -> Result<DictationCompletion, St
         .map_err(|_| dictation_stage_error("clock"))?
         .as_millis() as i64;
 
-    record_dictation_stage("history");
-    storage::save_dictation(NewDictation {
-        id: &capture.id,
-        created_at_ms,
-        raw_text: &raw_text,
-        cleaned_text: &final_text,
-        final_text: &final_text,
-        language: &capture.config.language,
-        writing_mode: &capture.config.writing_mode,
-        // Foreground app context is ephemeral and is never persisted.
-        source_application: "Desktop",
-        audio_duration_ms,
-        speech_duration_ms: speech.speech_duration_ms,
-        processing_duration_ms,
-        asr_engine: "whisper.cpp",
-        asr_model_id: Path::new(&capture.config.model_path)
-            .file_name()
-            .and_then(|name| name.to_str())
-            .unwrap_or("whisper-model"),
-        insertion_status: insertion.status,
-        insertion_method: insertion.method,
-    })
-    .map_err(|_| dictation_stage_error("history"))?;
-    // Best-effort: bound local history and learning data. A retention failure
-    // must never fail a completed dictation.
-    let _ = storage::enforce_history_retention();
+    // Privacy P0: a dictation into a secure (password) field is inserted for the
+    // user but MUST NOT be persisted. Skip the history write entirely — no raw,
+    // clean, or final text touches SQLite — and record only a privacy-safe stage
+    // marker. (No text was ever going to storage, so there is nothing to redact.)
+    if should_write_history(capture.config.is_sensitive) {
+        record_dictation_stage("history");
+        storage::save_dictation(NewDictation {
+            id: &capture.id,
+            created_at_ms,
+            raw_text: &raw_text,
+            cleaned_text: &final_text,
+            final_text: &final_text,
+            language: &capture.config.language,
+            writing_mode: &capture.config.writing_mode,
+            // Foreground app context is ephemeral and is never persisted.
+            source_application: "Desktop",
+            audio_duration_ms,
+            speech_duration_ms: speech.speech_duration_ms,
+            processing_duration_ms,
+            asr_engine: "whisper.cpp",
+            asr_model_id: Path::new(&capture.config.model_path)
+                .file_name()
+                .and_then(|name| name.to_str())
+                .unwrap_or("whisper-model"),
+            insertion_status: insertion.status,
+            insertion_method: insertion.method,
+        })
+        .map_err(|_| dictation_stage_error("history"))?;
+        // Best-effort: bound local history and learning data. A retention failure
+        // must never fail a completed dictation.
+        let _ = storage::enforce_history_retention();
+    } else {
+        record_dictation_stage("sensitive_no_history");
+    }
     record_dictation_stage("completed");
 
     Ok(DictationCompletion {
@@ -526,6 +538,13 @@ fn dictation_stage_error(stage: &'static str) -> String {
 
 /// Persists only a static pipeline stage for local troubleshooting. This file
 /// never contains recognised text, clipboard contents, audio, or error text.
+/// Whether a completed dictation may be written to history. A dictation into a
+/// secure (password) field is inserted for the user but never persisted, so no
+/// raw/clean/final text can reach SQLite (privacy P0).
+fn should_write_history(is_sensitive: bool) -> bool {
+    !is_sensitive
+}
+
 fn record_dictation_stage(stage: &'static str) {
     let Some(directories) = ProjectDirs::from("dev", "Swar", "Swar") else {
         return;
@@ -867,6 +886,7 @@ mod tests {
             provider_endpoint: "https://example.test".to_owned(),
             provider_model: "gpt".to_owned(),
             provider_api_key: "super-secret-key".to_owned(),
+            is_sensitive: false,
         };
         let rendered = format!("{config:?}");
         assert!(
@@ -875,6 +895,14 @@ mod tests {
         );
         assert!(rendered.contains("<redacted>"));
         assert!(rendered.contains("https://example.test"));
+    }
+
+    #[test]
+    fn sensitive_dictation_is_never_written_to_history() {
+        // Privacy P0: a password-field dictation must skip the history write so no
+        // raw/clean/final text can reach SQLite. An ordinary dictation still is.
+        assert!(!should_write_history(true), "sensitive must not persist");
+        assert!(should_write_history(false), "ordinary must persist");
     }
 
     // Serialised in one test: the coordinator exposes a single global slot, so

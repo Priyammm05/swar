@@ -1106,8 +1106,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   DictationSessionConfig dco_decode_dictation_session_config(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 13)
-      throw Exception('unexpected arr length: expect 13 but see ${arr.length}');
+    if (arr.length != 14)
+      throw Exception('unexpected arr length: expect 14 but see ${arr.length}');
     return DictationSessionConfig(
       modelPath: dco_decode_String(arr[0]),
       microphoneId: dco_decode_String(arr[1]),
@@ -1122,6 +1122,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       providerEndpoint: dco_decode_String(arr[10]),
       providerModel: dco_decode_String(arr[11]),
       providerApiKey: dco_decode_String(arr[12]),
+      isSensitive: dco_decode_bool(arr[13]),
     );
   }
 
@@ -1516,6 +1517,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_providerEndpoint = sse_decode_String(deserializer);
     var var_providerModel = sse_decode_String(deserializer);
     var var_providerApiKey = sse_decode_String(deserializer);
+    var var_isSensitive = sse_decode_bool(deserializer);
     return DictationSessionConfig(
       modelPath: var_modelPath,
       microphoneId: var_microphoneId,
@@ -1530,6 +1532,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       providerEndpoint: var_providerEndpoint,
       providerModel: var_providerModel,
       providerApiKey: var_providerApiKey,
+      isSensitive: var_isSensitive,
     );
   }
 
@@ -2018,6 +2021,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_String(self.providerEndpoint, serializer);
     sse_encode_String(self.providerModel, serializer);
     sse_encode_String(self.providerApiKey, serializer);
+    sse_encode_bool(self.isSensitive, serializer);
   }
 
   @protected

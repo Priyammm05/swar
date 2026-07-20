@@ -44,6 +44,10 @@ class MainFlutterWindow: NSWindow {
       case "foregroundApplication":
         let application = NSWorkspace.shared.frontmostApplication
         result(application?.localizedName ?? "")
+      case "focusedFieldIsSecure":
+        // nil = Accessibility unavailable/unreadable (caller records coverage),
+        // true = password/secure field, false = ordinary field.
+        result(FocusedFieldInspector.isSecure().map { NSNumber(value: $0) })
       case "updateDictationOverlay":
         if let arguments = call.arguments as? [String: Any] {
           overlay.update(
@@ -66,6 +70,42 @@ class MainFlutterWindow: NSWindow {
     overlayController = overlay
 
     super.awakeFromNib()
+  }
+}
+
+/// Read-only inspection of the currently focused UI element to decide whether it
+/// is a secure (password) field. This never writes or inserts — it only reads the
+/// element's role — so it does not reintroduce AX text insertion. A password
+/// dictated into such a field must never be written to history (privacy P0).
+private enum FocusedFieldInspector {
+  /// Returns true for a secure field, false for an ordinary field, and nil when
+  /// Accessibility is not granted or the focused element cannot be read (so the
+  /// caller can default to non-sensitive but record that coverage was missing).
+  static func isSecure() -> Bool? {
+    guard AXIsProcessTrusted() else { return nil }
+    let systemWide = AXUIElementCreateSystemWide()
+    var focused: CFTypeRef?
+    guard
+      AXUIElementCopyAttributeValue(
+        systemWide, kAXFocusedUIElementAttribute as CFString, &focused) == .success,
+      let focusedElement = focused
+    else { return nil }
+    let element = focusedElement as! AXUIElement
+    // Native AppKit secure fields report role "AXSecureTextField"; some apps
+    // (and browsers) expose it as the subrole instead.
+    if stringAttribute(element, kAXRoleAttribute as CFString) == "AXSecureTextField" {
+      return true
+    }
+    if stringAttribute(element, kAXSubroleAttribute as CFString) == "AXSecureTextField" {
+      return true
+    }
+    return false
+  }
+
+  private static func stringAttribute(_ element: AXUIElement, _ attribute: CFString) -> String? {
+    var value: CFTypeRef?
+    guard AXUIElementCopyAttributeValue(element, attribute, &value) == .success else { return nil }
+    return value as? String
   }
 }
 

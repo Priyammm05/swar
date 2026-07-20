@@ -122,6 +122,10 @@ final class _SwarAppState extends State<SwarApp> {
     final excluded = settings.excludedApplications.any(
       (value) => value.toLowerCase() == foregroundApplication.toLowerCase(),
     );
+    // Privacy P0: check the focused field before any audio is retained. A secure
+    // (password) field means the dictation still inserts but is never persisted.
+    final isSensitive = await widget.desktopShortcutGateway
+        .focusedFieldIsSecure();
     if (settings.pasteAutomatically) {
       await widget.desktopShortcutGateway.requestInsertionPermission();
     }
@@ -140,6 +144,7 @@ final class _SwarAppState extends State<SwarApp> {
         providerEndpoint: settings.providerEndpoint,
         providerModel: settings.providerModel,
         providerApiKey: _settingsViewModel.providerApiKey,
+        isSensitive: isSensitive,
       ),
     );
     return _dictationSessionViewModel.state != DictationLifecycleState.failed;

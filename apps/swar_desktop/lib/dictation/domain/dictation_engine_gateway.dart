@@ -77,6 +77,7 @@ final class DictationEngineConfig {
     this.providerEndpoint = '',
     this.providerModel = '',
     this.providerApiKey = '',
+    this.isSensitive = false,
   });
 
   final String modelPath;
@@ -92,6 +93,10 @@ final class DictationEngineConfig {
   final String providerEndpoint;
   final String providerModel;
   final String providerApiKey;
+
+  /// True when the focused field is a password/secure field. The dictation still
+  /// inserts, but nothing is persisted to history (privacy P0).
+  final bool isSensitive;
 }
 
 final class DictationEngineCompletion {
