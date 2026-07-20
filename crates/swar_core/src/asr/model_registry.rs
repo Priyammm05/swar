@@ -316,12 +316,18 @@ fn transcribe_with_context(
         return Ok(String::new());
     };
     let samples = samples.as_ref();
+    // The Hinglish pack is a large (whisper-large-v3) model. Beam-5 on it is the
+    // main latency cost, so it decodes with a narrow beam; temperature fallback
+    // and the anti-repetition guards below still protect against hallucination.
+    // The small English/Indic models keep the wider, most-accurate beam.
+    let is_hinglish_model =
+        model_path.file_name().and_then(|name| name.to_str()) == Some(HINGLISH_MODEL_FILE);
     let mut state = context.create_state().map_err(|error| error.to_string())?;
     let mut params = if preview {
         FullParams::new(SamplingStrategy::Greedy { best_of: 1 })
     } else {
         FullParams::new(SamplingStrategy::BeamSearch {
-            beam_size: 5,
+            beam_size: if is_hinglish_model { 2 } else { 5 },
             patience: -1.0,
         })
     };
@@ -356,8 +362,6 @@ fn transcribe_with_context(
     // The Hinglish pack is trained for `-l auto` and emits romanised Latin
     // directly, so it always auto-detects regardless of the selected mode; the
     // per-mode decode table only applies to the general/Indic models.
-    let is_hinglish_model =
-        model_path.file_name().and_then(|name| name.to_str()) == Some(HINGLISH_MODEL_FILE);
     let decoding = if is_hinglish_model {
         LanguageDecoding {
             whisper_language: None,
