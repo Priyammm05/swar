@@ -385,6 +385,9 @@ private final class DictationOverlayView: NSView {
   private let onStop: () -> Void
   private let onCancel: () -> Void
   private var state = "idle"
+  // True only in the locked (double-press) hands-free state. It gates the on-bar
+  // cancel/confirm buttons: a plain hold-to-talk shows a pure recording indicator.
+  private var isLatched = false
   private var targetAudioLevel = 0.0
   private var displayedAudioLevel = 0.0
   private var animationPhase = 0.0
@@ -423,7 +426,7 @@ private final class DictationOverlayView: NSView {
       isHovering = false
     }
     targetAudioLevel = min(max(audioLevel * 9, 0), 1)
-    _ = isLatched
+    self.isLatched = isLatched
     shortcutSymbol = shortcutKey == "control" ? "⌃" : "⌥"
     startAnimating()
     needsDisplay = true
@@ -457,7 +460,8 @@ private final class DictationOverlayView: NSView {
       RunLoop.main.add(timer, forMode: .common)
       return
     }
-    guard state == "recording" else { return }
+    // Cancel/confirm buttons are live only in the locked state (see draw + hitTest).
+    guard state == "recording", isLatched else { return }
     let point = convert(event.locationInWindow, from: nil)
     if cancelButtonRect.contains(point) {
       onCancel()
@@ -498,6 +502,10 @@ private final class DictationOverlayView: NSView {
     // capsule, clicks pass straight through so nothing accidentally starts
     // dictation. Dictation is started with the global shortcut key.
     guard state != "idle" else { return nil }
+    // Only the locked state exposes clickable cancel/confirm buttons; during
+    // hold-to-talk the bar is non-interactive so a stray click can never land on
+    // a button that is not drawn.
+    guard isLatched else { return nil }
     let local = convert(point, from: nil)
     return activeControlRect.contains(local) ? self : nil
   }
@@ -593,9 +601,16 @@ private final class DictationOverlayView: NSView {
     border.stroke()
     let recordingOpacity = opacity * (1 - processingProgress)
     if recordingOpacity > 0.001 {
-      drawCancel(opacity: recordingOpacity)
+      // The cancel (✗) and confirm (✓) buttons only appear in the locked
+      // (double-press) state, where no key is held and the user ends dictation
+      // with the mouse. During a plain hold-to-talk the physical key is still
+      // down and releasing it finishes, so the bar stays a pure recording
+      // indicator with no action icons — matching Wispr.
+      if isLatched {
+        drawCancel(opacity: recordingOpacity)
+        drawConfirm(opacity: recordingOpacity)
+      }
       drawWaveform(opacity: recordingOpacity)
-      drawConfirm(opacity: recordingOpacity)
     }
     if processingProgress > 0.001 {
       drawProcessing(opacity: opacity * processingProgress)
