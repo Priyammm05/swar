@@ -16,9 +16,9 @@ final class DictationActivationController {
        _modeChanged = modeChanged;
 
   // Gap allowed between the first tap's release and the second press to latch.
-  // Aligned closer to the macOS double-click interval (~500ms) so a natural
-  // double-press reliably locks instead of finishing after the first tap.
-  static const _doubleTapWindow = Duration(milliseconds: 480);
+  // Kept SHORT so only a deliberate quick double-tap locks: with a longer window
+  // two separate quick dictations were merging into an unwanted hands-free lock.
+  static const _doubleTapWindow = Duration(milliseconds: 280);
 
   final Future<bool> Function() _start;
   final Future<void> Function() _finish;

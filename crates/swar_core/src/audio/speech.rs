@@ -1,7 +1,11 @@
 const FRAME_MILLISECONDS: usize = 20;
 const PRE_PAD_MILLISECONDS: usize = 350;
 const POST_PAD_MILLISECONDS: usize = 350;
-const MINIMUM_SPEECH_MILLISECONDS: usize = 120;
+// Utterances shorter than this are dropped as clicks/blips rather than sent to
+// the model. Raised from 120ms: a large fine-tuned model (Apex) will hallucinate
+// a filler token ("Nan") on a very short, near-silent capture from an accidental
+// key tap, so the floor must exclude those before they reach decoding.
+const MINIMUM_SPEECH_MILLISECONDS: usize = 220;
 const ABSOLUTE_RMS_FLOOR: f64 = 0.0025;
 
 pub(crate) struct SpeechAnalysis {
@@ -72,11 +76,23 @@ mod tests {
 
     #[test]
     fn retains_speech_with_edge_padding() {
+        // 300 ms of speech — comfortably above the minimum floor.
         let mut samples = vec![0.0; 16_000];
-        samples[6_400..9_600].fill(0.1);
+        samples[6_400..11_200].fill(0.1);
         let analysis = retain_probable_speech(&samples, 16_000);
         assert!(!analysis.samples.is_empty());
-        assert!(analysis.samples.len() > 3_200);
-        assert_eq!(analysis.speech_duration_ms, 200);
+        assert!(analysis.samples.len() > 4_800);
+        assert_eq!(analysis.speech_duration_ms, 300);
+    }
+
+    #[test]
+    fn drops_ultra_short_blips_that_would_hallucinate() {
+        // ~120 ms of energy from an accidental key tap: below the floor, so it is
+        // dropped instead of being padded and decoded into a filler token.
+        let mut samples = vec![0.0; 16_000];
+        samples[6_400..8_320].fill(0.1);
+        let analysis = retain_probable_speech(&samples, 16_000);
+        assert!(analysis.samples.is_empty());
+        assert_eq!(analysis.speech_duration_ms, 0);
     }
 }

@@ -29,10 +29,12 @@ final class ShortcutGestureTransition {
 final class ShortcutGestureMachine {
   ShortcutGestureMachine({
     // A first press shorter than this counts as a tap (a candidate for the
-    // double-tap lock); longer is a deliberate press-and-hold. Kept generous so
-    // a slightly-held first tap of a double-press is not misread as a hold and
-    // finished on release.
-    this.holdThreshold = const Duration(milliseconds: 350),
+    // double-tap lock); anything longer is a deliberate press-and-hold that
+    // finishes immediately on release. Kept SHORT so ordinary push-to-talk holds
+    // are never misread as taps and accidentally latched into hands-free mode —
+    // only a genuine quick double-tap locks. (Was 350ms, which merged normal
+    // holds and consecutive dictations into an unwanted lock.)
+    this.holdThreshold = const Duration(milliseconds: 160),
   });
 
   final Duration holdThreshold;
