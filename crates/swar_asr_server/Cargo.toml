@@ -1,0 +1,22 @@
+[package]
+name = "swar_asr_server"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+# Swar's fast offline ASR helper. A standalone process that owns the ONNX speech
+# engines (Parakeet via sherpa-onnx for English, IndicConformer via ort for Hindi
+# and Indian languages) and turns audio into text over stdio. It lives in its own
+# binary so the two ONNX runtimes never link into the app framework — the same
+# isolation the cleanup LLM helper uses.
+[[bin]]
+name = "swar_asr_server"
+path = "src/main.rs"
+
+[dependencies]
+sherpa-rs = "=0.6.8"
+ort = { version = "=2.0.0-rc.10", features = ["download-binaries"] }
+rustfft = "=6.2.0"
+hound = "=3.5.1"
+serde = { version = "=1.0.228", features = ["derive"] }
+serde_json = "=1.0.145"

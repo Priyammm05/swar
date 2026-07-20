@@ -1,12 +1,11 @@
 //! Offline cleanup evaluation over a fixed corpus of ~200 short and long
-//! sentences (English / Hindi / Hinglish). Compiled only for tests with the
-//! `embedded-llm` feature. It is heavy — it loads the ~2 GB cleanup model and
-//! runs one generation per sentence — so it is opt-in at runtime via
-//! `SWAR_LLM_EVAL=1` and skips loudly when the model is not installed. It is the
-//! regression that proves the LLM cleanup never produces degenerate output
-//! (empties, truncation, repetition blow-ups, or flipped negation) across a wide
-//! spread of real-shaped dictations.
-#![cfg(all(test, feature = "embedded-llm"))]
+//! sentences (English / Hindi / Hinglish). It is heavy — it drives the real
+//! `swar_llm_server` helper (which loads the ~2 GB cleanup model) and runs one
+//! generation per sentence — so it is opt-in at runtime: it needs both
+//! `SWAR_LLM_EVAL=1` and `SWAR_LLM_SERVER=<path to the built helper>`, and skips
+//! loudly otherwise. It is the regression that proves cleanup never produces
+//! degenerate output (empties, truncation, repetition blow-ups, or flipped
+//! negation) across a wide spread of real-shaped dictations.
 
 use std::time::Instant;
 
@@ -46,6 +45,12 @@ fn cleanup_never_degenerates_across_the_corpus() {
     if std::env::var("SWAR_LLM_EVAL").is_err() {
         eprintln!(
             "SKIP cleanup_eval: set SWAR_LLM_EVAL=1 to run the ~200-sentence LLM eval (loads the ~2 GB model)"
+        );
+        return;
+    }
+    if std::env::var("SWAR_LLM_SERVER").is_err() {
+        eprintln!(
+            "SKIP cleanup_eval: set SWAR_LLM_SERVER=<path to the built swar_llm_server> so the helper can be reached"
         );
         return;
     }

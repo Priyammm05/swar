@@ -3,9 +3,8 @@ cargo:
     toolchain: '1.88.0'
   release:
     toolchain: '1.88.0'
-  # NOTE: the in-process llama.cpp cleanup LLM (`embedded-llm` feature) is parked,
-  # not shipped. It builds and works in isolation (see crates/swar_core/src/eval.rs
-  # and src/llm.rs), but linking llama.cpp alongside whisper.cpp into one static
-  # framework collides on duplicate ggml symbols. To ship the cleanup LLM later,
-  # run it as a separate llama-server subprocess over the existing local-llm HTTP
-  # path (no static-link conflict) rather than re-enabling this in-process feature.
+  # NOTE: this framework deliberately links NO llama.cpp. Offline cleanup runs in
+  # the separate `swar_llm_server` binary (crates/swar_llm_server) and is reached
+  # over a pipe via src/llm_client.rs. That keeps whisper.cpp's ggml the only ggml
+  # linked here, avoiding the duplicate-symbol collision that blocked linking both
+  # libraries into one static framework.

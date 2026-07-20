@@ -1,0 +1,23 @@
+[package]
+name = "swar_llm_server"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+# Swar's offline cleanup helper. A standalone process that owns llama.cpp and
+# turns (system, user) text into cleaned text over a line-delimited stdio
+# protocol. It lives in its OWN binary on purpose: llama.cpp and whisper.cpp each
+# vendor their own ggml, and linking both into one Mach-O collides on ~1000
+# duplicate ggml symbols. Two separate processes each link their own ggml with no
+# conflict, so the main app framework links only whisper.cpp and stays small.
+[[bin]]
+name = "swar_llm_server"
+path = "src/main.rs"
+
+[dependencies]
+# Metal accelerates generation on Apple Silicon; llama.cpp falls back to CPU
+# layers where no backend is present. default-features = false drops `common`
+# (the httplib downloader) via the workspace [patch.crates-io] vendored crate.
+llama-cpp-2 = { version = "=0.1.151", default-features = false, features = ["metal"] }
+serde = { version = "=1.0.228", features = ["derive"] }
+serde_json = "=1.0.145"

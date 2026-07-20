@@ -409,15 +409,33 @@ fn finish_capture(capture: &mut ActiveCapture) -> Result<DictationCompletion, St
         "audio drained and resampled",
     )?;
     record_dictation_stage("transcription");
-    // Bias whisper toward the user's own proper nouns at the source (§7).
-    let hotwords = personalization::hotword_prompt();
-    let raw_text = model_registry::transcribe(
-        &capture.config.model_path,
+    // Resolve the engine language. The two fast engines do not span both language
+    // families (Parakeet is English/European, IndicConformer is Indian), so Auto
+    // must first detect which family was spoken and route accordingly — otherwise
+    // English spoken in Auto would be decoded as phonetic Hindi.
+    let asr_language = resolve_asr_language(
         &capture.config.language,
+        &capture.config.model_path,
         &speech.samples,
-        &hotwords,
-    )
-    .map_err(|_| dictation_stage_error("transcription"))?;
+    );
+    // Fast path: the ONNX ASR helper (Parakeet for English, IndicConformer for
+    // Hindi, Hinglish, and Indian languages) is ~20-30x faster than whisper. It
+    // falls back to the whisper multilingual model whenever the helper, models, or
+    // a language route is missing or errors, so recognition never breaks.
+    let raw_text = match crate::asr_client::transcribe(&speech.samples, &asr_language) {
+        Ok(text) if transcript_contains_speech(&text) => text,
+        _ => {
+            // Bias whisper toward the user's own proper nouns at the source (§7).
+            let hotwords = personalization::hotword_prompt();
+            model_registry::transcribe(
+                &capture.config.model_path,
+                &capture.config.language,
+                &speech.samples,
+                &hotwords,
+            )
+            .map_err(|_| dictation_stage_error("transcription"))?
+        }
+    };
     if !transcript_contains_speech(&raw_text) {
         return Err(dictation_stage_error("transcription_empty"));
     }
@@ -435,11 +453,11 @@ fn finish_capture(capture: &mut ActiveCapture) -> Result<DictationCompletion, St
     }
     // When the on-device cleanup LLM is installed, use it for the default
     // "local" route (and the explicit "embedded-llm" route): it does Wispr-style
-    // context cleanup the deterministic editor cannot ("Mike" -> "mic",
+    // context cleanup the deterministic editor cannot ("mic" vs "Mike",
     // punctuation, casing). BYOK and local-llm server routes are left exactly as
     // configured. The GGUF path is resolved here so Flutter never needs to know
-    // it. If the `embedded-llm` feature is not built in, the enhancer degrades to
-    // the deterministic editor, so this is safe regardless of build flags.
+    // it. If the helper or model is not present, the enhancer degrades to the
+    // deterministic editor, so this is safe whether or not cleanup is installed.
     let embedded_llm_path = crate::api::models::embedded_llm_model_path();
     let configured_provider = capture.config.enhancement_provider.trim();
     let use_embedded = embedded_llm_path.is_some()
@@ -619,17 +637,24 @@ pub fn offline_model_is_ready(model_path: String) -> bool {
 pub fn prepare_dictation_engine(model_path: String) -> Result<bool, String> {
     let already_loaded =
         model_registry::prepare(&model_path).map(|status| status.already_loaded)?;
-    // Warm the cleanup LLM off-thread when it is installed, so the first dictation
-    // does not pay the ~2 GB model load. Best-effort and non-blocking: if it fails
-    // or is still loading, the enhancer just loads it lazily on first use.
-    #[cfg(feature = "embedded-llm")]
-    {
-        if let Some(path) = crate::api::models::embedded_llm_model_path() {
+    // Cleanup "just works" with no setup: when the model is present, warm the
+    // helper off-thread so the first dictation does not pay the ~2 GB load; when
+    // it is absent, download it once in the background (cleanup stays on the
+    // instant deterministic editor until it lands). Both are best-effort and
+    // non-blocking, so neither can delay or fail engine preparation.
+    match crate::api::models::embedded_llm_model_path() {
+        Some(path) => {
             std::thread::spawn(move || {
-                let _ = crate::llm::prepare(&path.to_string_lossy());
+                let _ = crate::llm_client::prepare(&path.to_string_lossy());
             });
         }
+        None => crate::api::models::ensure_embedded_llm_model_download(),
     }
+    // Fetch the default English engine (Parakeet) once in the background too.
+    // Self-guarded and non-blocking: recognition stays on whisper until it lands.
+    // The Indian-languages pack (IndicConformer) is opt-in from Settings, so it is
+    // NOT downloaded here.
+    crate::api::models::ensure_parakeet_download();
     Ok(already_loaded)
 }
 
@@ -648,13 +673,10 @@ pub fn prepare_audio_capture(microphone_id: String) -> Result<u32, String> {
 /// Releases the warm model without stopping the dedicated ASR worker.
 pub fn release_dictation_engine() -> Result<(), String> {
     model_registry::unload()?;
-    // Drop the warm cleanup LLM too. llama.cpp's Metal backend asserts on process
-    // teardown if a model/context is still resident, so it must be released before
-    // shutdown exactly like the ASR model. Best-effort: never fail shutdown on it.
-    #[cfg(feature = "embedded-llm")]
-    {
-        let _ = crate::llm::unload();
-    }
+    // Stop the cleanup helper too, freeing its ~2 GB of weights. The helper owns
+    // llama.cpp in its own process, so its Metal teardown happens there; here we
+    // just end it. Best-effort: never fail shutdown on it.
+    let _ = crate::llm_client::shutdown();
     capture_engine::release()
 }
 
@@ -852,6 +874,29 @@ fn abandon_coordinator_session(session_id: &str) {
 fn monotonic_timestamp_ms() -> u64 {
     static ORIGIN: std::sync::OnceLock<Instant> = std::sync::OnceLock::new();
     ORIGIN.get_or_init(Instant::now).elapsed().as_millis() as u64
+}
+
+/// The Indian languages IndicConformer handles (see `swar_asr_server::route`).
+/// Everything else — English and European codes — belongs to Parakeet.
+fn is_indic_language(code: &str) -> bool {
+    matches!(
+        code,
+        "hi" | "ta" | "te" | "bn" | "kn" | "ml" | "mr" | "gu" | "pa" | "or" | "ur"
+    )
+}
+
+/// The language string to hand the fast ASR helper. Explicit modes route directly;
+/// only Auto detects. On any detection failure Auto defaults to English (Parakeet),
+/// the app's default engine, rather than mis-decoding English as Hindi.
+fn resolve_asr_language(configured: &str, model_path: &str, samples: &[f32]) -> String {
+    let lower = configured.trim().to_ascii_lowercase();
+    if !matches!(lower.as_str(), "" | "auto" | "automatic") {
+        return configured.to_owned();
+    }
+    match model_registry::detect_language(model_path, samples) {
+        Ok(code) if is_indic_language(&code) => code,
+        _ => "english".to_owned(),
+    }
 }
 
 fn transcript_contains_speech(value: &str) -> bool {

@@ -2,6 +2,7 @@ use std::{
     fs::{self, File},
     io::{Read, Write},
     path::{Path, PathBuf},
+    sync::atomic::{AtomicBool, Ordering},
     time::Duration,
 };
 
@@ -30,20 +31,6 @@ const HINDI_MODEL_URL: &str =
     "https://huggingface.co/ukta-app/indic-whisper-ggml/resolve/main/ggml-hi-small.bin";
 const HINDI_MODEL_SHA256: &str = "6813fed7ffa6c3fa14490c1f1788d2d8b6e3b7badf59a2f75fb4c5c21cf00f3f";
 const HINDI_MODEL_BYTES: u64 = 190_085_487;
-// The Hinglish-tuned pack (Oriserve Hindi2Hinglish "Apex", ggml q5_0). It emits
-// romanised Latin directly, so Hinglish/Auto recover code-switched English at the
-// source ("complete", not "kanplit"). Larger and slower than the small model —
-// selected only for the Hinglish/Auto routes.
-const HINGLISH_MODEL_FILE: &str = "ggml-apex-hinglish-q5_0.bin";
-const HINGLISH_MODEL_URL: &str =
-    "https://huggingface.co/Marquestra/Whisper-Hindi2Hinglish-Apex-GGML/resolve/main/ggml-apex-hinglish-q5_0.bin";
-const HINGLISH_MODEL_SHA256: &str =
-    "9d877151b15cec1feb9110cfbc0a3162cf377bcc0ab1935174226f461cf60f13";
-const HINGLISH_MODEL_BYTES: u64 = 574_041_195;
-// The fast Hinglish pack (Swift, whisper-base). Locally converted for now, so it
-// is only size-guarded (no pinned download yet).
-const SWIFT_HINGLISH_MODEL_FILE: &str = "ggml-swift-hinglish.bin";
-const SWIFT_HINGLISH_MODEL_BYTES: u64 = 147_951_465;
 // The on-device cleanup LLM (Qwen2.5-3B-Instruct, GGUF q4_k_m, Apache-2.0). Used
 // by the embedded-llm enhancer to do Wispr-style context cleanup — fixing
 // homophones ("Mike" -> "mic"), punctuation, and capitalisation that a pure
@@ -103,19 +90,6 @@ pub fn install_recommended_model() -> Result<OfflineModelStatus, String> {
             &hindi_destination,
             HINDI_MODEL_BYTES,
             HINDI_MODEL_SHA256,
-        )?;
-    }
-    let hinglish_destination = parent.join(HINGLISH_MODEL_FILE);
-    if !verified_file(
-        &hinglish_destination,
-        HINGLISH_MODEL_BYTES,
-        HINGLISH_MODEL_SHA256,
-    ) {
-        download_verified(
-            HINGLISH_MODEL_URL,
-            &hinglish_destination,
-            HINGLISH_MODEL_BYTES,
-            HINGLISH_MODEL_SHA256,
         )?;
     }
     Ok(status_for(destination))
@@ -185,8 +159,6 @@ pub(crate) fn expected_minimum_bytes(model_path: &str) -> u64 {
         .and_then(|name| name.to_str())
     {
         Some(HINDI_MODEL_FILE) => HINDI_MODEL_BYTES,
-        Some(HINGLISH_MODEL_FILE) => HINGLISH_MODEL_BYTES,
-        Some(SWIFT_HINGLISH_MODEL_FILE) => SWIFT_HINGLISH_MODEL_BYTES,
         Some(EMBEDDED_LLM_MODEL_FILE) => EMBEDDED_LLM_MODEL_BYTES,
         Some(VAD_MODEL_FILE) => VAD_MODEL_BYTES,
         _ => MINIMUM_MODEL_BYTES,
@@ -265,6 +237,32 @@ pub fn install_embedded_llm_model() -> Result<OfflineModelStatus, String> {
     Ok(status_for(destination))
 }
 
+/// Guards the one-time background download so repeated `prepare` calls in a
+/// single process never start overlapping 2 GB downloads.
+static LLM_DOWNLOAD_STARTED: AtomicBool = AtomicBool::new(false);
+
+/// Kicks off a one-time background download of the ~2 GB cleanup model when it is
+/// absent, so cleanup "just works" without the user opening a setting. It is
+/// non-blocking and best-effort: until the model lands, cleanup stays on the
+/// instant deterministic editor; on success it warms the helper so the next
+/// dictation is fast; on failure it clears the guard so a later launch can retry.
+pub(crate) fn ensure_embedded_llm_model_download() {
+    if embedded_llm_model_path().is_some() {
+        return;
+    }
+    if LLM_DOWNLOAD_STARTED.swap(true, Ordering::SeqCst) {
+        return; // Already downloading (or downloaded) in this process.
+    }
+    std::thread::spawn(|| match install_embedded_llm_model() {
+        Ok(status) => {
+            let _ = crate::llm_client::prepare(&status.path);
+        }
+        Err(_) => {
+            LLM_DOWNLOAD_STARTED.store(false, Ordering::SeqCst);
+        }
+    });
+}
+
 fn status_for(path: PathBuf) -> OfflineModelStatus {
     let metadata = fs::metadata(&path).ok();
     let size_bytes = metadata.as_ref().map_or(0, fs::Metadata::len);
@@ -285,6 +283,163 @@ fn status_for(path: PathBuf) -> OfflineModelStatus {
     }
 }
 
+// ===== Fast ASR models (Parakeet + IndicConformer) =====
+//
+// These are multi-file ONNX bundles served by the fast helper (`swar_asr_server`).
+// Unlike the single-file whisper/LLM models, each bundle is a directory of files,
+// so the pinned manifest below drives a per-file verified download. Missing models
+// simply mean recognition stays on whisper — never a failure.
+
+/// One downloadable file in an ASR bundle. `path` is relative to the bundle's
+/// directory under `models/`; `url` is pinned to an immutable repo revision.
+#[derive(serde::Deserialize)]
+struct AsrFile {
+    path: String,
+    url: String,
+    sha256: String,
+    bytes: u64,
+}
+
+#[derive(serde::Deserialize)]
+struct AsrBundle {
+    dir: String,
+    files: Vec<AsrFile>,
+}
+
+#[derive(serde::Deserialize)]
+struct AsrManifest {
+    parakeet: AsrBundle,
+    indic: AsrBundle,
+}
+
+/// The pinned manifest of every fast-ASR file (URL + SHA-256 + size), embedded at
+/// compile time. Generated from the validated local models.
+const ASR_MANIFEST_JSON: &str = include_str!("../asr_models.json");
+
+fn asr_manifest() -> Result<AsrManifest, String> {
+    serde_json::from_str(ASR_MANIFEST_JSON).map_err(|error| error.to_string())
+}
+
+fn models_dir() -> Result<PathBuf, String> {
+    let directories = ProjectDirs::from("dev", "Swar", "Swar")
+        .ok_or_else(|| "application support directory is unavailable".to_owned())?;
+    Ok(directories.data_local_dir().join("models"))
+}
+
+/// True when every file of `bundle` is present at its expected size. A cheap
+/// presence + size check for the hot path and Settings; the strong SHA-256
+/// guarantee still holds at install time.
+fn bundle_installed(bundle: &AsrBundle) -> bool {
+    let Ok(root) = models_dir() else {
+        return false;
+    };
+    let base = root.join(&bundle.dir);
+    bundle
+        .files
+        .iter()
+        .all(|file| file_present_with_min_size(&base.join(&file.path), file.bytes))
+}
+
+/// Downloads every file of `bundle` that is missing or fails verification into the
+/// models directory, each verified by SHA-256 before it atomically replaces any
+/// existing file. Callers must run this off the UI thread.
+fn install_bundle(bundle: &AsrBundle) -> Result<(), String> {
+    let base = models_dir()?.join(&bundle.dir);
+    for file in &bundle.files {
+        let destination = base.join(&file.path);
+        if verified_file(&destination, file.bytes, &file.sha256) {
+            continue;
+        }
+        let parent = destination
+            .parent()
+            .ok_or_else(|| "asr model directory is unavailable".to_owned())?;
+        fs::create_dir_all(parent).map_err(|error| error.to_string())?;
+        download_verified(&file.url, &destination, file.bytes, &file.sha256)?;
+    }
+    Ok(())
+}
+
+/// True when the default English engine (Parakeet) is installed.
+pub(crate) fn parakeet_installed() -> bool {
+    asr_manifest().is_ok_and(|manifest| bundle_installed(&manifest.parakeet))
+}
+
+/// True when the optional Indian-languages pack (IndicConformer) is installed.
+pub(crate) fn indic_models_installed() -> bool {
+    asr_manifest().is_ok_and(|manifest| bundle_installed(&manifest.indic))
+}
+
+/// Downloads the optional Indian-languages pack (~670 MB). Exposed so a Settings
+/// action can install it on demand; until then Hindi/Hinglish/Indian speech uses
+/// the whisper fallback. Blocking, so Flutter must call it off the UI isolate.
+pub fn install_indic_models() -> Result<OfflineModelStatus, String> {
+    let manifest = asr_manifest()?;
+    install_bundle(&manifest.indic)?;
+    Ok(indic_pack_status())
+}
+
+/// The Indian-languages pack install state for Settings (presence + size only,
+/// cheap enough for a `#[frb(sync)]` render).
+#[frb(sync)]
+pub fn indic_pack_status() -> OfflineModelStatus {
+    let root = models_dir().ok();
+    let base = root.map(|root| {
+        asr_manifest()
+            .map(|manifest| root.join(manifest.indic.dir))
+            .unwrap_or(root)
+    });
+    let size_bytes = base.as_ref().map(|base| directory_size(base)).unwrap_or(0);
+    OfflineModelStatus {
+        path: base
+            .map(|base| base.to_string_lossy().into_owned())
+            .unwrap_or_default(),
+        installed: indic_models_installed(),
+        size_bytes,
+        model_id: "indic-conformer-600m-int8".to_owned(),
+    }
+}
+
+/// Best-effort recursive byte size of a directory tree; 0 when absent.
+fn directory_size(path: &Path) -> u64 {
+    let Ok(entries) = fs::read_dir(path) else {
+        return 0;
+    };
+    entries
+        .flatten()
+        .map(|entry| match entry.metadata() {
+            Ok(metadata) if metadata.is_dir() => directory_size(&entry.path()),
+            Ok(metadata) => metadata.len(),
+            Err(_) => 0,
+        })
+        .sum()
+}
+
+/// Guards the one-time background download so repeated `prepare` calls never start
+/// overlapping Parakeet downloads in a single process.
+static PARAKEET_DOWNLOAD_STARTED: AtomicBool = AtomicBool::new(false);
+
+/// Kicks off a one-time background download of the default English engine
+/// (Parakeet, ~670 MB) when it is absent, so fast English recognition "just works"
+/// without the user opening a setting. The Indian-languages pack is NOT fetched
+/// here — it is opt-in via `install_indic_models` from Settings. Non-blocking and
+/// best-effort: until Parakeet lands, recognition stays on whisper; on failure it
+/// clears the guard so a later launch can retry.
+pub(crate) fn ensure_parakeet_download() {
+    if parakeet_installed() {
+        return;
+    }
+    if PARAKEET_DOWNLOAD_STARTED.swap(true, Ordering::SeqCst) {
+        return; // Already downloading (or downloaded) in this process.
+    }
+    std::thread::spawn(|| {
+        let installed =
+            asr_manifest().is_ok_and(|manifest| install_bundle(&manifest.parakeet).is_ok());
+        if !installed {
+            PARAKEET_DOWNLOAD_STARTED.store(false, Ordering::SeqCst);
+        }
+    });
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -295,6 +450,38 @@ mod tests {
         assert!(!RECOMMENDED_MODEL_FILE.contains(".en."));
         assert_eq!(VAD_MODEL_FILE, "ggml-silero-v6.2.0.bin");
         assert_eq!(HINDI_MODEL_FILE, "ggml-hi-small.bin");
+    }
+
+    #[test]
+    fn asr_manifest_parses_and_pins_every_file() {
+        let manifest = asr_manifest().expect("embedded ASR manifest must parse");
+        assert_eq!(manifest.parakeet.dir, "parakeet-v3");
+        assert_eq!(manifest.indic.dir, "indic-conformer");
+        // The helper looks for these exact entrypoints (see asr_client::model_dirs
+        // and swar_asr_server), so a manifest that dropped them would silently
+        // disable fast ASR.
+        assert!(manifest
+            .parakeet
+            .files
+            .iter()
+            .any(|f| f.path == "encoder.int8.onnx"));
+        assert!(manifest
+            .indic
+            .files
+            .iter()
+            .any(|f| f.path == "onnx/encoder_quantized_int8.onnx"));
+        assert!(manifest
+            .indic
+            .files
+            .iter()
+            .any(|f| f.path == "onnx/adapters/joint_post_net_hi_quantized_int8.onnx"));
+        for bundle in [&manifest.parakeet, &manifest.indic] {
+            for file in &bundle.files {
+                assert_eq!(file.sha256.len(), 64, "sha256 for {}", file.path);
+                assert!(file.bytes > 0, "size for {}", file.path);
+                assert!(file.url.starts_with("https://"), "url for {}", file.path);
+            }
+        }
     }
 
     #[test]

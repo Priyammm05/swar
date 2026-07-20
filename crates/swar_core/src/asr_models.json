@@ -1,0 +1,138 @@
+{
+  "parakeet": {
+    "dir": "parakeet-v3",
+    "files": [
+      {
+        "path": "encoder.int8.onnx",
+        "url": "https://huggingface.co/csukuangfj/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8/resolve/2bda32ec70b097a55adaa07d9a7173915b43cc78/encoder.int8.onnx",
+        "sha256": "acfc2b4456377e15d04f0243af540b7fe7c992f8d898d751cf134c3a55fd2247",
+        "bytes": 652184281
+      },
+      {
+        "path": "decoder.int8.onnx",
+        "url": "https://huggingface.co/csukuangfj/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8/resolve/2bda32ec70b097a55adaa07d9a7173915b43cc78/decoder.int8.onnx",
+        "sha256": "179e50c43d1a9de79c8a24149a2f9bac6eb5981823f2a2ed88d655b24248db4e",
+        "bytes": 11845275
+      },
+      {
+        "path": "joiner.int8.onnx",
+        "url": "https://huggingface.co/csukuangfj/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8/resolve/2bda32ec70b097a55adaa07d9a7173915b43cc78/joiner.int8.onnx",
+        "sha256": "3164c13fc2821009440d20fcb5fdc78bff28b4db2f8d0f0b329101719c0948b3",
+        "bytes": 6355277
+      },
+      {
+        "path": "tokens.txt",
+        "url": "https://huggingface.co/csukuangfj/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8/resolve/2bda32ec70b097a55adaa07d9a7173915b43cc78/tokens.txt",
+        "sha256": "d58544679ea4bc6ac563d1f545eb7d474bd6cfa467f0a6e2c1dc1c7d37e3c35d",
+        "bytes": 93939
+      }
+    ]
+  },
+  "indic": {
+    "dir": "indic-conformer",
+    "files": [
+      {
+        "path": "onnx/encoder_quantized_int8.onnx",
+        "url": "https://huggingface.co/atharva-again/indic-conformer-600m-quantized/resolve/24161a9b14e6c8f48b4ccc58356e1eb34ad659ae/onnx/encoder_quantized_int8.onnx",
+        "sha256": "e6148643f102acb7af3f7bc89beec3f22357ad217da8aaa9ce0a6746c20203a3",
+        "bytes": 654791641
+      },
+      {
+        "path": "onnx/joint_enc_quantized_int8.onnx",
+        "url": "https://huggingface.co/atharva-again/indic-conformer-600m-quantized/resolve/24161a9b14e6c8f48b4ccc58356e1eb34ad659ae/onnx/joint_enc_quantized_int8.onnx",
+        "sha256": "663e2275955ed5a0a15e614834f32def493cf2612d8b88f01bbfdfd98f0c31bf",
+        "bytes": 664316
+      },
+      {
+        "path": "onnx/joint_pred_quantized_int8.onnx",
+        "url": "https://huggingface.co/atharva-again/indic-conformer-600m-quantized/resolve/24161a9b14e6c8f48b4ccc58356e1eb34ad659ae/onnx/joint_pred_quantized_int8.onnx",
+        "sha256": "d96abcf28c5919ec57b082c86b8b20d2b46fb46cfc2475cca04bb299c5195a4d",
+        "bytes": 418556
+      },
+      {
+        "path": "onnx/joint_pre_net_quantized_int8.onnx",
+        "url": "https://huggingface.co/atharva-again/indic-conformer-600m-quantized/resolve/24161a9b14e6c8f48b4ccc58356e1eb34ad659ae/onnx/joint_pre_net_quantized_int8.onnx",
+        "sha256": "2bbe9b42caee36eb8eadb7380b60ecd880991da307bcae203f50542c244a5c7a",
+        "bytes": 3025
+      },
+      {
+        "path": "onnx/rnnt_decoder_quantized_int8.onnx",
+        "url": "https://huggingface.co/atharva-again/indic-conformer-600m-quantized/resolve/24161a9b14e6c8f48b4ccc58356e1eb34ad659ae/onnx/rnnt_decoder_quantized_int8.onnx",
+        "sha256": "7dc16966e7b8256c201cb04da64b5818fa06f8f08a713c00c8ee0d61d9df0935",
+        "bytes": 10256455
+      },
+      {
+        "path": "config/vocab.json",
+        "url": "https://huggingface.co/atharva-again/indic-conformer-600m-quantized/resolve/24161a9b14e6c8f48b4ccc58356e1eb34ad659ae/config/vocab.json",
+        "sha256": "eda380b3ba4507cb0850b6d0666298babe07eaf3f299b2d08f91db4b491a59bf",
+        "bytes": 96743
+      },
+      {
+        "path": "onnx/adapters/joint_post_net_hi_quantized_int8.onnx",
+        "url": "https://huggingface.co/atharva-again/indic-conformer-600m-quantized/resolve/24161a9b14e6c8f48b4ccc58356e1eb34ad659ae/onnx/adapters/joint_post_net_hi_quantized_int8.onnx",
+        "sha256": "8e2a42f8f235dea3d3698b137efe15abef3eb8f1c5268748043519493ea5f5b5",
+        "bytes": 169989
+      },
+      {
+        "path": "onnx/adapters/joint_post_net_ta_quantized_int8.onnx",
+        "url": "https://huggingface.co/atharva-again/indic-conformer-600m-quantized/resolve/24161a9b14e6c8f48b4ccc58356e1eb34ad659ae/onnx/adapters/joint_post_net_ta_quantized_int8.onnx",
+        "sha256": "719d5acf4e1af0de5b4b9c8a91185894a2a987861e622f631c3beea9a0042079",
+        "bytes": 169989
+      },
+      {
+        "path": "onnx/adapters/joint_post_net_te_quantized_int8.onnx",
+        "url": "https://huggingface.co/atharva-again/indic-conformer-600m-quantized/resolve/24161a9b14e6c8f48b4ccc58356e1eb34ad659ae/onnx/adapters/joint_post_net_te_quantized_int8.onnx",
+        "sha256": "c7db4b400d006c66dba2d61cffeda9f43a52bbcfff56a9e80f3dde8b4abeef90",
+        "bytes": 169989
+      },
+      {
+        "path": "onnx/adapters/joint_post_net_bn_quantized_int8.onnx",
+        "url": "https://huggingface.co/atharva-again/indic-conformer-600m-quantized/resolve/24161a9b14e6c8f48b4ccc58356e1eb34ad659ae/onnx/adapters/joint_post_net_bn_quantized_int8.onnx",
+        "sha256": "17a220a8d78d7f2f81ce32d27dc21de53b1f8e12af101a8b7fdbe895b9852b7b",
+        "bytes": 169989
+      },
+      {
+        "path": "onnx/adapters/joint_post_net_kn_quantized_int8.onnx",
+        "url": "https://huggingface.co/atharva-again/indic-conformer-600m-quantized/resolve/24161a9b14e6c8f48b4ccc58356e1eb34ad659ae/onnx/adapters/joint_post_net_kn_quantized_int8.onnx",
+        "sha256": "3876824e5cc77927b06a7b91fbaea013adfa409446803d72c705facc32710ebf",
+        "bytes": 169989
+      },
+      {
+        "path": "onnx/adapters/joint_post_net_ml_quantized_int8.onnx",
+        "url": "https://huggingface.co/atharva-again/indic-conformer-600m-quantized/resolve/24161a9b14e6c8f48b4ccc58356e1eb34ad659ae/onnx/adapters/joint_post_net_ml_quantized_int8.onnx",
+        "sha256": "9f13e69beb28405fe057c59c06620bd8d7d082beb8595e5d6f3827482e203ef8",
+        "bytes": 169989
+      },
+      {
+        "path": "onnx/adapters/joint_post_net_mr_quantized_int8.onnx",
+        "url": "https://huggingface.co/atharva-again/indic-conformer-600m-quantized/resolve/24161a9b14e6c8f48b4ccc58356e1eb34ad659ae/onnx/adapters/joint_post_net_mr_quantized_int8.onnx",
+        "sha256": "90bd290ce43f42d9bd0d4e9535226d12dd42b9bbc1ba2c2fce12c6b8ffcd6509",
+        "bytes": 169989
+      },
+      {
+        "path": "onnx/adapters/joint_post_net_gu_quantized_int8.onnx",
+        "url": "https://huggingface.co/atharva-again/indic-conformer-600m-quantized/resolve/24161a9b14e6c8f48b4ccc58356e1eb34ad659ae/onnx/adapters/joint_post_net_gu_quantized_int8.onnx",
+        "sha256": "51cad51b56bc8980a75c28c55fd786e0ecbcf87cab96ea828bc102c05c9ff174",
+        "bytes": 169989
+      },
+      {
+        "path": "onnx/adapters/joint_post_net_pa_quantized_int8.onnx",
+        "url": "https://huggingface.co/atharva-again/indic-conformer-600m-quantized/resolve/24161a9b14e6c8f48b4ccc58356e1eb34ad659ae/onnx/adapters/joint_post_net_pa_quantized_int8.onnx",
+        "sha256": "2409802aa9cc90097e073fa4f1c0ea90bd823fe8f6b4455414d826c58af6b7bd",
+        "bytes": 169989
+      },
+      {
+        "path": "onnx/adapters/joint_post_net_or_quantized_int8.onnx",
+        "url": "https://huggingface.co/atharva-again/indic-conformer-600m-quantized/resolve/24161a9b14e6c8f48b4ccc58356e1eb34ad659ae/onnx/adapters/joint_post_net_or_quantized_int8.onnx",
+        "sha256": "73cd96181db43e98e41014cfd0b96fd6b786b719b5f8eeb40c9c338a3ad63587",
+        "bytes": 169989
+      },
+      {
+        "path": "onnx/adapters/joint_post_net_ur_quantized_int8.onnx",
+        "url": "https://huggingface.co/atharva-again/indic-conformer-600m-quantized/resolve/24161a9b14e6c8f48b4ccc58356e1eb34ad659ae/onnx/adapters/joint_post_net_ur_quantized_int8.onnx",
+        "sha256": "35b85b522febebaffda8c30bae673e625e4e0aadbb04b22c99a7ec90dd05d06f",
+        "bytes": 169989
+      }
+    ]
+  }
+}

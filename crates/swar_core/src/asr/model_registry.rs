@@ -41,6 +41,11 @@ enum ModelCommand {
         preview: bool,
         response: Sender<Result<String, String>>,
     },
+    DetectLanguage {
+        model_path: String,
+        samples: Vec<f32>,
+        response: Sender<Result<String, String>>,
+    },
     Unload {
         response: Sender<()>,
     },
@@ -185,6 +190,19 @@ impl ModelRegistry {
         await_worker_response(&result, PREVIEW_DECODE_TIMEOUT, "generating a preview")?
     }
 
+    fn detect_language(&self, model_path: &str, samples: &[f32]) -> Result<String, String> {
+        ensure_model_file(model_path)?;
+        let (response, result) = mpsc::channel();
+        self.commands
+            .send(ModelCommand::DetectLanguage {
+                model_path: model_path.to_owned(),
+                samples: samples.to_vec(),
+                response,
+            })
+            .map_err(|_| "the ASR worker is unavailable".to_owned())?;
+        await_worker_response(&result, PREVIEW_DECODE_TIMEOUT, "detecting the language")?
+    }
+
     fn unload(&self) -> Result<(), String> {
         let (response, result) = mpsc::channel();
         self.commands
@@ -236,6 +254,12 @@ pub(crate) fn transcribe_preview(
 ) -> Result<String, String> {
     let selected = model_path_for_language(Path::new(model_path), language);
     MODEL_REGISTRY.transcribe_preview(&selected.to_string_lossy(), language, samples)
+}
+
+/// Detects the spoken language via the warm whisper context, returning its ISO
+/// code (e.g. "en", "hi"). Used only to route Auto mode to the correct fast engine.
+pub(crate) fn detect_language(model_path: &str, samples: &[f32]) -> Result<String, String> {
+    MODEL_REGISTRY.detect_language(model_path, samples)
 }
 
 pub(crate) fn unload() -> Result<(), String> {
@@ -298,12 +322,53 @@ fn run_worker(receiver: Receiver<ModelCommand>) {
                 });
                 let _ = response.send(result);
             }
+            ModelCommand::DetectLanguage {
+                model_path,
+                samples,
+                response,
+            } => {
+                let outcome = panic::catch_unwind(AssertUnwindSafe(|| {
+                    cache.ensure(&model_path).and_then(|_| {
+                        let model = cache
+                            .get(&model_path)
+                            .ok_or_else(|| "the offline model did not remain loaded".to_owned())?;
+                        detect_language_with_context(&model.context, &samples)
+                    })
+                }));
+                let result = outcome.unwrap_or_else(|_| {
+                    cache.clear();
+                    Err("the offline model failed during language detection".to_owned())
+                });
+                let _ = response.send(result);
+            }
             ModelCommand::Unload { response } => {
                 cache.clear();
                 let _ = response.send(());
             }
         }
     }
+}
+
+/// Detects the spoken language with whisper's encoder only (no decode), returning
+/// its ISO code (e.g. "en", "hi"). Used to route Auto mode to the right fast
+/// engine — English/European to Parakeet, Indian to IndicConformer — since neither
+/// fast engine spans both families. This is a single encoder pass on the warm
+/// whisper context, far cheaper than a full decode.
+fn detect_language_with_context(
+    context: &WhisperContext,
+    samples: &[f32],
+) -> Result<String, String> {
+    let Some(samples) = prepared_decode_input(samples) else {
+        return Ok(String::new());
+    };
+    let mut state = context.create_state().map_err(|error| error.to_string())?;
+    state
+        .pcm_to_mel(samples.as_ref(), available_threads() as usize)
+        .map_err(|error| error.to_string())?;
+    let (lang_id, _probs) = state
+        .lang_detect(0, available_threads() as usize)
+        .map_err(|error| error.to_string())?;
+    Ok(whisper_rs::get_lang_str(lang_id).unwrap_or("en").to_owned())
 }
 
 fn transcribe_with_context(
@@ -321,15 +386,13 @@ fn transcribe_with_context(
         return Ok(String::new());
     };
     let samples = samples.as_ref();
-    let model_file = model_path.file_name().and_then(|name| name.to_str());
-    // Both Hinglish packs (Apex/Swift) are `-l auto` romanised-output models.
-    let is_hinglish_model = is_romanized_hinglish_pack(model_file);
     let mut state = context.create_state().map_err(|error| error.to_string())?;
-    // Beam-2 on the large Apex pack matches the previously accepted
-    // (Wispr-comparable) quality while keeping decode fast. Beam-5 was tried for
-    // extra accuracy but its added decode cost made dictation slower overall for
-    // no clear quality gain, so it was reverted. The dynamic audio context below
-    // is the real speed win and does not touch decode quality.
+    // Beam-2 matches the previously accepted (Wispr-comparable) quality while
+    // keeping decode fast. Beam-5 was tried for extra accuracy but its added decode
+    // cost made dictation slower overall for no clear quality gain, so it was
+    // reverted. The dynamic audio context below is the real speed win and does not
+    // touch decode quality. Whisper is now the fallback engine: the fast ONNX ASR
+    // helper handles the primary path (see api::dictation and asr_client).
     let mut params = if preview {
         FullParams::new(SamplingStrategy::Greedy { best_of: 1 })
     } else {
@@ -373,18 +436,7 @@ fn transcribe_with_context(
         params.set_entropy_thold(2.4);
         params.set_logprob_thold(-1.0);
     }
-    // The Hinglish pack is trained for `-l auto` and emits romanised Latin
-    // directly, so it always auto-detects regardless of the selected mode; the
-    // per-mode decode table only applies to the general/Indic models.
-    let decoding = if is_hinglish_model {
-        LanguageDecoding {
-            whisper_language: None,
-            initial_prompt: None,
-            detect_language: false,
-        }
-    } else {
-        language_decoding(language)
-    };
+    let decoding = language_decoding(language);
     params.set_language(decoding.whisper_language);
     params.set_detect_language(decoding.detect_language);
     // Bias the decoder toward the user's own vocabulary so proper nouns are
@@ -490,20 +542,7 @@ fn language_decoding(language: &str) -> LanguageDecoding {
     }
 }
 
-/// The Hinglish quality pack (Oriserve Hindi2Hinglish "Apex", large-v3). It emits
-/// romanised Latin directly ("complete", not "kanplit"), fixing Hinglish at the
-/// source. It is the single model used for Hinglish and Auto. The earlier fast
-/// "Swift" base pack was dropped: its accuracy loss (dropping names like "Goa",
-/// hearing "bore" as "door") did not meet the quality bar, and flash attention +
-/// dynamic audio context recovered enough speed to run Apex responsively instead.
-const HINGLISH_MODEL_FILE: &str = "ggml-apex-hinglish-q5_0.bin";
 const HINDI_MODEL_FILE: &str = "ggml-hi-small.bin";
-
-/// The Apex pack is an `-l auto` model that outputs romanised Latin, so it always
-/// auto-detects regardless of the selected mode.
-fn is_romanized_hinglish_pack(model_file: Option<&str>) -> bool {
-    model_file == Some(HINGLISH_MODEL_FILE)
-}
 
 fn vad_model_next_to(model_path: &Path) -> Option<std::path::PathBuf> {
     let candidate = model_path.parent()?.join("ggml-silero-v6.2.0.bin");
@@ -522,24 +561,13 @@ fn uses_hindi_model(language: &str) -> bool {
     language.trim().eq_ignore_ascii_case("hindi")
 }
 
-/// Hinglish and Auto prefer the Hinglish-tuned pack (native Roman output). English
-/// stays on the fast multilingual model; explicit Hindi uses the Indic model.
-fn uses_hinglish_model(language: &str) -> bool {
-    let lower = language.trim().to_ascii_lowercase();
-    lower == "hinglish" || lower == "automatic" || lower.is_empty()
-}
-
+/// Whisper is the fallback engine (the fast ONNX helper is primary). Only explicit
+/// Hindi swaps to the monolingual Indic fine-tune; Hinglish and Auto stay on the
+/// user's multilingual model, whose Devanagari output the language stage romanises.
 fn model_path_for_language(model_path: &Path, language: &str) -> std::path::PathBuf {
     if uses_hindi_model(language) {
         if let Some(hindi) = sibling_model(model_path, HINDI_MODEL_FILE) {
             return hindi;
-        }
-    } else if uses_hinglish_model(language) {
-        // Hinglish and Auto use the Apex quality pack when installed, else fall
-        // back to whatever multilingual model the user selected so they still work
-        // before the pack is downloaded.
-        if let Some(apex) = sibling_model(model_path, HINGLISH_MODEL_FILE) {
-            return apex;
         }
     }
     model_path.to_owned()
@@ -593,6 +621,27 @@ fn available_threads() -> i32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // Opt-in diagnostic: loads the installed whisper model and reports the language
+    // it detects for a 16 kHz mono Int16 WAV. Used to validate that Auto routing
+    // distinguishes English (-> Parakeet) from Indian speech (-> IndicConformer).
+    // No-ops unless both env vars point at real files, so CI never runs it.
+    #[test]
+    fn detect_language_on_env_wav() {
+        let (Ok(model), Ok(wav)) = (
+            std::env::var("SWAR_DETECT_MODEL"),
+            std::env::var("SWAR_DETECT_WAV"),
+        ) else {
+            return;
+        };
+        let bytes = std::fs::read(&wav).expect("read wav");
+        let samples: Vec<f32> = bytes[44..]
+            .chunks_exact(2)
+            .map(|b| i16::from_le_bytes([b[0], b[1]]) as f32 / 32768.0)
+            .collect();
+        let code = detect_language(&model, &samples).expect("detect");
+        println!("DETECTED[{wav}] = {code}");
+    }
 
     #[test]
     fn missing_model_is_rejected_before_the_worker_is_contacted() {
@@ -683,26 +732,30 @@ mod tests {
     }
 
     #[test]
-    fn hinglish_and_auto_prefer_the_apex_pack_when_installed() {
+    fn whisper_fallback_keeps_hinglish_and_auto_on_the_multilingual_model() {
         use std::fs;
-        let dir = std::env::temp_dir().join(format!("swar-apex-route-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("swar-fallback-route-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).expect("temp dir");
         let selected = dir.join("ggml-small-q5_1.bin");
         fs::write(&selected, b"x").expect("write base");
 
-        // Before the pack is installed, Hinglish/Auto fall back to the selected
-        // multilingual model so dictation still works.
-        assert_eq!(model_path_for_language(&selected, "hinglish"), selected);
-        assert_eq!(model_path_for_language(&selected, "automatic"), selected);
+        // Apex is gone: Hinglish/Auto/English all stay on the selected multilingual
+        // model on the whisper fallback path. The fast ONNX helper (IndicConformer)
+        // is the primary Hinglish engine; the language stage romanises its output.
+        for mode in ["hinglish", "automatic", "auto", "english", ""] {
+            assert_eq!(
+                model_path_for_language(&selected, mode),
+                selected,
+                "{mode:?}"
+            );
+        }
 
-        // Once the Apex pack sits next to it, Hinglish and Auto route to it (the
-        // "kanplit" fix at the source). English never does.
-        let apex = dir.join(HINGLISH_MODEL_FILE);
-        fs::write(&apex, b"x").expect("write apex");
-        assert_eq!(model_path_for_language(&selected, "hinglish"), apex);
-        assert_eq!(model_path_for_language(&selected, "automatic"), apex);
-        assert_eq!(model_path_for_language(&selected, "english"), selected);
+        // Only explicit Hindi swaps to the Indic fine-tune when it sits next to it.
+        let hindi = dir.join(HINDI_MODEL_FILE);
+        fs::write(&hindi, b"x").expect("write hindi");
+        assert_eq!(model_path_for_language(&selected, "hindi"), hindi);
+        assert_eq!(model_path_for_language(&selected, "hinglish"), selected);
 
         let _ = fs::remove_dir_all(&dir);
     }

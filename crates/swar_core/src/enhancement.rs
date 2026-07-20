@@ -46,9 +46,10 @@ struct OpenAiCompatibleEnhancer<'a> {
     config: EnhancementProviderConfig<'a>,
 }
 
-/// The in-process llama.cpp enhancer. Present only when the `embedded-llm`
-/// feature is built in; it uses `config.model` as the path to the local GGUF.
-#[cfg(feature = "embedded-llm")]
+/// The offline cleanup enhancer. It sends the text to the out-of-process helper
+/// (`swar_llm_server`) via `llm_client`, using `config.model` as the GGUF path.
+/// When the helper or model is absent the client returns an error and the caller
+/// falls back to the deterministic editor, so this is always safe to select.
 struct EmbeddedLlamaEnhancer<'a> {
     config: EnhancementProviderConfig<'a>,
 }
@@ -66,7 +67,6 @@ fn cleanup_system_prompt(source_application: &str) -> String {
     }
 }
 
-#[cfg(feature = "embedded-llm")]
 impl TranscriptEnhancer for EmbeddedLlamaEnhancer<'_> {
     fn enhance(&self, request: &EnhancementRequest<'_>) -> Result<String, String> {
         let model_path = self.config.model.trim();
@@ -74,7 +74,7 @@ impl TranscriptEnhancer for EmbeddedLlamaEnhancer<'_> {
             return Err("no embedded LLM model is installed".to_owned());
         }
         let system = cleanup_system_prompt(request.source_application);
-        crate::llm::generate(model_path, &system, request.safe_clean_text)
+        crate::llm_client::generate(model_path, &system, request.safe_clean_text)
     }
 }
 
@@ -200,23 +200,14 @@ pub(crate) fn enhance_transcript(
     }
 }
 
-/// Routes to the in-process llama.cpp enhancer when the `embedded-llm` feature is
-/// built in; otherwise degrades gracefully to the deterministic editor so a
-/// build without the feature still produces safe text.
-#[cfg(feature = "embedded-llm")]
+/// Routes to the offline cleanup helper. When the helper or model is missing the
+/// client errors and `run_with_provider` falls back to the deterministic editor,
+/// so this always produces safe text regardless of install state.
 fn run_embedded_llm(
     request: &EnhancementRequest<'_>,
     config: EnhancementProviderConfig<'_>,
 ) -> EnhancementOutcome {
     run_with_provider(request, &EmbeddedLlamaEnhancer { config })
-}
-
-#[cfg(not(feature = "embedded-llm"))]
-fn run_embedded_llm(
-    request: &EnhancementRequest<'_>,
-    _config: EnhancementProviderConfig<'_>,
-) -> EnhancementOutcome {
-    run_with_provider(request, &EmbeddedLocalEnhancer)
 }
 
 /// Enough words to be worth an LLM pass. Skips a single-word snippet so the LLM
