@@ -316,18 +316,18 @@ fn transcribe_with_context(
         return Ok(String::new());
     };
     let samples = samples.as_ref();
-    // The Hinglish pack is a large (whisper-large-v3) model. Beam-5 on it is the
-    // main latency cost, so it decodes with a narrow beam; temperature fallback
-    // and the anti-repetition guards below still protect against hallucination.
-    // The small English/Indic models keep the wider, most-accurate beam.
-    let is_hinglish_model =
-        model_path.file_name().and_then(|name| name.to_str()) == Some(HINGLISH_MODEL_FILE);
+    let model_file = model_path.file_name().and_then(|name| name.to_str());
+    // Both Hinglish packs (Apex/Swift) are `-l auto` romanised-output models.
+    let is_hinglish_model = is_romanized_hinglish_pack(model_file);
+    // Only the large Apex pack is heavy enough to need a narrow beam; the small
+    // Swift pack and the English/Indic models keep the wider, most-accurate beam.
+    let is_large_model = model_file == Some(HINGLISH_MODEL_FILE);
     let mut state = context.create_state().map_err(|error| error.to_string())?;
     let mut params = if preview {
         FullParams::new(SamplingStrategy::Greedy { best_of: 1 })
     } else {
         FullParams::new(SamplingStrategy::BeamSearch {
-            beam_size: if is_hinglish_model { 2 } else { 5 },
+            beam_size: if is_large_model { 2 } else { 5 },
             patience: -1.0,
         })
     };
@@ -476,11 +476,25 @@ fn language_decoding(language: &str) -> LanguageDecoding {
     }
 }
 
-/// The Hinglish-tuned ASR pack (Oriserve Hindi2Hinglish "Apex", ggml q5_0). It
-/// hears code-switched speech and emits romanised Latin directly ("complete", not
-/// "kanplit"), so it fixes the Hinglish word-recovery problem at the source.
+/// The high-accuracy Hinglish pack (Oriserve Hindi2Hinglish "Apex", large-v3). It
+/// emits romanised Latin directly ("complete", not "kanplit"), fixing Hinglish at
+/// the source — but it is large and slower.
 const HINGLISH_MODEL_FILE: &str = "ggml-apex-hinglish-q5_0.bin";
+/// The fast Hinglish pack (Oriserve Hindi2Hinglish "Swift", whisper-base). Same
+/// romanised behaviour, ~sub-second, at some accuracy cost. Preferred when
+/// installed so Hinglish/Auto feel responsive; also hallucinates far less on
+/// silence than the large model.
+const SWIFT_HINGLISH_MODEL_FILE: &str = "ggml-swift-hinglish.bin";
 const HINDI_MODEL_FILE: &str = "ggml-hi-small.bin";
+
+/// Both Hinglish packs are `-l auto` models that output romanised Latin, so they
+/// always auto-detect regardless of the selected mode.
+fn is_romanized_hinglish_pack(model_file: Option<&str>) -> bool {
+    matches!(
+        model_file,
+        Some(HINGLISH_MODEL_FILE) | Some(SWIFT_HINGLISH_MODEL_FILE)
+    )
+}
 
 fn vad_model_next_to(model_path: &Path) -> Option<std::path::PathBuf> {
     let candidate = model_path.parent()?.join("ggml-silero-v6.2.0.bin");
@@ -512,8 +526,12 @@ fn model_path_for_language(model_path: &Path, language: &str) -> std::path::Path
             return hindi;
         }
     } else if uses_hinglish_model(language) {
-        // Prefer Apex when installed; fall back to whatever multilingual model the
-        // user selected so Hinglish/Auto still work before the pack is downloaded.
+        // Prefer the fast Swift pack, then the high-accuracy Apex pack, then fall
+        // back to whatever multilingual model the user selected so Hinglish/Auto
+        // still work before a pack is downloaded.
+        if let Some(swift) = sibling_model(model_path, SWIFT_HINGLISH_MODEL_FILE) {
+            return swift;
+        }
         if let Some(apex) = sibling_model(model_path, HINGLISH_MODEL_FILE) {
             return apex;
         }

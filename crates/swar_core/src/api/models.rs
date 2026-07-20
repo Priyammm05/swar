@@ -40,6 +40,10 @@ const HINGLISH_MODEL_URL: &str =
 const HINGLISH_MODEL_SHA256: &str =
     "9d877151b15cec1feb9110cfbc0a3162cf377bcc0ab1935174226f461cf60f13";
 const HINGLISH_MODEL_BYTES: u64 = 574_041_195;
+// The fast Hinglish pack (Swift, whisper-base). Locally converted for now, so it
+// is only size-guarded (no pinned download yet).
+const SWIFT_HINGLISH_MODEL_FILE: &str = "ggml-swift-hinglish.bin";
+const SWIFT_HINGLISH_MODEL_BYTES: u64 = 147_951_465;
 
 #[derive(Clone, Debug)]
 pub struct OfflineModelStatus {
@@ -171,6 +175,7 @@ pub(crate) fn expected_minimum_bytes(model_path: &str) -> u64 {
     {
         Some(HINDI_MODEL_FILE) => HINDI_MODEL_BYTES,
         Some(HINGLISH_MODEL_FILE) => HINGLISH_MODEL_BYTES,
+        Some(SWIFT_HINGLISH_MODEL_FILE) => SWIFT_HINGLISH_MODEL_BYTES,
         Some(VAD_MODEL_FILE) => VAD_MODEL_BYTES,
         _ => MINIMUM_MODEL_BYTES,
     }
