@@ -74,12 +74,17 @@ impl TranscriptEnhancer for EmbeddedLocalEnhancer {
 
 impl TranscriptEnhancer for OpenAiCompatibleEnhancer<'_> {
     fn enhance(&self, request: &EnhancementRequest<'_>) -> Result<String, String> {
-        if self.config.api_key.trim().is_empty() {
-            return Err("the provider API key is unavailable".to_owned());
-        }
         let endpoint = self.config.endpoint.trim().trim_end_matches('/');
-        if !endpoint.starts_with("https://") && !endpoint.starts_with("http://127.0.0.1") {
+        let is_localhost =
+            endpoint.starts_with("http://127.0.0.1") || endpoint.starts_with("http://localhost");
+        if !endpoint.starts_with("https://") && !is_localhost {
             return Err("the provider endpoint must use HTTPS or localhost".to_owned());
+        }
+        let api_key = self.config.api_key.trim();
+        // A local LLM server (Ollama, llama-server) needs no key; a remote HTTPS
+        // provider still does. Only the key requirement is relaxed for localhost.
+        if api_key.is_empty() && !is_localhost {
+            return Err("the provider API key is unavailable".to_owned());
         }
         let url = if endpoint.ends_with("/chat/completions") {
             endpoint.to_owned()
@@ -107,10 +112,11 @@ impl TranscriptEnhancer for OpenAiCompatibleEnhancer<'_> {
             .timeout_read(PROVIDER_IO_TIMEOUT)
             .timeout_write(PROVIDER_IO_TIMEOUT)
             .build();
-        let response = agent
-            .post(&url)
-            .set("Authorization", &format!("Bearer {}", self.config.api_key))
-            .set("Content-Type", "application/json")
+        let mut post = agent.post(&url).set("Content-Type", "application/json");
+        if !api_key.is_empty() {
+            post = post.set("Authorization", &format!("Bearer {api_key}"));
+        }
+        let response = post
             .send_json(body)
             .map_err(|_| "the optional provider request failed".to_owned())?;
         let value: serde_json::Value = response
@@ -138,7 +144,14 @@ pub(crate) fn enhance_transcript(
         writing_mode,
         source_application,
     };
-    if !should_route(&request) {
+    // A local LLM is free and offline, so — like Wispr — it cleans up every
+    // non-trivial dictation, not only ones with explicit correction cues. Remote
+    // BYOK and the embedded editor keep the conservative gate.
+    let uses_llm_server = provider_config.provider.eq_ignore_ascii_case("byok")
+        || provider_config.provider.eq_ignore_ascii_case("local-llm");
+    let local_llm = provider_config.provider.eq_ignore_ascii_case("local-llm");
+    let route = should_route(&request) || (local_llm && has_cleanable_content(&request));
+    if !route {
         return EnhancementOutcome {
             text: safe_clean_text.to_owned(),
             routed: false,
@@ -147,7 +160,7 @@ pub(crate) fn enhance_transcript(
             error_code: None,
         };
     }
-    if provider_config.provider.eq_ignore_ascii_case("byok") {
+    if uses_llm_server {
         run_with_provider(
             &request,
             &OpenAiCompatibleEnhancer {
@@ -157,6 +170,12 @@ pub(crate) fn enhance_transcript(
     } else {
         run_with_provider(&request, &EmbeddedLocalEnhancer)
     }
+}
+
+/// Enough words to be worth an LLM pass. Skips one- or two-word snippets so a
+/// local LLM does not add latency to a trivial dictation.
+fn has_cleanable_content(request: &EnhancementRequest<'_>) -> bool {
+    request.raw_transcript.split_whitespace().count() >= 3
 }
 
 fn run_with_provider(
@@ -575,5 +594,73 @@ mod tests {
             model: "",
             api_key: "",
         }
+    }
+
+    fn local_llm_provider(endpoint: &'static str) -> EnhancementProviderConfig<'static> {
+        EnhancementProviderConfig {
+            provider: "local-llm",
+            endpoint,
+            model: "qwen2.5:3b",
+            api_key: "",
+        }
+    }
+
+    #[test]
+    fn local_llm_routes_plain_text_that_the_conservative_gate_would_skip() {
+        // "send the note" has no correction cue, so the embedded editor leaves it
+        // un-routed; a local LLM should still take it (Wispr-style always-clean).
+        let outcome = enhance_transcript(
+            "send the note now",
+            "Send the note now",
+            "clean",
+            "",
+            // Unreachable endpoint → provider errors → safe fallback, but the key
+            // signal is that it *routed*.
+            local_llm_provider("http://127.0.0.1:59999/v1"),
+        );
+        assert!(outcome.routed, "local LLM must clean plain dictation");
+        assert_eq!(outcome.text, "Send the note now");
+    }
+
+    #[test]
+    fn local_llm_skips_trivial_one_or_two_word_snippets() {
+        let outcome = enhance_transcript(
+            "okay",
+            "Okay",
+            "clean",
+            "",
+            local_llm_provider("http://127.0.0.1:59999/v1"),
+        );
+        assert!(!outcome.routed);
+        assert_eq!(outcome.text, "Okay");
+    }
+
+    #[test]
+    fn localhost_endpoint_is_accepted_without_an_api_key() {
+        let enhancer = OpenAiCompatibleEnhancer {
+            config: local_llm_provider("http://localhost:11434/v1"),
+        };
+        // No server is listening, so this errors on the request — but it must get
+        // past the key/endpoint guards (i.e. not the "API key unavailable" error).
+        let error = enhancer
+            .enhance(&request("clean this up please"))
+            .unwrap_err();
+        assert!(!error.contains("API key"), "localhost must not need a key");
+    }
+
+    #[test]
+    fn remote_http_endpoint_still_requires_a_key() {
+        let enhancer = OpenAiCompatibleEnhancer {
+            config: EnhancementProviderConfig {
+                provider: "local-llm",
+                endpoint: "http://example.test/v1",
+                model: "x",
+                api_key: "",
+            },
+        };
+        let error = enhancer
+            .enhance(&request("clean this up please"))
+            .unwrap_err();
+        assert!(error.contains("HTTPS or localhost"));
     }
 }
