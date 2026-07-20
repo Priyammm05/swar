@@ -1,0 +1,249 @@
+# Swar cleanup evaluation corpus.
+#
+# One raw-transcript sentence per line (blank lines and lines starting with '#'
+# are ignored). Short and long, English / Hindi / Hinglish, chosen to exercise
+# the content the cleanup pass must NEVER drop or alter: digits, dates, times,
+# money, URLs, emails, @handles, negation, and proper nouns. The eval derives the
+# protected tokens from each line and asserts the cleaned output preserves them.
+# Synthetic and generic on purpose: no private user data lives here.
+
+# --- short English commands (2-6 words) ---
+mic testing one two
+open the settings page
+send the note now
+call the doctor today
+turn off the lights
+save this file please
+schedule a meeting tomorrow
+reply to that email
+mute the microphone now
+start the timer
+lock the front door
+play the next song
+delete the last message
+share my screen now
+take a screenshot
+add milk to the list
+set an alarm
+close all the tabs
+restart the router
+find my keys
+
+# --- longer English sentences (15-40 words) ---
+Please remind me to submit the quarterly report before Friday because the finance team needs it for the board review on Monday morning.
+I was walking to the station when I realised I had left my laptop charger at home so I had to turn around and go back.
+The new onboarding flow reduced our drop-off rate significantly, but we still need to fix the confusing password step that support keeps hearing about.
+Can you draft a short reply to the client explaining that the shipment was delayed by two days and that we have arranged expedited delivery at no extra cost.
+After the deployment last night the error rate spiked for about ten minutes and then settled down, so we should add an alert for that specific threshold.
+She said the presentation went well overall, although the section about pricing felt rushed and a couple of investors asked for more detail on the unit economics.
+Let us move the standup to nine thirty so the design team in the other timezone can join without staying late in the evening.
+The library was quiet except for the sound of rain against the tall windows, and I finally managed to finish the last three chapters of the book.
+We interviewed six candidates this week and two of them were exceptional, so I would like to move both of them forward to the final round with the team.
+Remember to back up the database before running the migration because the last time we skipped that step we lost about an hour of recent records.
+
+# --- Hinglish short (2-6 words) ---
+bhai kal milte hain
+mujhe coffee chahiye abhi
+yeh kaam ho gaya
+thoda ruko main aata hoon
+kya scene hai aaj
+mic testing ho raha hai
+abhi busy hoon baad mein
+chal chalte hain yaar
+paisa transfer kar diya
+sab theek hai na
+gaadi nikaal lo
+khana ready hai kya
+meeting shuru karo
+thoda volume badha do
+call kar mujhe
+
+# --- Hinglish longer sentences ---
+Bhai main to kal baahar ja raha hoon to dekh lena deployment ka jo bhi issue hoga usko tum handle kar lena warna client naaraaz ho jaayega.
+Yaar mujhe samajh nahi aa raha ki yeh bug production mein kaise aaya jabki humne staging pe teen baar test kiya tha aur sab pass ho gaya tha.
+Aaj office mein itni meetings thi ki actual kaam karne ka time hi nahi mila, ab raat ko baithke report complete karni padegi warna kal review miss ho jaayega.
+To kya hamaara feature complete ho gaya, mujhe kal demo dena hai phir main tumhe ping karunga agar koi last minute change chahiye hoga.
+Metro itni crowded thi ki main do stations tak khada raha aur phir jaake ek seat mili, waise bhi Monday ki bheed hamesha zyada hoti hai.
+
+# --- numbers, dates, times, money (must survive exactly) ---
+the meeting is at 3:45 pm on March 12
+transfer 2500 rupees to account 90210
+my flight is IN 2 hours at gate 14
+the invoice total is 1,299.50 dollars
+call me at 98765 43210 after 6
+we shipped 340 units in Q3 2024
+the temperature dropped to minus 4 degrees
+room number 402 on the 4th floor
+the discount is 25 percent until June 30
+add 3 eggs and 250 grams of flour
+the code expires in 15 minutes at 11:59
+her score improved from 68 to 91
+the package weighs 2.4 kilograms
+version 3.2.1 was released on August 8
+pay 199 per month or 1,999 per year
+
+# --- URLs, emails, handles (must survive exactly) ---
+visit https://swar.app/docs for the setup guide
+email me at priya.sharma@example.com by noon
+the repo is at github.com/oynix/swar
+ping @rahul on the thread about the release
+send it to support@company.co and cc the team
+the dashboard is at http://127.0.0.1:8080/status
+follow us @swardictation for updates
+the file is in the shared drive under /projects/2024
+read more at www.example.org/blog/hinglish
+the api key goes in the header x-api-key
+
+# --- negation-critical (flipping meaning would be a serious bug) ---
+do not send the email until I confirm
+this is not the final version yet
+never share the password with anyone
+I did not approve that change
+there is no refund after 30 days
+please don't restart the server now
+we cannot ship without the sign off
+she was not happy with the result
+it is not working on the older build
+do not merge the branch before review
+mujhe yeh bilkul nahi chahiye
+abhi mat bhejo message
+usne haan nahi kaha tha
+kabhi bhi password mat batao
+yeh sahi nahi hai
+
+# --- proper nouns / technical terms (spelling must be preserved) ---
+deploy the Oynix connector to production
+open the Kubernetes dashboard for the staging cluster
+Priya and Arjun will lead the migration
+we use PostgreSQL and Redis for caching
+the meeting is with Anaya from the Bengaluru office
+push the changes to the main branch on GitHub
+configure the Nginx reverse proxy correctly
+the Whisper model runs on Metal locally
+Rahul reviewed the pull request this morning
+integrate Stripe for the payment flow
+
+# --- mixed short/long stress cases ---
+no
+yes please
+okay done
+hmm let me think about that for a second before I answer
+send 500 to Rahul at rahul@pay.com not to anyone else and confirm on the thread
+the standup at 10 with Priya about the Oynix release got moved to 11:30 because of the outage
+mic mic mic testing testing one two three
+bhai 250 rupaye bhej de abhi UPI pe warna kal tak wait karna padega
+do not forget the 2 factor code it expires in 30 seconds
+the flight AI 202 departs at 6:15 from terminal 3 not terminal 2
+
+# --- batch 2: more short English ---
+check the calendar for me
+email the team now
+book a cab to the airport
+lower the brightness a bit
+what time is the call
+forward this to my manager
+archive the old threads
+pin this message please
+join the video call
+copy the link for me
+undo that last change
+open a new document
+switch to dark mode later
+remind me in an hour
+read the notification aloud
+
+# --- batch 2: more long English ---
+When you get a chance could you review the pull request I opened this afternoon because it is blocking the release and a few people are waiting on it.
+The customer mentioned that the mobile layout breaks on smaller screens, so before we announce the feature we should test it on at least three older devices.
+I think the root cause of the outage was a slow database query that only shows up under heavy load, which is why we never caught it in testing.
+He explained the plan clearly and everyone agreed, but we still need someone to own the rollout and to write the documentation for the support team.
+The weather forecast says heavy rain all weekend, so we should probably move the outdoor event indoors and let the guests know by tomorrow afternoon.
+Our monthly active users grew steadily over the last quarter, and the retention numbers finally crossed the target we set at the start of the year.
+If the build passes on the staging environment tonight, we can promote it to production first thing in the morning before the traffic picks up.
+The recipe takes about forty minutes, but most of that is the oven time, so you can prepare the salad and set the table while it bakes.
+
+# --- batch 2: more Hinglish short ---
+kal subah call karna
+abhi ghar pahunch gaya
+thoda pani de do
+yeh number save kar lo
+office kab jaana hai
+lunch ke baad milte hain
+battery low ho gayi hai
+recharge kara diya kya
+train time pe aayi thi
+mujhe neend aa rahi hai
+project deadline nazdeek hai
+bill pay kar diya
+seat book kar lo
+weather kaisa hai wahan
+report bhej di maine
+
+# --- batch 2: more Hinglish longer ---
+Yaar us restaurant ka khana itna accha tha ki agli baar hum sab log wahi jaayenge, bas thodi wait karni padti hai weekend pe kyunki bheed hoti hai.
+Mujhe kal 3 baje ek important call join karni hai to please koi aur meeting mat rakhna us time pe warna dono clash ho jaayenge aur dikkat hogi.
+Humne pura din laga diya us feature ko banane mein lekin last mein pata chala ki requirement hi galat samjhi thi, ab dobara se poora scope discuss karna padega.
+Agar internet theek se chal raha hota to main video call pe hi sab samjha deta, lekin abhi signal weak hai to main baad mein detail message kar dunga.
+Meri gaadi service pe gayi hai to aaj main metro se aaunga, thoda late ho sakta hoon isliye meeting ka link mujhe pehle hi bhej dena taaki main join kar sakoon.
+Bhai yeh naya phone kaafi accha hai battery bhi din bhar chal jaati hai aur camera to kamaal ka hai, bas thoda mehenga zaroor hai but worth it lagta hai.
+
+# --- batch 2: more numbers, dates, times ---
+the train leaves at 08:20 from platform 6
+I owe you 750 rupees from last week
+the file is 45 megabytes so it may take a minute
+meet me at 7 near gate number 9
+the offer ends on 31 December 2024
+she ran 10 kilometres in 52 minutes
+the total came to 88.75 after the discount
+book 4 tickets for the 9 o'clock show
+the password must be at least 12 characters
+we grew from 12 to 47 employees this year
+the reading was 120 over 80
+add 1.5 litres of water to the pot
+the warranty lasts 24 months from purchase
+turn to page 214 in the manual
+the deadline is 5 pm sharp on Thursday
+
+# --- batch 2: more URLs, emails, handles ---
+the docs live at https://docs.swar.app/guide
+reach me on rahul.verma@work.co anytime
+star the project at github.com/example/repo
+mention @anaya when the build is ready
+the status page is at https://status.example.com
+send invoices to billing@company.io only
+the meeting link is meet.example.com/abc-defg
+tag @team-leads in the incident channel
+
+# --- batch 2: more negation ---
+do not delete the production database
+this feature is not ready for release
+I never received the confirmation email
+we should not deploy on a Friday evening
+there is no need to call them back today
+please do not change the default settings
+he was not able to reproduce the bug
+it does not work without the api key
+mujhe abhi disturb mat karna
+yeh file delete mat karna galti se
+usne mana kar diya tha clearly
+kabhi bhi apna otp kisi ko mat dena
+
+# --- batch 2: more proper nouns / technical ---
+the Oynix pipeline syncs with Salesforce nightly
+deploy the service behind Cloudflare
+Aditi from Mumbai will present the roadmap
+we migrated from MySQL to PostgreSQL last month
+the Grafana dashboard shows the latency spike
+Karthik merged the fix into the release branch
+configure Terraform for the new environment
+the Swar app inserts text at the cursor
+
+# --- batch 3: extra mixed to clear 200 ---
+mic testing check karo one two
+call kari baby, main abhi aata hoon
+ping me when the 4 pm build is green
+yaar yeh deployment ka issue kal dekh lenge
+do not push to main without a review
+the total is 3,450 rupees including tax
+send the report to anaya@team.co by 5
+Goa chalte hain, bore ho raha hai ghar pe

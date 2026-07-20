@@ -3,3 +3,9 @@ cargo:
     toolchain: '1.88.0'
   release:
     toolchain: '1.88.0'
+  # NOTE: the in-process llama.cpp cleanup LLM (`embedded-llm` feature) is parked,
+  # not shipped. It builds and works in isolation (see crates/swar_core/src/eval.rs
+  # and src/llm.rs), but linking llama.cpp alongside whisper.cpp into one static
+  # framework collides on duplicate ggml symbols. To ship the cleanup LLM later,
+  # run it as a separate llama-server subprocess over the existing local-llm HTTP
+  # path (no static-link conflict) rather than re-enabling this in-process feature.

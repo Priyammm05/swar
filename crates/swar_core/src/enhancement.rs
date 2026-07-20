@@ -219,10 +219,12 @@ fn run_embedded_llm(
     run_with_provider(request, &EmbeddedLocalEnhancer)
 }
 
-/// Enough words to be worth an LLM pass. Skips one- or two-word snippets so a
-/// local LLM does not add latency to a trivial dictation.
+/// Enough words to be worth an LLM pass. Skips a single-word snippet so the LLM
+/// does not add latency to a one-word dictation, but a two-word phrase like
+/// "mic testing" is cleaned — that is exactly the homophone case the LLM exists
+/// to fix, so it must not be gated out.
 fn has_cleanable_content(request: &EnhancementRequest<'_>) -> bool {
-    request.raw_transcript.split_whitespace().count() >= 3
+    request.raw_transcript.split_whitespace().count() >= 2
 }
 
 fn run_with_provider(
@@ -670,7 +672,7 @@ mod tests {
     }
 
     #[test]
-    fn local_llm_skips_trivial_one_or_two_word_snippets() {
+    fn local_llm_skips_a_trivial_single_word_snippet() {
         let outcome = enhance_transcript(
             "okay",
             "Okay",
@@ -680,6 +682,21 @@ mod tests {
         );
         assert!(!outcome.routed);
         assert_eq!(outcome.text, "Okay");
+    }
+
+    #[test]
+    fn local_llm_cleans_a_two_word_homophone_phrase() {
+        // "mic testing" is two words: it must reach the LLM (route), not be gated
+        // out as trivial. No server is listening, so it routes and then falls back
+        // to safe text — the assertion is that it *routed*.
+        let outcome = enhance_transcript(
+            "mic testing",
+            "Mic testing",
+            "clean",
+            "",
+            local_llm_provider("http://127.0.0.1:59999/v1"),
+        );
+        assert!(outcome.routed, "a two-word phrase must reach the LLM");
     }
 
     #[test]

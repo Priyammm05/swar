@@ -44,6 +44,17 @@ const HINGLISH_MODEL_BYTES: u64 = 574_041_195;
 // is only size-guarded (no pinned download yet).
 const SWIFT_HINGLISH_MODEL_FILE: &str = "ggml-swift-hinglish.bin";
 const SWIFT_HINGLISH_MODEL_BYTES: u64 = 147_951_465;
+// The on-device cleanup LLM (Qwen2.5-3B-Instruct, GGUF q4_k_m, Apache-2.0). Used
+// by the embedded-llm enhancer to do Wispr-style context cleanup — fixing
+// homophones ("Mike" -> "mic"), punctuation, and capitalisation that a pure
+// speech model cannot resolve from sound alone. Large (~2 GB) and adds latency,
+// so it is optional: present only if the user installs it.
+const EMBEDDED_LLM_MODEL_FILE: &str = "qwen2.5-3b-instruct-q4_k_m.gguf";
+const EMBEDDED_LLM_MODEL_URL: &str =
+    "https://huggingface.co/Qwen/Qwen2.5-3B-Instruct-GGUF/resolve/main/qwen2.5-3b-instruct-q4_k_m.gguf";
+const EMBEDDED_LLM_MODEL_SHA256: &str =
+    "626b4a6678b86442240e33df819e00132d3ba7dddfe1cdc4fbb18e0a9615c62d";
+const EMBEDDED_LLM_MODEL_BYTES: u64 = 2_104_932_768;
 
 #[derive(Clone, Debug)]
 pub struct OfflineModelStatus {
@@ -176,6 +187,7 @@ pub(crate) fn expected_minimum_bytes(model_path: &str) -> u64 {
         Some(HINDI_MODEL_FILE) => HINDI_MODEL_BYTES,
         Some(HINGLISH_MODEL_FILE) => HINGLISH_MODEL_BYTES,
         Some(SWIFT_HINGLISH_MODEL_FILE) => SWIFT_HINGLISH_MODEL_BYTES,
+        Some(EMBEDDED_LLM_MODEL_FILE) => EMBEDDED_LLM_MODEL_BYTES,
         Some(VAD_MODEL_FILE) => VAD_MODEL_BYTES,
         _ => MINIMUM_MODEL_BYTES,
     }
@@ -216,6 +228,41 @@ fn recommended_model_path() -> Result<PathBuf, String> {
         .data_local_dir()
         .join("models")
         .join(RECOMMENDED_MODEL_FILE))
+}
+
+/// The on-disk path to the embedded cleanup LLM, or `None` when it is not
+/// installed. Presence + minimum-size only (no full hash) so it is cheap on the
+/// hot dictation path; the strong SHA-256 guarantee still holds at install time.
+pub(crate) fn embedded_llm_model_path() -> Option<PathBuf> {
+    let directories = ProjectDirs::from("dev", "Swar", "Swar")?;
+    let path = directories
+        .data_local_dir()
+        .join("models")
+        .join(EMBEDDED_LLM_MODEL_FILE);
+    file_present_with_min_size(&path, EMBEDDED_LLM_MODEL_BYTES).then_some(path)
+}
+
+/// Downloads the embedded cleanup LLM (~2 GB) into the models directory,
+/// verifying its SHA-256 before it atomically replaces any existing file.
+pub fn install_embedded_llm_model() -> Result<OfflineModelStatus, String> {
+    let directories = ProjectDirs::from("dev", "Swar", "Swar")
+        .ok_or_else(|| "application support directory is unavailable".to_owned())?;
+    let models_dir = directories.data_local_dir().join("models");
+    fs::create_dir_all(&models_dir).map_err(|error| error.to_string())?;
+    let destination = models_dir.join(EMBEDDED_LLM_MODEL_FILE);
+    if !verified_file(
+        &destination,
+        EMBEDDED_LLM_MODEL_BYTES,
+        EMBEDDED_LLM_MODEL_SHA256,
+    ) {
+        download_verified(
+            EMBEDDED_LLM_MODEL_URL,
+            &destination,
+            EMBEDDED_LLM_MODEL_BYTES,
+            EMBEDDED_LLM_MODEL_SHA256,
+        )?;
+    }
+    Ok(status_for(destination))
 }
 
 fn status_for(path: PathBuf) -> OfflineModelStatus {

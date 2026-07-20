@@ -433,15 +433,41 @@ fn finish_capture(capture: &mut ActiveCapture) -> Result<DictationCompletion, St
     if clean_text.trim().is_empty() {
         return Err(dictation_stage_error("cleanup_empty"));
     }
+    // When the on-device cleanup LLM is installed, use it for the default
+    // "local" route (and the explicit "embedded-llm" route): it does Wispr-style
+    // context cleanup the deterministic editor cannot ("Mike" -> "mic",
+    // punctuation, casing). BYOK and local-llm server routes are left exactly as
+    // configured. The GGUF path is resolved here so Flutter never needs to know
+    // it. If the `embedded-llm` feature is not built in, the enhancer degrades to
+    // the deterministic editor, so this is safe regardless of build flags.
+    let embedded_llm_path = crate::api::models::embedded_llm_model_path();
+    let configured_provider = capture.config.enhancement_provider.trim();
+    let use_embedded = embedded_llm_path.is_some()
+        && (configured_provider.is_empty()
+            || configured_provider.eq_ignore_ascii_case("local")
+            || configured_provider.eq_ignore_ascii_case("embedded")
+            || configured_provider.eq_ignore_ascii_case("embedded-llm"));
+    let embedded_model_string = embedded_llm_path
+        .as_ref()
+        .map(|path| path.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    let (enhancement_provider, enhancement_model): (&str, &str) = if use_embedded {
+        ("embedded-llm", embedded_model_string.as_str())
+    } else {
+        (
+            capture.config.enhancement_provider.as_str(),
+            capture.config.provider_model.as_str(),
+        )
+    };
     let enhancement = enhancement::enhance_transcript(
         &personalized_raw,
         &clean_text,
         &capture.config.writing_mode,
         &capture.config.source_application,
         enhancement::EnhancementProviderConfig {
-            provider: &capture.config.enhancement_provider,
+            provider: enhancement_provider,
             endpoint: &capture.config.provider_endpoint,
-            model: &capture.config.provider_model,
+            model: enhancement_model,
             api_key: &capture.config.provider_api_key,
         },
     );
@@ -591,7 +617,20 @@ pub fn offline_model_is_ready(model_path: String) -> bool {
 
 /// Loads the selected model on the dedicated ASR worker before the first dictation.
 pub fn prepare_dictation_engine(model_path: String) -> Result<bool, String> {
-    model_registry::prepare(&model_path).map(|status| status.already_loaded)
+    let already_loaded =
+        model_registry::prepare(&model_path).map(|status| status.already_loaded)?;
+    // Warm the cleanup LLM off-thread when it is installed, so the first dictation
+    // does not pay the ~2 GB model load. Best-effort and non-blocking: if it fails
+    // or is still loading, the enhancer just loads it lazily on first use.
+    #[cfg(feature = "embedded-llm")]
+    {
+        if let Some(path) = crate::api::models::embedded_llm_model_path() {
+            std::thread::spawn(move || {
+                let _ = crate::llm::prepare(&path.to_string_lossy());
+            });
+        }
+    }
+    Ok(already_loaded)
 }
 
 /// Starts CoreAudio/WASAPI before the first shortcut so native pre-roll is
@@ -609,6 +648,13 @@ pub fn prepare_audio_capture(microphone_id: String) -> Result<u32, String> {
 /// Releases the warm model without stopping the dedicated ASR worker.
 pub fn release_dictation_engine() -> Result<(), String> {
     model_registry::unload()?;
+    // Drop the warm cleanup LLM too. llama.cpp's Metal backend asserts on process
+    // teardown if a model/context is still resident, so it must be released before
+    // shutdown exactly like the ASR model. Best-effort: never fail shutdown on it.
+    #[cfg(feature = "embedded-llm")]
+    {
+        let _ = crate::llm::unload();
+    }
     capture_engine::release()
 }
 

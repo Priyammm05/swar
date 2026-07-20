@@ -7,3 +7,12 @@ version = "0.1.0"
 edition = "2021"
 license = "Proprietary"
 
+# Vendored llama-cpp-2 with one change: its llama-cpp-sys-2 dependency is pinned
+# to default-features = false. Upstream 0.1.151 pulls llama-cpp-sys-2's default
+# features, which include `common`; `common` compiles llama.cpp's httplib model
+# downloader (download.cpp) whose symbols do not resolve in the macOS static
+# framework link, breaking the release build. We never use `common` (only the
+# core llama API), so disabling it is safe and removes download.cpp entirely.
+[patch.crates-io]
+llama-cpp-2 = { path = "vendor/llama-cpp-2" }
+
