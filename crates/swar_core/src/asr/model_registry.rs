@@ -321,9 +321,26 @@ fn transcribe_with_context(
     params.set_single_segment(true);
     params.set_n_threads(available_threads());
     params.set_suppress_blank(true);
+    // Suppress non-speech tokens (music notes, [sounds], etc.). With the VAD hard
+    // gate this closes the last of whisper.cpp's hallucination-on-noise hole
+    // (swar.md §7).
+    params.set_suppress_nst(true);
     params.set_no_speech_thold(0.60);
     params.set_temperature(0.0);
     params.set_temperature_inc(if preview { 0.0 } else { 0.2 });
+    // Anti-repetition guards. A degenerate decode (wrong-language audio, noise,
+    // a near-silent tail) can collapse into a token loop like "tit tit tit...".
+    // whisper.cpp escapes that by re-decoding at a higher temperature when the
+    // segment is too compressible (entropy_thold) or too improbable
+    // (logprob_thold); the temperature_inc above supplies the escape steps.
+    // Setting them explicitly guarantees the fallback is armed for final
+    // dictation. Preview keeps a single fast greedy pass. no_context stops one
+    // window's runaway tokens from seeding the next.
+    params.set_no_context(true);
+    if !preview {
+        params.set_entropy_thold(2.4);
+        params.set_logprob_thold(-1.0);
+    }
     let decoding = language_decoding(language);
     params.set_language(decoding.whisper_language);
     params.set_detect_language(decoding.detect_language);
@@ -383,9 +400,14 @@ struct LanguageDecoding {
     detect_language: bool,
 }
 
-/// Whisper's Hindi token requests Devanagari. Hinglish must remain in Roman
-/// script, so it intentionally uses multilingual detection plus a Roman-script
-/// context prompt instead of being forced through the Hindi decoder.
+/// Each explicit mode forces its language; Auto detects per utterance (swar.md
+/// §7: "leave unset for Auto"). Forcing one language in Auto is wrong for a user
+/// who alternates languages — a forced `hi` turns spoken English ("123 mic test")
+/// into a Hindi-token hallucination loop, and a forced `en` destroys Hinglish.
+/// Detection needs a healthy input level to be reliable (quiet audio is what
+/// makes whisper.cpp misdetect Hindi as Urdu/Arabic), which the §4 gain stage now
+/// provides. Whatever Auto detects, the later language stage romanises any
+/// Devanagari, so English stays English and spoken Hindi comes out Roman.
 fn language_decoding(language: &str) -> LanguageDecoding {
     match language.trim().to_ascii_lowercase().as_str() {
         "english" => LanguageDecoding {
@@ -398,21 +420,19 @@ fn language_decoding(language: &str) -> LanguageDecoding {
             initial_prompt: None,
             detect_language: false,
         },
+        // Explicit Hinglish: the user is telling us it is Hindi-led code-switch,
+        // so decode Hindi and romanise. `en` is banned here by §7.
         "hinglish" => LanguageDecoding {
-            // Decode as Hindi, never free auto-detect: a null language lets
-            // whisper.cpp misidentify short or accented Hindi as Urdu/Arabic and
-            // emit a completely different script. Hindi decoding is reliable for
-            // Hindi and code-switched English; the Devanagari it returns is then
-            // transliterated to Roman by the language stage after transcription.
             whisper_language: Some("hi"),
             initial_prompt: None,
             detect_language: false,
         },
-        // Auto: also decode as Hindi rather than free auto-detect, so spoken
-        // Hindi is recognised reliably (and later romanised) instead of being
-        // misdetected. Pure-English users should pick the English mode.
+        // Auto: language left unset so whisper.cpp auto-detects AND transcribes
+        // (swar.md §7 / CLAUDE.md §11). `detect_language` MUST stay false —
+        // setting it true triggers whisper.cpp's detection-ONLY mode, which
+        // reports the language and returns an empty transcript.
         _ => LanguageDecoding {
-            whisper_language: Some("hi"),
+            whisper_language: None,
             initial_prompt: None,
             detect_language: false,
         },
@@ -425,11 +445,14 @@ fn vad_model_next_to(model_path: &Path) -> Option<std::path::PathBuf> {
 }
 
 fn model_path_for_language(model_path: &Path, language: &str) -> std::path::PathBuf {
-    // The Indic-tuned model recognises Hindi (and code-switched English) best, so
-    // the Hindi-centric modes use it. Auto stays on the general multilingual model
-    // for a better balance when the speaker switches to full English.
+    // Only explicit Hindi mode uses the monolingual Indic fine-tune (accurate
+    // Devanagari). Hinglish and Auto stay on the general multilingual model:
+    // the Hindi-only model has almost no English vocabulary, so code-switched
+    // words like "complete" get forced into the nearest Hindi syllables. See
+    // docs/models.md and the local bake-off (multilingual Hinglish 17.4% WER vs
+    // the Hindi-only model at 42.9%).
     let lower = language.trim().to_ascii_lowercase();
-    if lower == "hindi" || lower == "hinglish" {
+    if lower == "hindi" {
         if let Some(parent) = model_path.parent() {
             let hindi = parent.join("ggml-hi-small.bin");
             if hindi.is_file() {
@@ -483,16 +506,21 @@ mod tests {
     }
 
     #[test]
-    fn language_modes_force_a_concrete_decode_never_free_auto_detect() {
-        // English decodes as English; every Hindi-capable mode decodes as Hindi
-        // rather than null auto-detect (which misidentifies short/accented Hindi
-        // as Urdu/Arabic). Roman output is produced by the later transliteration
-        // stage, not by the decoder, so no mode leaves the language null.
+    fn explicit_modes_force_their_language_and_auto_leaves_it_unset() {
+        // Explicit modes pin their language; `en` is banned for Hinglish (§7).
         assert_eq!(language_decoding("english").whisper_language, Some("en"));
         assert_eq!(language_decoding("hindi").whisper_language, Some("hi"));
         assert_eq!(language_decoding("hinglish").whisper_language, Some("hi"));
-        assert_eq!(language_decoding("automatic").whisper_language, Some("hi"));
 
+        // Auto leaves the language unset so whisper.cpp auto-detects AND
+        // transcribes (§7: "leave unset for Auto"). detect_language MUST stay
+        // false — true is whisper.cpp's detection-ONLY mode and returns an empty
+        // transcript (CLAUDE.md §11).
+        let auto = language_decoding("automatic");
+        assert_eq!(auto.whisper_language, None);
+        assert!(!auto.detect_language, "Auto must not use detection-only mode");
+
+        // No mode enables detection-only mode or biases the decoder with a prompt.
         for mode in ["english", "hindi", "hinglish", "automatic"] {
             let decoding = language_decoding(mode);
             assert!(
