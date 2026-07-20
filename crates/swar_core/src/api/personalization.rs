@@ -72,6 +72,42 @@ pub(crate) fn apply_vocabulary(value: &str) -> String {
     apply_entries(value, &entries)
 }
 
+/// Whisper initial-prompt built from the user's vocabulary (swar.md §7): a short
+/// list of correctly-spelled written forms that biases the decoder toward the
+/// user's proper nouns at the source. The deterministic `apply_vocabulary` pass
+/// still runs afterwards. Bounded so the prompt never dominates the decode.
+pub(crate) fn hotword_prompt() -> String {
+    let Ok(entries) = storage::vocabulary_entries() else {
+        return String::new();
+    };
+    build_hotword_prompt(&entries)
+}
+
+/// Max characters of vocabulary handed to whisper as a bias prompt. Small on
+/// purpose: a long prompt skews decoding and can be echoed into the output.
+const HOTWORD_PROMPT_BUDGET: usize = 200;
+
+fn build_hotword_prompt(entries: &[storage::StoredVocabularyEntry]) -> String {
+    // `vocabulary_entries` returns most-used first, so the budget keeps the terms
+    // the user actually dictates. De-duplicate case-insensitively.
+    let mut seen = std::collections::BTreeSet::new();
+    let mut terms = Vec::new();
+    let mut length = 0;
+    for entry in entries {
+        let term = entry.written.trim();
+        if term.is_empty() || !seen.insert(term.to_ascii_lowercase()) {
+            continue;
+        }
+        let added = term.len() + 2; // term + ", "
+        if length + added > HOTWORD_PROMPT_BUDGET {
+            break;
+        }
+        length += added;
+        terms.push(term);
+    }
+    terms.join(", ")
+}
+
 fn apply_entries(value: &str, entries: &[storage::StoredVocabularyEntry]) -> String {
     value
         .split_whitespace()
@@ -145,5 +181,35 @@ mod tests {
     fn rejects_empty_or_unbounded_vocabulary_pairs() {
         assert!(validate_pair("", "Swar").is_err());
         assert!(validate_pair("spoken", &"x".repeat(129)).is_err());
+    }
+
+    fn entry(written: &str) -> storage::StoredVocabularyEntry {
+        storage::StoredVocabularyEntry {
+            spoken: written.to_ascii_lowercase(),
+            written: written.to_owned(),
+            use_count: 1,
+        }
+    }
+
+    #[test]
+    fn hotword_prompt_lists_written_forms_and_dedupes() {
+        let entries = vec![entry("Oynix"), entry("Niyo"), entry("oynix")];
+        assert_eq!(build_hotword_prompt(&entries), "Oynix, Niyo");
+    }
+
+    #[test]
+    fn hotword_prompt_is_empty_without_vocabulary() {
+        assert_eq!(build_hotword_prompt(&[]), "");
+    }
+
+    #[test]
+    fn hotword_prompt_respects_the_character_budget() {
+        let entries = (0..100)
+            .map(|index| entry(&format!("Term{index:03}")))
+            .collect::<Vec<_>>();
+        let prompt = build_hotword_prompt(&entries);
+        assert!(prompt.len() <= HOTWORD_PROMPT_BUDGET);
+        // The most-used (earliest) terms survive the budget.
+        assert!(prompt.starts_with("Term000, Term001"));
     }
 }

@@ -46,7 +46,9 @@ pub fn run_asr_file_benchmark(
         return Err("benchmark fixture did not contain probable speech".to_owned());
     }
     let started = Instant::now();
-    let actual_text = model_registry::transcribe(model_path, language, &speech.samples)?;
+    // No vocabulary bias in the benchmark: results must stay reproducible and
+    // independent of whatever a user happens to have saved.
+    let actual_text = model_registry::transcribe(model_path, language, &speech.samples, "")?;
     let processing_milliseconds = started.elapsed().as_millis() as u64;
     Ok(AsrFileBenchmarkReport {
         language: language.to_owned(),

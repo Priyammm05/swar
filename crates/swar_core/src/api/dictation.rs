@@ -405,10 +405,13 @@ fn finish_capture(capture: &mut ActiveCapture) -> Result<DictationCompletion, St
         "audio drained and resampled",
     )?;
     record_dictation_stage("transcription");
+    // Bias whisper toward the user's own proper nouns at the source (§7).
+    let hotwords = personalization::hotword_prompt();
     let raw_text = model_registry::transcribe(
         &capture.config.model_path,
         &capture.config.language,
         &speech.samples,
+        &hotwords,
     )
     .map_err(|_| dictation_stage_error("transcription"))?;
     if !transcript_contains_speech(&raw_text) {

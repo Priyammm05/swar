@@ -35,6 +35,9 @@ enum ModelCommand {
         model_path: String,
         language: String,
         samples: Vec<f32>,
+        /// User vocabulary fed to whisper.cpp as an initial prompt so proper
+        /// nouns are spelled right at the source (swar.md §7). Empty = no bias.
+        hotwords: String,
         preview: bool,
         response: Sender<Result<String, String>>,
     },
@@ -137,6 +140,7 @@ impl ModelRegistry {
         model_path: &str,
         language: &str,
         samples: &[f32],
+        hotwords: &str,
     ) -> Result<String, String> {
         ensure_model_file(model_path)?;
         let (response, result) = mpsc::channel();
@@ -145,6 +149,7 @@ impl ModelRegistry {
                 model_path: model_path.to_owned(),
                 language: language.to_owned(),
                 samples: samples.to_vec(),
+                hotwords: hotwords.to_owned(),
                 preview: false,
                 response,
             })
@@ -165,6 +170,9 @@ impl ModelRegistry {
                 model_path: model_path.to_owned(),
                 language: language.to_owned(),
                 samples: samples.to_vec(),
+                // Live preview stays unbiased and fast; hotwords apply to the
+                // final decode only.
+                hotwords: String::new(),
                 preview: true,
                 response,
             })
@@ -210,9 +218,10 @@ pub(crate) fn transcribe(
     model_path: &str,
     language: &str,
     samples: &[f32],
+    hotwords: &str,
 ) -> Result<String, String> {
     let selected = model_path_for_language(Path::new(model_path), language);
-    MODEL_REGISTRY.transcribe(&selected.to_string_lossy(), language, samples)
+    MODEL_REGISTRY.transcribe(&selected.to_string_lossy(), language, samples, hotwords)
 }
 
 pub(crate) fn transcribe_preview(
@@ -255,6 +264,7 @@ fn run_worker(receiver: Receiver<ModelCommand>) {
                 model_path,
                 language,
                 samples,
+                hotwords,
                 preview,
                 response,
             } => {
@@ -272,6 +282,7 @@ fn run_worker(receiver: Receiver<ModelCommand>) {
                             Path::new(&model.path),
                             &language,
                             &samples,
+                            &hotwords,
                             preview,
                         )
                     })
@@ -295,6 +306,7 @@ fn transcribe_with_context(
     model_path: &Path,
     language: &str,
     samples: &[f32],
+    hotwords: &str,
     preview: bool,
 ) -> Result<String, String> {
     // Degenerate input (empty, over-long, or NaN/Inf from an upstream resample)
@@ -344,7 +356,15 @@ fn transcribe_with_context(
     let decoding = language_decoding(language);
     params.set_language(decoding.whisper_language);
     params.set_detect_language(decoding.detect_language);
-    if let Some(prompt) = decoding.initial_prompt {
+    // Bias the decoder toward the user's own vocabulary so proper nouns are
+    // spelled correctly at the source ("Oynix", not "onyx"). This is the user's
+    // words, not a hand-written romanisation prompt (which §7 bans), and it only
+    // applies to the final decode. A concrete language mode may still carry a
+    // built-in prompt; the hotwords take precedence when present.
+    let hotwords = hotwords.trim();
+    if !hotwords.is_empty() {
+        params.set_initial_prompt(hotwords);
+    } else if let Some(prompt) = decoding.initial_prompt {
         params.set_initial_prompt(prompt);
     }
     // Final dictation has already passed Swar's conservative native energy
@@ -444,15 +464,19 @@ fn vad_model_next_to(model_path: &Path) -> Option<std::path::PathBuf> {
     candidate.is_file().then_some(candidate)
 }
 
+/// Only explicit Hindi mode uses the monolingual Indic fine-tune (accurate
+/// Devanagari). Hinglish and Auto MUST stay on the general multilingual model:
+/// the Hindi-only model has almost no English vocabulary, so code-switched words
+/// like "complete" get forced into the nearest Hindi syllables ("kanplit"). See
+/// docs/models.md and the local bake-off (multilingual Hinglish 17.4% WER vs the
+/// Hindi-only model at 42.9%). Kept as a pure predicate so the routing is locked
+/// by a regression test independent of which model files happen to be installed.
+fn uses_hindi_model(language: &str) -> bool {
+    language.trim().eq_ignore_ascii_case("hindi")
+}
+
 fn model_path_for_language(model_path: &Path, language: &str) -> std::path::PathBuf {
-    // Only explicit Hindi mode uses the monolingual Indic fine-tune (accurate
-    // Devanagari). Hinglish and Auto stay on the general multilingual model:
-    // the Hindi-only model has almost no English vocabulary, so code-switched
-    // words like "complete" get forced into the nearest Hindi syllables. See
-    // docs/models.md and the local bake-off (multilingual Hinglish 17.4% WER vs
-    // the Hindi-only model at 42.9%).
-    let lower = language.trim().to_ascii_lowercase();
-    if lower == "hindi" {
+    if uses_hindi_model(language) {
         if let Some(parent) = model_path.parent() {
             let hindi = parent.join("ggml-hi-small.bin");
             if hindi.is_file() {
@@ -518,7 +542,10 @@ mod tests {
         // transcript (CLAUDE.md §11).
         let auto = language_decoding("automatic");
         assert_eq!(auto.whisper_language, None);
-        assert!(!auto.detect_language, "Auto must not use detection-only mode");
+        assert!(
+            !auto.detect_language,
+            "Auto must not use detection-only mode"
+        );
 
         // No mode enables detection-only mode or biases the decoder with a prompt.
         for mode in ["english", "hindi", "hinglish", "automatic"] {
@@ -530,6 +557,36 @@ mod tests {
             assert!(
                 decoding.initial_prompt.is_none(),
                 "{mode} must not bias the decoder with a prompt"
+            );
+        }
+    }
+
+    #[test]
+    fn only_explicit_hindi_uses_the_monolingual_indic_model() {
+        // Regression: Hinglish was once routed through the Hindi-only fine-tune,
+        // which mangled English words ("complete" -> "kanplit"). Only explicit
+        // Hindi may request the Indic model; every code-switch-capable mode stays
+        // on the multilingual model. Kept file-independent via the pure predicate.
+        assert!(uses_hindi_model("hindi"));
+        assert!(uses_hindi_model("Hindi"));
+        for mode in ["hinglish", "automatic", "english", "", "auto"] {
+            assert!(
+                !uses_hindi_model(mode),
+                "{mode:?} must stay on the multilingual model"
+            );
+        }
+    }
+
+    #[test]
+    fn non_hindi_modes_keep_the_selected_model_path() {
+        // Whatever multilingual model the user picked is passed through untouched
+        // for Hinglish/Auto/English (the Indic file may or may not exist on disk).
+        let selected = Path::new("/models/ggml-small-q5_1.bin");
+        for mode in ["hinglish", "automatic", "english"] {
+            assert_eq!(
+                model_path_for_language(selected, mode),
+                selected.to_owned(),
+                "{mode} must not be re-routed to another model"
             );
         }
     }
