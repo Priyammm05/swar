@@ -86,9 +86,13 @@ impl ModelCache {
             self.entries.insert(0, entry);
             return Ok(true);
         }
-        let context =
-            WhisperContext::new_with_params(model_path, WhisperContextParameters::default())
-                .map_err(|error| format!("could not load offline model: {error}"))?;
+        let mut context_params = WhisperContextParameters::default();
+        // Flash attention is a substantial decode speedup on Metal with a
+        // negligible accuracy change, and it is what lets the final decode afford
+        // the wide, most-accurate beam-5 (see transcribe_with_context).
+        context_params.use_gpu(true).flash_attn(true);
+        let context = WhisperContext::new_with_params(model_path, context_params)
+            .map_err(|error| format!("could not load offline model: {error}"))?;
         self.entries.insert(
             0,
             LoadedModel {
@@ -319,15 +323,16 @@ fn transcribe_with_context(
     let model_file = model_path.file_name().and_then(|name| name.to_str());
     // Both Hinglish packs (Apex/Swift) are `-l auto` romanised-output models.
     let is_hinglish_model = is_romanized_hinglish_pack(model_file);
-    // Only the large Apex pack is heavy enough to need a narrow beam; the small
-    // Swift pack and the English/Indic models keep the wider, most-accurate beam.
-    let is_large_model = model_file == Some(HINGLISH_MODEL_FILE);
     let mut state = context.create_state().map_err(|error| error.to_string())?;
+    // Beam-5 is the most accurate practical setting. The old narrow beam-2 traded
+    // accuracy for speed on the large Apex pack; that trade is no longer needed
+    // because flash attention (at context load) plus the dynamic audio context
+    // (below) cut decode cost enough to keep the wide, accurate beam within budget.
     let mut params = if preview {
         FullParams::new(SamplingStrategy::Greedy { best_of: 1 })
     } else {
         FullParams::new(SamplingStrategy::BeamSearch {
-            beam_size: if is_large_model { 2 } else { 5 },
+            beam_size: 5,
             patience: -1.0,
         })
     };
@@ -338,6 +343,13 @@ fn transcribe_with_context(
     params.set_no_timestamps(true);
     params.set_single_segment(true);
     params.set_n_threads(available_threads());
+    // Shrink the encoder's audio context to the clip's real length. Whisper's
+    // encoder otherwise always processes a full 30 s mel window (1500 ctx tokens)
+    // no matter how short the utterance is, so a 3 s dictation pays ~10x the needed
+    // encode cost. A margin keeps the tail intact; clips at/over 30 s fall back to
+    // the model's full context. This is the largest single latency win for short
+    // dictation, and it is what pays for the wider beam above.
+    params.set_audio_ctx(dynamic_audio_ctx(samples.len()));
     params.set_suppress_blank(true);
     // Suppress non-speech tokens (music notes, [sounds], etc.). With the VAD hard
     // gate this closes the last of whisper.cpp's hallucination-on-noise hole
@@ -476,24 +488,19 @@ fn language_decoding(language: &str) -> LanguageDecoding {
     }
 }
 
-/// The high-accuracy Hinglish pack (Oriserve Hindi2Hinglish "Apex", large-v3). It
-/// emits romanised Latin directly ("complete", not "kanplit"), fixing Hinglish at
-/// the source — but it is large and slower.
+/// The Hinglish quality pack (Oriserve Hindi2Hinglish "Apex", large-v3). It emits
+/// romanised Latin directly ("complete", not "kanplit"), fixing Hinglish at the
+/// source. It is the single model used for Hinglish and Auto. The earlier fast
+/// "Swift" base pack was dropped: its accuracy loss (dropping names like "Goa",
+/// hearing "bore" as "door") did not meet the quality bar, and flash attention +
+/// dynamic audio context recovered enough speed to run Apex responsively instead.
 const HINGLISH_MODEL_FILE: &str = "ggml-apex-hinglish-q5_0.bin";
-/// The fast Hinglish pack (Oriserve Hindi2Hinglish "Swift", whisper-base). Same
-/// romanised behaviour, ~sub-second, at some accuracy cost. Preferred when
-/// installed so Hinglish/Auto feel responsive; also hallucinates far less on
-/// silence than the large model.
-const SWIFT_HINGLISH_MODEL_FILE: &str = "ggml-swift-hinglish.bin";
 const HINDI_MODEL_FILE: &str = "ggml-hi-small.bin";
 
-/// Both Hinglish packs are `-l auto` models that output romanised Latin, so they
-/// always auto-detect regardless of the selected mode.
+/// The Apex pack is an `-l auto` model that outputs romanised Latin, so it always
+/// auto-detects regardless of the selected mode.
 fn is_romanized_hinglish_pack(model_file: Option<&str>) -> bool {
-    matches!(
-        model_file,
-        Some(HINGLISH_MODEL_FILE) | Some(SWIFT_HINGLISH_MODEL_FILE)
-    )
+    model_file == Some(HINGLISH_MODEL_FILE)
 }
 
 fn vad_model_next_to(model_path: &Path) -> Option<std::path::PathBuf> {
@@ -526,12 +533,9 @@ fn model_path_for_language(model_path: &Path, language: &str) -> std::path::Path
             return hindi;
         }
     } else if uses_hinglish_model(language) {
-        // Prefer the fast Swift pack, then the high-accuracy Apex pack, then fall
-        // back to whatever multilingual model the user selected so Hinglish/Auto
-        // still work before a pack is downloaded.
-        if let Some(swift) = sibling_model(model_path, SWIFT_HINGLISH_MODEL_FILE) {
-            return swift;
-        }
+        // Hinglish and Auto use the Apex quality pack when installed, else fall
+        // back to whatever multilingual model the user selected so they still work
+        // before the pack is downloaded.
         if let Some(apex) = sibling_model(model_path, HINGLISH_MODEL_FILE) {
             return apex;
         }
@@ -559,6 +563,25 @@ fn ensure_model_file(model_path: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// The encoder audio-context size to request for a clip of `sample_len` 16 kHz
+/// samples. Whisper maps a full 30 s window to 1500 context tokens (one per
+/// 320 samples / 20 ms), and always encodes the full window unless told otherwise.
+/// Sizing the context to the real clip length — plus a safety margin so the tail
+/// is never clipped — cuts encode cost roughly in proportion to how short the clip
+/// is. A clip at or beyond the full window returns 0, whisper.cpp's "use the
+/// model's full context" sentinel.
+fn dynamic_audio_ctx(sample_len: usize) -> i32 {
+    const SAMPLES_PER_CTX: usize = 320;
+    const FULL_CTX: usize = 1500;
+    const MARGIN_CTX: usize = 64;
+    const MIN_CTX: usize = 128;
+    const FULL_WINDOW_SAMPLES: usize = SAMPLES_PER_CTX * FULL_CTX; // 30 s at 16 kHz
+    if sample_len >= FULL_WINDOW_SAMPLES {
+        return 0;
+    }
+    ((sample_len / SAMPLES_PER_CTX) + MARGIN_CTX).clamp(MIN_CTX, FULL_CTX) as i32
+}
+
 fn available_threads() -> i32 {
     thread::available_parallelism()
         .map(|count| count.get().saturating_sub(1).clamp(1, 8) as i32)
@@ -579,6 +602,34 @@ mod tests {
     #[test]
     fn asr_thread_count_leaves_capacity_for_the_desktop() {
         assert!((1..=8).contains(&available_threads()));
+    }
+
+    #[test]
+    fn audio_ctx_shrinks_for_short_clips_and_falls_back_for_long_ones() {
+        // A ~3 s clip needs far less than the full 1500-token window, so the
+        // encoder does proportionally less work (the main short-dictation win).
+        let three_seconds = 16_000 * 3;
+        let ctx = dynamic_audio_ctx(three_seconds);
+        assert!(
+            ctx > 0 && ctx < 1500,
+            "3 s should shrink the context: {ctx}"
+        );
+        // 3 s == 150 ctx tokens + 64 margin.
+        assert_eq!(ctx, (three_seconds / 320 + 64) as i32);
+
+        // Very short clips never drop below the safety floor, so quality holds.
+        assert_eq!(dynamic_audio_ctx(16_000 / 10), 128);
+        assert_eq!(dynamic_audio_ctx(0), 128);
+
+        // A clip at/over the full 30 s window returns 0 == "use the full context".
+        assert_eq!(dynamic_audio_ctx(16_000 * 30), 0);
+        assert_eq!(dynamic_audio_ctx(16_000 * 45), 0);
+
+        // The result is always a legal whisper.cpp audio-context value.
+        for seconds in [1, 2, 5, 10, 20, 29] {
+            let value = dynamic_audio_ctx(16_000 * seconds);
+            assert!((128..=1500).contains(&value), "{seconds}s -> {value}");
+        }
     }
 
     #[test]
