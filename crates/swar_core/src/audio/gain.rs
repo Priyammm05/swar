@@ -69,7 +69,12 @@ pub(crate) fn normalize(input: &[f32]) -> (Vec<f32>, GainMetrics) {
             clipped += 1;
         }
     }
-    let rms = (sum_squares / input.len() as f64).sqrt() as f32;
+    let overall_rms = (sum_squares / input.len() as f64).sqrt() as f32;
+    // Normalize on the level of the *speech*, not the whole utterance: a
+    // pause-heavy dictation has its overall RMS dragged down by the silences,
+    // which would over-boost the speech until the limiter clamps it. Measuring
+    // over frames above the noise floor keeps the boost honest (plan M1.6).
+    let rms = speech_weighted_rms(input, overall_rms);
     let clipped_pct = (clipped as f32 / input.len() as f32) * 100.0;
 
     // Bypass on silence: nothing worth boosting, and VAD will discard it.
@@ -100,6 +105,39 @@ pub(crate) fn normalize(input: &[f32]) -> (Vec<f32>, GainMetrics) {
             applied_gain_db: to_dbfs(gain),
         },
     )
+}
+
+/// 20 ms at 16 kHz — the gain stage always runs on the resampled 16 kHz buffer.
+const FRAME_SAMPLES: usize = 320;
+
+/// RMS measured over speech frames only (frames whose energy is above the
+/// estimated noise floor). Falls back to `overall_rms` when the buffer is too
+/// short to frame or too uniform to separate speech from noise, so a clean
+/// steady tone still normalizes exactly as before.
+fn speech_weighted_rms(input: &[f32], overall_rms: f32) -> f32 {
+    if input.len() < FRAME_SAMPLES * 4 {
+        return overall_rms;
+    }
+    let frame_rms: Vec<f32> = input
+        .chunks(FRAME_SAMPLES)
+        .map(|frame| {
+            let sum: f64 = frame.iter().map(|s| f64::from(*s) * f64::from(*s)).sum();
+            (sum / frame.len() as f64).sqrt() as f32
+        })
+        .collect();
+    // Noise floor ~ 10th percentile of frame energy; speech is anything clearly
+    // above it.
+    let mut sorted = frame_rms.clone();
+    sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    let noise_floor = sorted[sorted.len() / 10];
+    let threshold = (noise_floor * 2.0).max(SILENCE_RMS);
+    let speech: Vec<f32> = frame_rms.into_iter().filter(|r| *r >= threshold).collect();
+    // Need a few real speech frames (~60 ms) to trust the estimate.
+    if speech.len() < 3 {
+        return overall_rms;
+    }
+    let sum: f64 = speech.iter().map(|r| f64::from(*r) * f64::from(*r)).sum();
+    (sum / speech.len() as f64).sqrt() as f32
 }
 
 /// tanh soft knee above the peak ceiling. Leaves the bulk of the signal linear and
@@ -174,5 +212,33 @@ mod tests {
         let (out, metrics) = normalize(&[]);
         assert!(out.is_empty());
         assert_eq!(metrics.applied_gain_db, 0.0);
+    }
+
+    #[test]
+    fn pause_heavy_audio_is_not_over_boosted() {
+        // A short burst of on-target speech (0.1 RMS) inside mostly-silent
+        // audio. The overall RMS is dragged far below target by the pauses; a
+        // naive normalizer would boost the whole thing several dB. Speech-
+        // weighted RMS sees the speech is already at target and barely moves it.
+        let mut samples = vec![0.005_f32; 16_000];
+        for sample in samples.iter_mut().skip(7_000).take(2_000) {
+            *sample = 0.1;
+        }
+        let (_out, metrics) = normalize(&samples);
+        assert!(
+            metrics.applied_gain_db.abs() < 3.0,
+            "speech already at target should barely move; got {} dB",
+            metrics.applied_gain_db
+        );
+    }
+
+    #[test]
+    fn steady_quiet_tone_still_normalizes_to_target() {
+        // A uniform quiet tone has no pauses to exclude, so speech-weighting must
+        // not change the existing behaviour: it is still boosted to the target.
+        let quiet = vec![0.02_f32; 16_000];
+        let (out, metrics) = normalize(&quiet);
+        assert!(metrics.applied_gain_db > 6.0);
+        assert!((rms_of(&out) - TARGET_RMS).abs() < 0.02);
     }
 }
