@@ -16,6 +16,25 @@ for framework in "$app_path"/Contents/Frameworks/*.framework; do
   codesign --force --sign - "$framework"
 done
 
+# The offline cleanup helper is a second executable in Contents/MacOS. Sign it on
+# its own before the outer app seal records it, so --deep --strict verifies.
+helper="$app_path/Contents/MacOS/swar_llm_server"
+if [ -f "$helper" ]; then
+  codesign --force --sign - "$helper"
+fi
+
+# The fast ASR helper and its ONNX dylibs are further nested Mach-O in
+# Contents/MacOS. Sign each dylib first, then the helper, so the app seal records
+# their final signatures and --deep --strict verifies.
+for asr_lib in "$app_path"/Contents/MacOS/libonnxruntime.*.dylib \
+  "$app_path"/Contents/MacOS/libsherpa-onnx-*.dylib; do
+  [ -f "$asr_lib" ] && codesign --force --sign - "$asr_lib"
+done
+asr_helper="$app_path/Contents/MacOS/swar_asr_server"
+if [ -f "$asr_helper" ]; then
+  codesign --force --sign - "$asr_helper"
+fi
+
 # A plain ad-hoc app signature uses the executable hash as its identity, which
 # makes macOS Accessibility permission expire after every local rebuild. This
 # stable designated requirement keeps local builds associated with Swar.
