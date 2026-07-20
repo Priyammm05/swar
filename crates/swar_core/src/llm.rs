@@ -295,14 +295,25 @@ mod tests {
             eprintln!("SWAR_LLM_TEST_MODEL unset — skipping embedded LLM smoke test");
             return;
         };
-        let system = "You are Swar's local dictation editor. Fix spelling, spacing, \
-            and punctuation of the user's text. Repair obviously misspelled English \
-            words. Do not translate. Return only the edited text.";
-        let raw = "To kya hamara hingalish kanplit hogya";
-        let cleaned = generate(&path, system, raw).expect("generation should succeed");
-        eprintln!("RAW:     {raw}");
-        eprintln!("CLEANED: {cleaned}");
-        assert!(!cleaned.trim().is_empty(), "model returned empty text");
+        // Repair-oriented prompt: the shipped cleanup prompt is deliberately
+        // conservative, but here we want to measure whether the model *can*
+        // recover words whisper mis-spelled from Devanagari code-switch.
+        let system = "You are Swar's dictation editor for Hindi-English (Hinglish) speech. \
+            Fix spelling, spacing, and punctuation. Restore obviously misheard English \
+            words to their correct English spelling (for example a phonetic spelling of \
+            an English tech word). Keep Hindi words in Roman script. Do NOT translate. \
+            Do NOT change numbers, names, or amounts. Return only the corrected text.";
+        let cases = [
+            "To kya hamara hingalish kanplit hogya",
+            "mujhe kal ka deploymnet karna hai phir tumhe ping karunga",
+            "please send me the invoyce by tomoro morning",
+        ];
+        for raw in cases {
+            let cleaned = generate(&path, system, raw).expect("generation should succeed");
+            eprintln!("RAW:     {raw}");
+            eprintln!("CLEANED: {cleaned}\n");
+            assert!(!cleaned.trim().is_empty(), "model returned empty text");
+        }
         // Drop the warm model/backend before the process exits so ggml's Metal
         // device finalizer does not assert on still-live resource sets.
         unload().expect("unload should succeed");
