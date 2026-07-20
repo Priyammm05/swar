@@ -279,3 +279,32 @@ fn generate_once(
 
     Ok(String::from_utf8_lossy(&produced).trim().to_owned())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Real end-to-end generation needs a GGUF on disk, so it is opt-in via an
+    // environment variable and skipped otherwise (keeps `cargo test` hermetic).
+    // Run with:
+    //   SWAR_LLM_TEST_MODEL=/path/to/model.gguf \
+    //   cargo test -p swar_core --features embedded-llm llm:: -- --nocapture
+    #[test]
+    fn generates_a_cleanup_when_a_model_is_provided() {
+        let Ok(path) = std::env::var("SWAR_LLM_TEST_MODEL") else {
+            eprintln!("SWAR_LLM_TEST_MODEL unset — skipping embedded LLM smoke test");
+            return;
+        };
+        let system = "You are Swar's local dictation editor. Fix spelling, spacing, \
+            and punctuation of the user's text. Repair obviously misspelled English \
+            words. Do not translate. Return only the edited text.";
+        let raw = "To kya hamara hingalish kanplit hogya";
+        let cleaned = generate(&path, system, raw).expect("generation should succeed");
+        eprintln!("RAW:     {raw}");
+        eprintln!("CLEANED: {cleaned}");
+        assert!(!cleaned.trim().is_empty(), "model returned empty text");
+        // Drop the warm model/backend before the process exits so ggml's Metal
+        // device finalizer does not assert on still-live resource sets.
+        unload().expect("unload should succeed");
+    }
+}
