@@ -38,9 +38,34 @@ pub(crate) struct CursorContext<'a> {
     pub after: &'a str,
 }
 
+/// Whether recent dictations and the surrounding field text are sent to the
+/// model at all.
+///
+/// Off, on measured evidence. Over the 205-sentence corpus the full block took
+/// the median cleanup from 259 ms to 568 ms, added a 10.5 second worst case, and
+/// produced *fewer* useful edits (31 against 40) because it drew the model's
+/// attention away from the transcript it was supposed to be editing. The cause
+/// is structural: the KV prefix cache covers the system prompt, so every
+/// character of the user turn is re-read on every dictation.
+///
+/// The assembly, the budgets, and the privacy guarantees all stay in place and
+/// under test. Flip this back to true once there is a way to measure the benefit
+/// it is meant to deliver, which the current corpus cannot show.
+const SEND_HISTORY_AND_FIELD_TEXT: bool = false;
+
 /// Builds the context block, or an empty string when there is nothing useful to
 /// say. The caller attaches it to the local LLM request only.
 pub(crate) fn build(cursor: CursorContext<'_>) -> String {
+    if !SEND_HISTORY_AND_FIELD_TEXT {
+        // The vocabulary list is short, stable, and the part most likely to earn
+        // its cost — it is what makes a name the speaker uses constantly come
+        // out spelled right.
+        return assemble(
+            &personalization::hotword_prompt(),
+            &[],
+            CursorContext::default(),
+        );
+    }
     assemble(
         &personalization::hotword_prompt(),
         &recent_dictations(),
@@ -157,30 +182,54 @@ mod tests {
 
     #[test]
     fn empty_cursor_context_contributes_no_section() {
-        let block = build(CursorContext {
-            before: "   ",
-            after: "",
-        });
+        let block = assemble(
+            "",
+            &[],
+            CursorContext {
+                before: "   ",
+                after: "",
+            },
+        );
         assert!(!block.contains("<CURSOR>"));
     }
 
     #[test]
     fn cursor_marker_sits_between_the_two_halves() {
-        let block = build(CursorContext {
-            before: "Hi Priyam, ",
-            after: " Thanks.",
-        });
+        let block = assemble(
+            "",
+            &[],
+            CursorContext {
+                before: "Hi Priyam, ",
+                after: " Thanks.",
+            },
+        );
         assert!(block.contains("Hi Priyam, <CURSOR> Thanks."));
+    }
+
+    #[test]
+    fn field_text_and_history_are_withheld_while_the_flag_is_off() {
+        // The measured cost was not worth it, so build() sends the vocabulary
+        // only. The assembly itself stays correct and covered above.
+        let block = build(CursorContext {
+            before: "a private letter nobody asked to share",
+            after: "",
+        });
+        assert!(!block.contains("<CURSOR>"));
+        assert!(!block.contains("private letter"));
     }
 
     #[test]
     fn long_field_keeps_the_words_nearest_the_caret() {
         let before = "x".repeat(BEFORE_CURSOR_BUDGET) + "near the caret";
         let after = "close by".to_owned() + &"y".repeat(AFTER_CURSOR_BUDGET);
-        let block = build(CursorContext {
-            before: &before,
-            after: &after,
-        });
+        let block = assemble(
+            "",
+            &[],
+            CursorContext {
+                before: &before,
+                after: &after,
+            },
+        );
         assert!(block.contains("near the caret<CURSOR>close by"));
         // Both halves were trimmed, so the elision marker appears on each side.
         assert!(block.contains("…"));
@@ -210,10 +259,14 @@ mod tests {
     fn multibyte_text_is_never_split_mid_character() {
         // Devanagari is three bytes per character; a naive byte slice panics.
         let before = "नमस्ते".repeat(400);
-        let block = build(CursorContext {
-            before: &before,
-            after: "",
-        });
+        let block = assemble(
+            "",
+            &[],
+            CursorContext {
+                before: &before,
+                after: "",
+            },
+        );
         assert!(block.contains("<CURSOR>"));
     }
 }
