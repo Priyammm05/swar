@@ -54,15 +54,23 @@ struct EmbeddedLlamaEnhancer<'a> {
     config: EnhancementProviderConfig<'a>,
 }
 
-/// The cleanup system prompt plus optional target-application context. Shared by
-/// every LLM backend so their instructions are identical.
-fn cleanup_system_prompt(source_application: &str) -> String {
+/// The cleanup system prompt. Deliberately constant: the helper keeps a decoded
+/// KV-cache prefix of the system turn and only re-decodes it when the text
+/// changes, which removes the whole prompt from the per-dictation cost. Anything
+/// that varies per request (the target application) belongs in the user turn.
+pub(crate) fn cleanup_system_prompt() -> &'static str {
+    CLEANUP_PROMPT
+}
+
+/// The user turn: the transcript, plus the target-application context when it is
+/// known. Shared by every LLM backend so their instructions are identical.
+fn cleanup_user_message(source_application: &str, safe_clean_text: &str) -> String {
     let application = source_application.trim();
     if application.is_empty() {
-        CLEANUP_PROMPT.to_owned()
+        safe_clean_text.to_owned()
     } else {
         format!(
-            "{CLEANUP_PROMPT}\nThe text will be inserted into {application}. Preserve its register without adding information."
+            "The text will be inserted into {application}. Preserve its register without adding information.\n\n{safe_clean_text}"
         )
     }
 }
@@ -73,8 +81,8 @@ impl TranscriptEnhancer for EmbeddedLlamaEnhancer<'_> {
         if model_path.is_empty() {
             return Err("no embedded LLM model is installed".to_owned());
         }
-        let system = cleanup_system_prompt(request.source_application);
-        crate::llm_client::generate(model_path, &system, request.safe_clean_text)
+        let user = cleanup_user_message(request.source_application, request.safe_clean_text);
+        crate::llm_client::generate(model_path, cleanup_system_prompt(), &user)
     }
 }
 
@@ -127,8 +135,8 @@ impl TranscriptEnhancer for OpenAiCompatibleEnhancer<'_> {
             "model": self.config.model,
             "temperature": 0,
             "messages": [
-                {"role": "system", "content": cleanup_system_prompt(request.source_application)},
-                {"role": "user", "content": request.safe_clean_text}
+                {"role": "system", "content": cleanup_system_prompt()},
+                {"role": "user", "content": cleanup_user_message(request.source_application, request.safe_clean_text)}
             ]
         });
         let agent = ureq::AgentBuilder::new()

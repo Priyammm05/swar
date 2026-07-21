@@ -37,6 +37,7 @@ static LLM: LazyLock<LlmClient> = LazyLock::new(LlmClient::spawn);
 enum Job {
     Prepare {
         model_path: String,
+        system: String,
         response: Sender<Result<(), String>>,
     },
     Generate {
@@ -87,10 +88,13 @@ impl LlmClient {
 
 /// Loads the model into a warm helper ahead of the first cleanup so a real
 /// dictation never pays the multi-hundred-millisecond (cold: multi-second) load.
-pub(crate) fn prepare(model_path: &str) -> Result<(), String> {
+/// `system` is the cleanup prompt: sending it here lets the helper decode and
+/// cache its KV prefix now, so even the first dictation skips that cost.
+pub(crate) fn prepare(model_path: &str, system: &str) -> Result<(), String> {
     LLM.send(
         |response| Job::Prepare {
             model_path: model_path.to_owned(),
+            system: system.to_owned(),
             response,
         },
         PREPARE_TIMEOUT,
@@ -144,9 +148,10 @@ fn run_worker(receiver: Receiver<Job>) {
         match command {
             Job::Prepare {
                 model_path,
+                system,
                 response,
             } => {
-                let result = ensure_prepared(&mut helper, &model_path);
+                let result = ensure_prepared(&mut helper, &model_path, &system);
                 let _ = response.send(result);
             }
             Job::Generate {
@@ -166,11 +171,16 @@ fn run_worker(receiver: Receiver<Job>) {
     }
 }
 
-fn ensure_prepared(helper: &mut Option<Helper>, model_path: &str) -> Result<(), String> {
+fn ensure_prepared(
+    helper: &mut Option<Helper>,
+    model_path: &str,
+    system: &str,
+) -> Result<(), String> {
     if helper.is_none() {
         *helper = Some(spawn_helper()?);
     }
-    let request = serde_json::json!({ "model": model_path, "prepare": true }).to_string();
+    let request =
+        serde_json::json!({ "model": model_path, "system": system, "prepare": true }).to_string();
     match exchange(
         helper.as_mut().expect("just spawned"),
         &request,

@@ -255,7 +255,10 @@ pub(crate) fn ensure_embedded_llm_model_download() {
     }
     std::thread::spawn(|| match install_embedded_llm_model() {
         Ok(status) => {
-            let _ = crate::llm_client::prepare(&status.path);
+            let _ = crate::llm_client::prepare(
+                &status.path,
+                crate::enhancement::cleanup_system_prompt(),
+            );
         }
         Err(_) => {
             LLM_DOWNLOAD_STARTED.store(false, Ordering::SeqCst);

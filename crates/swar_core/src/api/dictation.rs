@@ -645,7 +645,10 @@ pub fn prepare_dictation_engine(model_path: String) -> Result<bool, String> {
     match crate::api::models::embedded_llm_model_path() {
         Some(path) => {
             std::thread::spawn(move || {
-                let _ = crate::llm_client::prepare(&path.to_string_lossy());
+                let _ = crate::llm_client::prepare(
+                    &path.to_string_lossy(),
+                    crate::enhancement::cleanup_system_prompt(),
+                );
             });
         }
         None => crate::api::models::ensure_embedded_llm_model_download(),
