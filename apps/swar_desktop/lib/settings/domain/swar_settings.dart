@@ -4,7 +4,13 @@ enum SwarWritingMode { raw, clean, intent }
 
 enum SwarShortcutKey { option, control }
 
-enum SwarEnhancementProvider { local, byok }
+/// How Swar tidies a transcript after recognition.
+///
+/// [local] is the deterministic editor: instant, predictable, and the default.
+/// [embedded] adds an on-device 3B model, which is a 2 GB download and is opted
+/// into rather than assumed. [byok] sends text to an OpenAI-compatible endpoint
+/// the user configures.
+enum SwarEnhancementProvider { local, embedded, byok }
 
 /// Domain Model.
 /// Settings that the Phase 1 shell can edit without owning product logic.

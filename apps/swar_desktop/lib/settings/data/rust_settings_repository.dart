@@ -65,4 +65,9 @@ final class RustSettingsRepository implements SettingsRepository {
       ),
     );
   }
+
+  @override
+  Future<void> installCleanupModel() async {
+    await models.installEmbeddedLlmModel();
+  }
 }

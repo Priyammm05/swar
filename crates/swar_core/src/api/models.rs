@@ -213,35 +213,6 @@ pub fn install_embedded_llm_model() -> Result<OfflineModelStatus, String> {
     Ok(status_for(destination))
 }
 
-/// Guards the one-time background download so repeated `prepare` calls in a
-/// single process never start overlapping 2 GB downloads.
-static LLM_DOWNLOAD_STARTED: AtomicBool = AtomicBool::new(false);
-
-/// Kicks off a one-time background download of the ~2 GB cleanup model when it is
-/// absent, so cleanup "just works" without the user opening a setting. It is
-/// non-blocking and best-effort: until the model lands, cleanup stays on the
-/// instant deterministic editor; on success it warms the helper so the next
-/// dictation is fast; on failure it clears the guard so a later launch can retry.
-pub(crate) fn ensure_embedded_llm_model_download() {
-    if embedded_llm_model_path().is_some() {
-        return;
-    }
-    if LLM_DOWNLOAD_STARTED.swap(true, Ordering::SeqCst) {
-        return; // Already downloading (or downloaded) in this process.
-    }
-    std::thread::spawn(|| match install_embedded_llm_model() {
-        Ok(status) => {
-            let _ = crate::llm_client::prepare(
-                &status.path,
-                crate::enhancement::cleanup_system_prompt(),
-            );
-        }
-        Err(_) => {
-            LLM_DOWNLOAD_STARTED.store(false, Ordering::SeqCst);
-        }
-    });
-}
-
 fn status_for(path: PathBuf) -> OfflineModelStatus {
     let metadata = fs::metadata(&path).ok();
     let size_bytes = metadata.as_ref().map_or(0, fs::Metadata::len);

@@ -71,6 +71,11 @@ final class SettingsViewModel extends ChangeNotifier {
   void setHistoryRetentionDays(int value) =>
       _save(_settings.copyWith(historyRetentionDays: value));
 
+  /// Starts the optional cleanup model download. Nothing waits on it: until
+  /// the weights land, cleanup stays on the deterministic editor, which is also
+  /// what happens if the download never finishes.
+  Future<void> installCleanupModel() => _repository.installCleanupModel();
+
   /// Secrets deliberately live only for the current app process.
   void setProviderApiKey(String value) {
     _providerApiKey = value.trim();

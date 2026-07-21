@@ -1,5 +1,7 @@
 // apps/swar_desktop/lib/settings/presentation/settings_page.dart
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:swar_desktop/design_system/swar_components.dart';
 import 'package:swar_desktop/design_system/swar_tokens.dart';
@@ -303,11 +305,15 @@ final class _GeneralSettings extends StatelessWidget {
               trailing: _VocabularyButton(viewModel: personalizationViewModel),
             ),
             _SettingRow(
-              title: 'Optional cleanup provider',
-              description:
-                  settings.enhancementProvider == SwarEnhancementProvider.local
-                  ? 'Local processing only. No text leaves this device.'
-                  : 'Opt-in OpenAI-compatible provider. The key is never saved.',
+              title: 'How Swar tidies your words',
+              description: switch (settings.enhancementProvider) {
+                SwarEnhancementProvider.local =>
+                  'Deterministic editor. Instant, predictable, nothing leaves this device.',
+                SwarEnhancementProvider.embedded =>
+                  'On-device 3B model. Slower, and it sometimes rewrites more than you meant.',
+                SwarEnhancementProvider.byok =>
+                  'Opt-in OpenAI-compatible provider. The key is never saved.',
+              },
               trailing: _ProviderSettingsButton(viewModel: viewModel),
             ),
           ],
@@ -949,7 +955,11 @@ final class _ProviderSettingsButton extends StatelessWidget {
                   items: const [
                     DropdownMenuItem(
                       value: SwarEnhancementProvider.local,
-                      child: Text('Local only'),
+                      child: Text('Deterministic editor (recommended)'),
+                    ),
+                    DropdownMenuItem(
+                      value: SwarEnhancementProvider.embedded,
+                      child: Text('On-device model — 2 GB download'),
                     ),
                     DropdownMenuItem(
                       value: SwarEnhancementProvider.byok,
@@ -960,6 +970,17 @@ final class _ProviderSettingsButton extends StatelessWidget {
                     if (value != null) setState(() => provider = value);
                   },
                 ),
+                // Say the cost before it is paid. Swar used to fetch these two
+                // gigabytes in the background on first launch without asking.
+                if (provider == SwarEnhancementProvider.embedded) ...[
+                  const SizedBox(height: 16),
+                  const Text(
+                    'Downloads a 2 GB model the first time you use it, and adds '
+                    'about half a second to every dictation. It can fix things '
+                    'sound alone cannot, and it can also rewrite more than you '
+                    'meant. The deterministic editor is instant and predictable.',
+                  ),
+                ],
                 if (provider == SwarEnhancementProvider.byok) ...[
                   const SizedBox(height: 16),
                   TextField(
@@ -1002,6 +1023,13 @@ final class _ProviderSettingsButton extends StatelessWidget {
                   ..setProviderEndpoint(endpoint.text)
                   ..setProviderModel(model.text)
                   ..setProviderApiKey(apiKey.text);
+                // Choosing the on-device model is what starts its download.
+                // Nothing blocks on it: until the weights land, cleanup stays
+                // on the deterministic editor, which is the same thing that
+                // happens if the download never succeeds.
+                if (provider == SwarEnhancementProvider.embedded) {
+                  unawaited(viewModel.installCleanupModel());
+                }
                 Navigator.of(context).pop();
               },
               child: const Text('Save'),

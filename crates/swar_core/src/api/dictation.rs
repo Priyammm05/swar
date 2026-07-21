@@ -471,10 +471,13 @@ fn finish_capture(capture: &mut ActiveCapture) -> Result<DictationCompletion, St
     // deterministic editor, so this is safe whether or not cleanup is installed.
     let embedded_llm_path = crate::api::models::embedded_llm_model_path();
     let configured_provider = capture.config.enhancement_provider.trim();
+    // Only when the user asked for it by name. "local", which is the default,
+    // used to land here too, so merely having the weights on disk was enough to
+    // put every dictation through a 3B model. That is how Raw stopped being raw:
+    // the mode skipped the deterministic pass and the LLM rewrote the result
+    // anyway. "local" now means the deterministic editor, and nothing else.
     let use_embedded = embedded_llm_path.is_some()
-        && (configured_provider.is_empty()
-            || configured_provider.eq_ignore_ascii_case("local")
-            || configured_provider.eq_ignore_ascii_case("embedded")
+        && (configured_provider.eq_ignore_ascii_case("embedded")
             || configured_provider.eq_ignore_ascii_case("embedded-llm"));
     let embedded_model_string = embedded_llm_path
         .as_ref()
@@ -660,21 +663,24 @@ pub fn offline_model_is_ready(model_path: String) -> bool {
 pub fn prepare_dictation_engine(model_path: String) -> Result<bool, String> {
     let already_loaded =
         model_registry::prepare(&model_path).map(|status| status.already_loaded)?;
-    // Cleanup "just works" with no setup: when the model is present, warm the
-    // helper off-thread so the first dictation does not pay the ~2 GB load; when
-    // it is absent, download it once in the background (cleanup stays on the
-    // instant deterministic editor until it lands). Both are best-effort and
-    // non-blocking, so neither can delay or fail engine preparation.
-    match crate::api::models::embedded_llm_model_path() {
-        Some(path) => {
-            std::thread::spawn(move || {
-                let _ = crate::llm_client::prepare(
-                    &path.to_string_lossy(),
-                    crate::enhancement::cleanup_system_prompt(),
-                );
-            });
-        }
-        None => crate::api::models::ensure_embedded_llm_model_download(),
+    // If the cleanup model is installed, warm the helper off-thread so the
+    // first dictation does not pay its cold load. If it is not installed, do
+    // nothing: it is a 2 GB download and it is now the user's decision, made
+    // from Settings.
+    //
+    // This used to fetch it in the background on first launch, unasked. That
+    // was seven tenths of a 2.8 GB first run for a model that measurement did
+    // not justify: on a probe of eight dictations the validator discarded its
+    // answer five times, and of the three it kept, one inverted the meaning of
+    // the sentence and one broke raw mode. Nothing gets downloaded on somebody's
+    // behalf until it earns its place on a scored set.
+    if let Some(path) = crate::api::models::embedded_llm_model_path() {
+        std::thread::spawn(move || {
+            let _ = crate::llm_client::prepare(
+                &path.to_string_lossy(),
+                crate::enhancement::cleanup_system_prompt(),
+            );
+        });
     }
     // Fetch the default English engine (Parakeet) once in the background too.
     // Self-guarded and non-blocking: recognition stays on whisper until it lands.

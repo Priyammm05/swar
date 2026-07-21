@@ -17,4 +17,8 @@ final class InMemorySettingsRepository implements SettingsRepository {
   void save(SwarSettings settings) {
     _settings = settings;
   }
+
+  /// No download in the in-memory implementation; there is nothing to fetch.
+  @override
+  Future<void> installCleanupModel() async {}
 }
