@@ -435,15 +435,24 @@ fn finish_capture(capture: &mut ActiveCapture) -> Result<DictationCompletion, St
     // language route is missing or errors, so recognition never breaks.
     let fast_text = match &route {
         AsrRoute::Fast(language) => crate::asr_client::transcribe(&speech.samples, language),
-        AsrRoute::Multilingual => Err("code-switched audio routes to whisper".to_owned()),
+        AsrRoute::Multilingual { .. } => Err("code-switched audio routes to whisper".to_owned()),
     };
     let raw_text = match fast_text {
         Ok(text) if transcript_contains_speech(&text) => text,
         _ => {
             // Bias whisper toward the user's own proper nouns at the source (§7).
             let hotwords = personalization::hotword_prompt();
+            // Auto has already detected what it is listening to, so let that
+            // choose the whisper model rather than applying one model to every
+            // Auto utterance. Sending all of Auto to the code-switch fine-tune
+            // measured 2.714 on monolingual Hindi against the general model's
+            // 0.429, and it repeats short English. The decode language stays as
+            // configured: only the model file changes, so Auto still detects and
+            // transcribes in one pass (swar.md §7).
+            let model_path =
+                model_registry::whisper_model_for(&capture.config.model_path, route.model_hint());
             model_registry::transcribe(
-                &capture.config.model_path,
+                &model_path,
                 &capture.config.language,
                 &speech.samples,
                 &hotwords,
@@ -929,9 +938,42 @@ enum AsrRoute {
     /// an Indian language. Roughly 20-30x faster than whisper, but it can only
     /// produce the script it was trained on.
     Fast(String),
-    /// whisper's multilingual model, which decodes a code-switched utterance in
-    /// a single pass. Slower, and the only correct answer for Hinglish.
-    Multilingual,
+    /// whisper, which decodes a mixed-language utterance in a single pass.
+    /// Slower, and the only correct answer for Hinglish.
+    Multilingual {
+        /// Which whisper model file suits what detection actually heard.
+        /// `Mixed` when languages differ across the clip, `Uniform` when every
+        /// window agreed. Only the model file follows this; the decode language
+        /// stays as the user configured it.
+        heard: HeardLanguages,
+    },
+}
+
+/// What language detection observed across the sampled windows.
+#[derive(Clone, Debug, Eq, PartialEq)]
+enum HeardLanguages {
+    /// Windows disagreed, so the clip code-switches: the Hinglish fine-tune.
+    Mixed,
+    /// Every window agreed on this language: its own specialist model.
+    Uniform(String),
+    /// Detection did not complete, so nothing is known: the general model.
+    Unknown,
+}
+
+impl AsrRoute {
+    /// The language whose whisper model should decode this clip.
+    fn model_hint(&self) -> &str {
+        match self {
+            // An explicit mode never reaches the whisper fallback through this
+            // path without its own language already set.
+            AsrRoute::Fast(language) => language,
+            AsrRoute::Multilingual { heard } => match heard {
+                HeardLanguages::Mixed => "hinglish",
+                HeardLanguages::Uniform(language) => language,
+                HeardLanguages::Unknown => "",
+            },
+        }
+    }
 }
 
 /// Length of one language-detection window.
@@ -947,9 +989,12 @@ const DETECT_WINDOW_SAMPLES: usize = 16_000 * 4;
 fn resolve_asr_route(configured: &str, model_path: &str, samples: &[f32]) -> AsrRoute {
     let lower = configured.trim().to_ascii_lowercase();
     if !matches!(lower.as_str(), "" | "auto" | "automatic") {
-        // Hinglish is mixed by definition; no monolingual engine can serve it.
+        // Hinglish is mixed by definition; no monolingual engine can serve it,
+        // and the user has told us so explicitly, so no detection is needed.
         if lower == "hinglish" {
-            return AsrRoute::Multilingual;
+            return AsrRoute::Multilingual {
+                heard: HeardLanguages::Mixed,
+            };
         }
         return AsrRoute::Fast(configured.to_owned());
     }
@@ -958,26 +1003,49 @@ fn resolve_asr_route(configured: &str, model_path: &str, samples: &[f32]) -> Asr
     // Detecting on a prefix is what made "let's ship this, phir kal baat karte
     // hain" route to Parakeet: the opening is English, so the Hindi half was
     // never transcribed.
-    let mut sawenglish = false;
+    let mut heard: Vec<String> = Vec::new();
     for window in detection_windows(samples) {
         match model_registry::detect_language(model_path, window) {
-            Ok(code) => {
-                if is_indic_language(&normalized_auto_language(&code)) {
-                    // Any Indic anywhere in the clip means it may be mixed.
-                    return AsrRoute::Multilingual;
+            Ok(code) => heard.push(normalized_auto_language(&code)),
+            // Detection failed, so confidence is gone. Take whisper, which cannot
+            // lose a language, on the model that handles anything.
+            Err(_) => {
+                return AsrRoute::Multilingual {
+                    heard: HeardLanguages::Unknown,
                 }
-                sawenglish = true;
             }
-            // Detection failed, so confidence is gone; take the engine that
-            // cannot lose a language.
-            Err(_) => return AsrRoute::Multilingual,
         }
     }
-    if sawenglish {
-        AsrRoute::Fast("english".to_owned())
-    } else {
-        AsrRoute::Multilingual
+    if heard.is_empty() {
+        return AsrRoute::Multilingual {
+            heard: HeardLanguages::Unknown,
+        };
     }
+    // Every window agreed. A clip that is one language throughout is not
+    // code-switched, so it gets that language's own model rather than the
+    // code-switch fine-tune, which is markedly worse on monolingual speech.
+    if let Some(only) = single_language(&heard) {
+        if !is_indic_language(&only) {
+            return AsrRoute::Fast("english".to_owned());
+        }
+        return AsrRoute::Multilingual {
+            heard: HeardLanguages::Uniform(only),
+        };
+    }
+    // Windows disagreed, so the speaker switched languages mid-clip. This is the
+    // case the fast monolingual engines silently drop half of.
+    AsrRoute::Multilingual {
+        heard: HeardLanguages::Mixed,
+    }
+}
+
+/// The one language every window reported, or `None` when they differed.
+fn single_language(heard: &[String]) -> Option<String> {
+    let first = heard.first()?;
+    heard
+        .iter()
+        .all(|language| language == first)
+        .then(|| first.clone())
 }
 
 /// Up to three detection windows: the opening, the middle, and the tail. A short
@@ -1180,7 +1248,9 @@ mod tests {
         // drops half the sentence.
         assert_eq!(
             resolve_asr_route("hinglish", "", &[]),
-            AsrRoute::Multilingual
+            AsrRoute::Multilingual {
+                heard: HeardLanguages::Mixed
+            }
         );
     }
 
@@ -1191,10 +1261,62 @@ mod tests {
         let samples = vec![0.0_f32; 16_000];
         assert_eq!(
             resolve_asr_route("auto", "", &samples),
-            AsrRoute::Multilingual
+            AsrRoute::Multilingual {
+                heard: HeardLanguages::Unknown
+            }
         );
         // Empty audio yields no windows at all; same reasoning.
-        assert_eq!(resolve_asr_route("auto", "", &[]), AsrRoute::Multilingual);
+        assert_eq!(
+            resolve_asr_route("auto", "", &[]),
+            AsrRoute::Multilingual {
+                heard: HeardLanguages::Unknown
+            }
+        );
+    }
+
+    #[test]
+    fn the_model_hint_follows_what_detection_actually_heard() {
+        // Windows disagreed: the clip code-switches, so the Hinglish fine-tune,
+        // which measured 0.696 -> 0.174 on that route.
+        assert_eq!(
+            AsrRoute::Multilingual {
+                heard: HeardLanguages::Mixed
+            }
+            .model_hint(),
+            "hinglish"
+        );
+        // Every window agreed on Hindi. The code-switch fine-tune measured 2.714
+        // on monolingual Hindi against the general model's 0.429, so uniform
+        // speech must not be sent to it.
+        assert_eq!(
+            AsrRoute::Multilingual {
+                heard: HeardLanguages::Uniform("hi".to_owned())
+            }
+            .model_hint(),
+            "hi"
+        );
+        // Detection never completed, so nothing is known: keep the general model
+        // rather than gambling on a specialist.
+        assert_eq!(
+            AsrRoute::Multilingual {
+                heard: HeardLanguages::Unknown
+            }
+            .model_hint(),
+            ""
+        );
+    }
+
+    #[test]
+    fn agreeing_windows_are_not_treated_as_code_switching() {
+        assert_eq!(
+            single_language(&["hi".to_owned(), "hi".to_owned(), "hi".to_owned()]),
+            Some("hi".to_owned())
+        );
+        assert_eq!(
+            single_language(&["en".to_owned(), "hi".to_owned(), "en".to_owned()]),
+            None
+        );
+        assert_eq!(single_language(&[]), None);
     }
 
     #[test]

@@ -269,6 +269,19 @@ pub(crate) fn detect_language(model_path: &str, samples: &[f32]) -> Result<Strin
     MODEL_REGISTRY.detect_language(model_path, samples)
 }
 
+/// The whisper model file that best fits `hint`, falling back to the user's
+/// selected model when no specialist is installed.
+///
+/// Auto uses this to act on what its own detection heard, instead of sending
+/// every Auto utterance to one model. `hint` accepts a mode name ("hindi") or
+/// whisper's ISO code ("hi"); an empty hint means nothing is known and keeps the
+/// general model.
+pub(crate) fn whisper_model_for(model_path: &str, hint: &str) -> String {
+    model_path_for_language(Path::new(model_path), hint)
+        .to_string_lossy()
+        .into_owned()
+}
+
 pub(crate) fn unload() -> Result<(), String> {
     MODEL_REGISTRY.unload()
 }
@@ -620,20 +633,27 @@ fn sibling_model(model_path: &Path, file: &str) -> Option<std::path::PathBuf> {
 /// Only explicit Hindi mode uses the monolingual Indic fine-tune (accurate
 /// Devanagari). Kept as a pure predicate so routing is locked by a regression
 /// test independent of which model files happen to be installed.
+/// Accepts the ISO code too: Auto's routing hint arrives as whisper's own
+/// detection output ("hi"), not as the mode name the settings screen uses.
 fn uses_hindi_model(language: &str) -> bool {
-    language.trim().eq_ignore_ascii_case("hindi")
-}
-
-/// Code-switched routes take the Hinglish fine-tune when it is installed.
-///
-/// Auto is included because it only reaches whisper at all when the router saw
-/// an Indic language somewhere in the clip, which for this product almost always
-/// means English mixed with Hindi.
-fn uses_hinglish_model(language: &str) -> bool {
     matches!(
         language.trim().to_ascii_lowercase().as_str(),
-        "hinglish" | "auto" | "automatic" | ""
+        "hindi" | "hi"
     )
+}
+
+/// Only explicit Hinglish takes the code-switch fine-tune.
+///
+/// Auto used to be routed here too, on the reasoning that it reaches whisper
+/// only when the router saw an Indic language. That was wrong in the case that
+/// matters: the fine-tune repeats short English utterances, returning
+/// "hello this is svar hello this is svar" for a clip the general model
+/// transcribes perfectly. Auto is the default mode and has to survive whatever
+/// it is given, so it stays on the general multilingual model. A user who knows
+/// they are code-switching can select Hinglish and get the specialist, which is
+/// worth 0.696 to 0.174 on that route.
+fn uses_hinglish_model(language: &str) -> bool {
+    language.trim().eq_ignore_ascii_case("hinglish")
 }
 
 /// Whisper is the fallback engine (the fast ONNX helper is primary). Explicit
@@ -842,23 +862,26 @@ mod tests {
         assert_eq!(model_path_for_language(&selected, "hindi"), hindi);
         assert_eq!(model_path_for_language(&selected, "hinglish"), selected);
 
-        // The Hinglish fine-tune takes the code-switched routes once installed.
-        // Measured on the benchmark cases it cuts Hinglish word error rate from
-        // 0.696 to 0.174, so this swap is worth its 514 MB.
+        // Explicit Hinglish takes the fine-tune once installed. Measured on the
+        // benchmark cases it cuts Hinglish word error rate from 0.696 to 0.174,
+        // so this swap is worth its 514 MB.
         let hinglish = dir.join(HINGLISH_MODEL_FILE);
         fs::write(&hinglish, b"x").expect("write hinglish");
-        for mode in ["hinglish", "automatic", "auto", ""] {
+        assert_eq!(model_path_for_language(&selected, "hinglish"), hinglish);
+
+        // Every other mode keeps the general model, Auto included. The fine-tune
+        // repeats short English ("hello this is svar hello this is svar" for a
+        // clip the general model gets exactly right), and Auto is the default
+        // mode, so it has to survive whatever it is handed. On monolingual Hindi
+        // the same fine-tune measured 2.714 against the general model's 0.429.
+        for mode in ["automatic", "auto", "", "english"] {
             assert_eq!(
                 model_path_for_language(&selected, mode),
-                hinglish,
+                selected,
                 "{mode:?}"
             );
         }
-        // But never for monolingual routes. The same measurement put it at 2.714
-        // on Hindi against the general model's 0.429, so widening this swap would
-        // make Hindi dramatically worse.
         assert_eq!(model_path_for_language(&selected, "hindi"), hindi);
-        assert_eq!(model_path_for_language(&selected, "english"), selected);
 
         let _ = fs::remove_dir_all(&dir);
     }
