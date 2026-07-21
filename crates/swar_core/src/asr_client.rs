@@ -74,6 +74,22 @@ pub(crate) fn transcribe(samples: &[f32], language: &str) -> Result<String, Stri
     outcome
 }
 
+/// Warms the fast engines so the first real dictation does not pay their cold
+/// load (~2-3 s for Parakeet's 622 MB encoder). Sends a short silent request for
+/// each available engine — English loads Parakeet, Hindi loads IndicConformer
+/// when its pack is installed. Best-effort; the transcript is discarded. Callers
+/// run this off the UI thread.
+pub(crate) fn warm() {
+    if helper_path().is_none() || model_dirs().is_none() {
+        return;
+    }
+    let silence = vec![0f32; 16_000 / 5]; // 200 ms is enough to force a model load.
+    let _ = transcribe(&silence, "english");
+    if crate::api::models::indic_models_installed() {
+        let _ = transcribe(&silence, "hindi");
+    }
+}
+
 fn run_worker(receiver: Receiver<Job>) {
     let mut helper: Option<Helper> = None;
     while let Ok(job) = receiver.recv() {

@@ -655,6 +655,9 @@ pub fn prepare_dictation_engine(model_path: String) -> Result<bool, String> {
     // The Indian-languages pack (IndicConformer) is opt-in from Settings, so it is
     // NOT downloaded here.
     crate::api::models::ensure_parakeet_download();
+    // Warm the fast ASR engines off-thread so the first dictation does not pay
+    // their cold load (~2-3 s for Parakeet). Best-effort and non-blocking.
+    std::thread::spawn(crate::asr_client::warm);
     Ok(already_loaded)
 }
 
@@ -893,7 +896,11 @@ fn resolve_asr_language(configured: &str, model_path: &str, samples: &[f32]) -> 
     if !matches!(lower.as_str(), "" | "auto" | "automatic") {
         return configured.to_owned();
     }
-    match model_registry::detect_language(model_path, samples) {
+    // Detect on the first few seconds only — language is obvious from a short
+    // prefix, and a shorter mel keeps the whisper encoder pass cheap.
+    const DETECT_PREFIX_SAMPLES: usize = 16_000 * 5;
+    let prefix = &samples[..samples.len().min(DETECT_PREFIX_SAMPLES)];
+    match model_registry::detect_language(model_path, prefix) {
         Ok(code) if is_indic_language(&code) => code,
         _ => "english".to_owned(),
     }
