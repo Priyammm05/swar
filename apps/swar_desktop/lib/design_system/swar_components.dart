@@ -247,30 +247,33 @@ final class SwarToggle extends StatelessWidget {
     return Semantics(
       toggled: value,
       container: true,
-      child: GestureDetector(
-        onTap: () => onChanged(!value),
-        behavior: HitTestBehavior.opaque,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 150),
-          curve: Curves.easeOut,
-          width: 44,
-          height: 26,
-          decoration: BoxDecoration(
-            color: value ? t.spruce : t.toggleOff,
-            borderRadius: BorderRadius.circular(SwarRadii.pill),
-          ),
-          child: AnimatedAlign(
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: GestureDetector(
+          onTap: () => onChanged(!value),
+          behavior: HitTestBehavior.opaque,
+          child: AnimatedContainer(
             duration: const Duration(milliseconds: 150),
             curve: Curves.easeOut,
-            alignment: value ? Alignment.centerRight : Alignment.centerLeft,
-            child: Padding(
-              padding: const EdgeInsets.all(3),
-              child: Container(
-                width: 20,
-                height: 20,
-                decoration: const BoxDecoration(
-                  color: Colors.white,
-                  shape: BoxShape.circle,
+            width: 44,
+            height: 26,
+            decoration: BoxDecoration(
+              color: value ? t.spruce : t.toggleOff,
+              borderRadius: BorderRadius.circular(SwarRadii.pill),
+            ),
+            child: AnimatedAlign(
+              duration: const Duration(milliseconds: 150),
+              curve: Curves.easeOut,
+              alignment: value ? Alignment.centerRight : Alignment.centerLeft,
+              child: Padding(
+                padding: const EdgeInsets.all(3),
+                child: Container(
+                  width: 20,
+                  height: 20,
+                  decoration: const BoxDecoration(
+                    color: Colors.white,
+                    shape: BoxShape.circle,
+                  ),
                 ),
               ),
             ),
@@ -439,17 +442,24 @@ final class _PressableBox extends StatelessWidget {
   Widget build(BuildContext context) {
     return Opacity(
       opacity: onPressed == null ? 0.6 : 1,
-      child: GestureDetector(
-        onTap: onPressed,
-        behavior: HitTestBehavior.opaque,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-          decoration: BoxDecoration(
-            color: background,
-            borderRadius: BorderRadius.circular(radius),
-            border: Border.all(color: border, width: 0.5),
+      child: MouseRegion(
+        // Disabled buttons keep the plain arrow: a pointing hand over something
+        // that cannot be pressed is a promise the control does not keep.
+        cursor: onPressed == null
+            ? SystemMouseCursors.basic
+            : SystemMouseCursors.click,
+        child: GestureDetector(
+          onTap: onPressed,
+          behavior: HitTestBehavior.opaque,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            decoration: BoxDecoration(
+              color: background,
+              borderRadius: BorderRadius.circular(radius),
+              border: Border.all(color: border, width: 0.5),
+            ),
+            child: child,
           ),
-          child: child,
         ),
       ),
     );
