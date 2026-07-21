@@ -192,6 +192,8 @@ struct ActiveCapture {
     preview_running: Arc<AtomicBool>,
     preview_exited: Arc<AtomicBool>,
     preview_worker: Option<thread::JoinHandle<()>>,
+    /// Segments already decoded while the speaker was still talking.
+    streaming: Arc<Mutex<StreamingTranscript>>,
     sink: StreamSink<DictationEvent>,
     lifecycle: DictationStateMachine,
 }
@@ -308,14 +310,15 @@ pub fn start_dictation_session(
     emit_transition(&sink, &session_id, recording, None);
     let preview_running = Arc::new(AtomicBool::new(config.enable_live_preview));
     let preview_exited = Arc::new(AtomicBool::new(false));
+    let streaming = Arc::new(Mutex::new(StreamingTranscript::default()));
     let preview_worker = if config.enable_live_preview {
-        match spawn_preview_worker(
+        match spawn_streaming_worker(
             session_id.clone(),
             config.model_path.clone(),
-            config.language.clone(),
             sink.clone(),
             preview_running.clone(),
             preview_exited.clone(),
+            streaming.clone(),
         ) {
             Ok(handle) => Some(handle),
             Err(_) => {
@@ -340,6 +343,7 @@ pub fn start_dictation_session(
         preview_running,
         preview_exited,
         preview_worker,
+        streaming,
         sink,
         lifecycle,
     });
@@ -396,7 +400,15 @@ fn finish_capture(capture: &mut ActiveCapture) -> Result<DictationCompletion, St
     }
 
     let processing_started = Instant::now();
-    let mono_16khz = resample::to_sample_rate(&captured, capture.sample_rate, 16_000);
+    // Whatever the streaming worker already settled is final. Decode only what
+    // it had not reached, which is what keeps the wait after the speaker stops
+    // roughly constant instead of proportional to the whole dictation.
+    let (settled_text, consumed) = capture
+        .streaming
+        .lock()
+        .map(|state| (state.joined(), state.consumed_samples.min(captured.len())))
+        .unwrap_or_else(|_| (String::new(), 0));
+    let mono_16khz = resample::to_sample_rate(&captured[consumed..], capture.sample_rate, 16_000);
     // The raw capture buffer holds up to several minutes of dictation PCM and is
     // not needed after resampling. Scrub it now rather than waiting for the
     // allocator to hand the pages to another process (privacy guarantee).
@@ -408,7 +420,9 @@ fn finish_capture(capture: &mut ActiveCapture) -> Result<DictationCompletion, St
     record_dictation_levels(&gain_metrics);
     record_dictation_stage("speech_detection");
     let speech = speech::retain_probable_speech(&mono_16khz, 16_000);
-    if speech.samples.is_empty() {
+    // An empty tail is only a failure when nothing settled either; the speaker
+    // may simply have stopped on a segment boundary.
+    if speech.samples.is_empty() && settled_text.trim().is_empty() {
         return Err(dictation_stage_error("speech_detection"));
     }
     transition_capture(
@@ -426,20 +440,16 @@ fn finish_capture(capture: &mut ActiveCapture) -> Result<DictationCompletion, St
     // twice as fast as whisper and without whisper's 30 s window seam. Whisper
     // remains only as the safety net for when the helper or its model is
     // missing or errors, so recognition never hard-fails.
-    let raw_text = match crate::asr_client::transcribe(&speech.samples, ASR_LANGUAGE) {
-        Ok(text) if transcript_contains_speech(&text) => text,
-        _ => {
-            // Bias whisper toward the user's own proper nouns at the source (§7).
-            let hotwords = personalization::hotword_prompt();
-            model_registry::transcribe(
-                &capture.config.model_path,
-                ASR_LANGUAGE,
-                &speech.samples,
-                &hotwords,
-            )
+    let tail_text = if speech.samples.is_empty() {
+        String::new()
+    } else {
+        transcribe_english(&speech.samples, &capture.config.model_path)
             .map_err(|_| dictation_stage_error("transcription"))?
-        }
     };
+    // Segments settled during recording are already final; only the tail was
+    // outstanding when the speaker stopped. This is what stops the wait growing
+    // with the length of the dictation.
+    let raw_text = join_transcript(&settled_text, &tail_text);
     if !transcript_contains_speech(&raw_text) {
         return Err(dictation_stage_error("transcription_empty"));
     }
@@ -713,52 +723,128 @@ fn take_capture(session_id: &str) -> Result<ActiveCapture, String> {
     Ok(capture)
 }
 
-fn spawn_preview_worker(
+/// Joins settled segments to the final tail with exactly one separating space.
+fn join_transcript(settled: &str, tail: &str) -> String {
+    let settled = settled.trim();
+    let tail = tail.trim();
+    match (settled.is_empty(), tail.is_empty()) {
+        (true, _) => tail.to_owned(),
+        (_, true) => settled.to_owned(),
+        _ => format!("{settled} {tail}"),
+    }
+}
+
+/// Transcribes 16 kHz speech with the primary engine, falling back to whisper.
+///
+/// Shared so a segment decoded mid-utterance and the tail decoded at the end go
+/// through exactly the same path; a difference between them would show up as a
+/// seam in the finished text.
+fn transcribe_english(samples: &[f32], whisper_model: &str) -> Result<String, String> {
+    match crate::asr_client::transcribe(samples, ASR_LANGUAGE) {
+        Ok(text) if transcript_contains_speech(&text) => Ok(text),
+        _ => {
+            // Bias whisper toward the user's own proper nouns at the source (§7).
+            let hotwords = personalization::hotword_prompt();
+            model_registry::transcribe(whisper_model, ASR_LANGUAGE, samples, &hotwords)
+        }
+    }
+}
+
+/// Text already transcribed while the speaker was still talking.
+///
+/// The wait after a dictation ends used to be the whole utterance decoding from
+/// scratch: 90 seconds of speech meant about 16 seconds of silence afterwards,
+/// and the once-a-second preview that ran during recording re-transcribed the
+/// entire buffer every time and threw all of it away. Decoding each settled
+/// segment as it completes means only the final segment is still outstanding
+/// when the speaker stops, so the wait stops growing with the length of what was
+/// said.
+#[derive(Default)]
+struct StreamingTranscript {
+    /// Samples, at the capture rate, already decoded into `segments`.
+    consumed_samples: usize,
+    /// Confirmed text in spoken order.
+    segments: Vec<String>,
+}
+
+impl StreamingTranscript {
+    fn joined(&self) -> String {
+        self.segments.join(" ")
+    }
+}
+
+/// Shortest span the streaming decoder will settle. Below this a segment carries
+/// too little context to decode well, and the pause search has nothing to work
+/// with.
+const STREAM_MINIMUM_SECONDS: usize = 10;
+
+/// Longest span it will hold before cutting at the quietest point available,
+/// whether or not the speaker paused. Kept under whisper's 30 s window so the
+/// fallback engine never has a seam to mishandle either.
+const STREAM_MAXIMUM_SECONDS: usize = 20;
+
+/// Decodes settled segments while the speaker is still talking.
+///
+/// Only whole segments ending at a pause are decoded, so the text is final
+/// rather than tentative and `finish` can reuse it verbatim.
+fn spawn_streaming_worker(
     session_id: String,
-    model_path: String,
-    language: String,
+    whisper_model: String,
     sink: StreamSink<DictationEvent>,
     running: Arc<AtomicBool>,
     exited: Arc<AtomicBool>,
+    transcript: Arc<Mutex<StreamingTranscript>>,
 ) -> Result<thread::JoinHandle<()>, String> {
     thread::Builder::new()
-        .name(format!("swar-preview-{session_id}"))
+        .name(format!("swar-stream-{session_id}"))
         .spawn(move || {
-            let mut elapsed = Duration::ZERO;
-            let mut previous = String::new();
             while running.load(Ordering::Acquire) {
-                thread::sleep(Duration::from_millis(100));
-                elapsed += Duration::from_millis(100);
-                if elapsed < Duration::from_millis(1_000) {
-                    continue;
-                }
-                elapsed = Duration::ZERO;
-                let Ok((samples, sample_rate)) = capture_engine::snapshot(&session_id) else {
+                thread::sleep(Duration::from_millis(250));
+                let consumed = transcript
+                    .lock()
+                    .map(|state| state.consumed_samples)
+                    .unwrap_or(0);
+                let Ok((pending, sample_rate)) =
+                    capture_engine::snapshot_from(&session_id, consumed)
+                else {
                     break;
                 };
-                if samples.len() < sample_rate as usize * 4 / 5 {
+                let rate = sample_rate as usize;
+                if pending.len() < STREAM_MINIMUM_SECONDS * rate {
                     continue;
                 }
-                let mono_16khz = resample::to_sample_rate(&samples, sample_rate, 16_000);
-                let Ok(partial) =
-                    model_registry::transcribe_preview(&model_path, &language, &mono_16khz)
-                else {
+                let Some(cut) = settled_span(&pending, sample_rate) else {
                     continue;
                 };
-                if partial.is_empty()
-                    || partial == previous
-                    || !transcript_contains_speech(&partial)
-                    || is_degenerate_preview(&partial)
-                {
-                    continue;
-                }
-                previous.clone_from(&partial);
-                // The decode above takes seconds, and the speaker may have
-                // stopped during it. Re-check before emitting: a preview that
-                // arrives after the session has left Recording describes a state
-                // that no longer exists.
+                let mono_16khz = resample::to_sample_rate(&pending[..cut], sample_rate, 16_000);
+                let speech = speech::retain_probable_speech(&mono_16khz, 16_000);
+                // A silent span still advances the cursor: it holds no words, and
+                // leaving it pending would make the segment grow without end.
+                let decoded = if speech.samples.is_empty() {
+                    String::new()
+                } else {
+                    transcribe_english(&speech.samples, &whisper_model).unwrap_or_default()
+                };
                 if !running.load(Ordering::Acquire) {
                     break;
+                }
+                let Ok(mut state) = transcript.lock() else {
+                    break;
+                };
+                // The cursor advances either way: a segment that decoded badly
+                // must not be retried forever, and leaving it pending would make
+                // the next segment grow without bound.
+                state.consumed_samples += cut;
+                // A settled segment is permanent, unlike the tentative preview
+                // this replaced, so a degenerate decode is dropped rather than
+                // written into the finished text.
+                if transcript_contains_speech(&decoded) && !is_degenerate_transcript(&decoded) {
+                    state.segments.push(decoded.trim().to_owned());
+                }
+                let confirmed = state.joined();
+                drop(state);
+                if confirmed.is_empty() {
+                    continue;
                 }
                 let _ = sink.add(DictationEvent {
                     session_id: session_id.clone(),
@@ -768,13 +854,52 @@ fn spawn_preview_worker(
                     timestamp_ms: monotonic_timestamp_ms(),
                     previous_state: DictationState::Recording.into(),
                     current_state: DictationState::Recording.into(),
-                    reason: "tentative local preview".to_owned(),
-                    partial_text: Some(partial),
+                    reason: "settled segment".to_owned(),
+                    partial_text: Some(confirmed),
                 });
             }
             exited.store(true, Ordering::Release);
         })
         .map_err(|error| error.to_string())
+}
+
+/// Where to end the next segment, or `None` to keep waiting for a pause.
+///
+/// Cutting on a stopwatch slices words in half; one such cut decoded as
+/// "[Reading the numbers]" instead of its content. So the target length only
+/// opens a search window, and the quietest frame inside it becomes the boundary.
+/// Past the maximum the quietest frame available is taken regardless, so an
+/// unbroken talker still gets segmented.
+fn settled_span(pending: &[f32], sample_rate: u32) -> Option<usize> {
+    let rate = sample_rate as usize;
+    let minimum = STREAM_MINIMUM_SECONDS * rate;
+    let maximum = STREAM_MAXIMUM_SECONDS * rate;
+    if pending.len() < minimum {
+        return None;
+    }
+    let search_end = pending.len().min(maximum);
+    let window = &pending[minimum..search_end];
+    if window.is_empty() {
+        return Some(search_end);
+    }
+    let frame = (rate / 50).max(1); // 20 ms, matching the speech gate
+    let quietest = window
+        .chunks(frame)
+        .enumerate()
+        .min_by(|left, right| frame_energy(left.1).total_cmp(&frame_energy(right.1)))
+        .map(|(index, _)| index * frame)?;
+    Some(minimum + quietest)
+}
+
+fn frame_energy(frame: &[f32]) -> f64 {
+    if frame.is_empty() {
+        return 0.0;
+    }
+    frame
+        .iter()
+        .map(|sample| f64::from(*sample) * f64::from(*sample))
+        .sum::<f64>()
+        / frame.len() as f64
 }
 
 fn stop_preview(capture: &mut ActiveCapture) {
@@ -907,7 +1032,7 @@ fn monotonic_timestamp_ms() -> u64 {
 /// is held to the same language, so nothing downstream has to guess a script.
 const ASR_LANGUAGE: &str = "english";
 
-/// Whether a live preview has collapsed into a repetition loop.
+/// Whether a decode has collapsed into a repetition loop.
 ///
 /// The preview re-decodes the whole growing buffer roughly once a second with
 /// greedy decoding, which is the classic way to make a decoder latch onto one
@@ -918,7 +1043,7 @@ const ASR_LANGUAGE: &str = "english";
 ///
 /// Deliberately strict about multi-word loops and lenient about single words:
 /// "no no no" is something a person says, "the cat the cat the cat" is not.
-fn is_degenerate_preview(value: &str) -> bool {
+fn is_degenerate_transcript(value: &str) -> bool {
     let words = value.split_whitespace().collect::<Vec<_>>();
     if words.len() < 6 {
         return false;
@@ -1020,26 +1145,28 @@ mod tests {
     #[test]
     fn a_looping_preview_is_suppressed() {
         // The real failure: greedy decoding latched onto one Devanagari token.
-        assert!(is_degenerate_preview("ये सब तो होगया और आगे आगे आगे आगे आगे आगे"));
-        assert!(is_degenerate_preview(
+        assert!(is_degenerate_transcript(
+            "ये सब तो होगया और आगे आगे आगे आगे आगे आगे"
+        ));
+        assert!(is_degenerate_transcript(
             "so what we should do the cat the cat the cat the cat"
         ));
     }
 
     #[test]
     fn ordinary_speech_survives_the_repetition_guard() {
-        assert!(!is_degenerate_preview("अरे और क्या बाकी है ये सब तो हो गया"));
-        assert!(!is_degenerate_preview(
+        assert!(!is_degenerate_transcript("अरे और क्या बाकी है ये सब तो हो गया"));
+        assert!(!is_degenerate_transcript(
             "no no no that is not what I meant at all"
         ));
         // Emphatic repetition is speech, not a decoder loop.
-        assert!(!is_degenerate_preview("बहुत बहुत धन्यवाद आपका दिन शुभ हो"));
+        assert!(!is_degenerate_transcript("बहुत बहुत धन्यवाद आपका दिन शुभ हो"));
     }
 
     #[test]
     fn a_short_preview_is_never_called_degenerate() {
         // Too little evidence to distinguish a loop from real emphasis.
-        assert!(!is_degenerate_preview("हाँ हाँ हाँ हाँ"));
+        assert!(!is_degenerate_transcript("हाँ हाँ हाँ हाँ"));
     }
 
     #[test]
@@ -1104,5 +1231,49 @@ mod tests {
             "a disarmed guard must leave the slot reserved"
         );
         abandon_coordinator_session("guard-c");
+    }
+    #[test]
+    fn settled_segments_and_the_tail_join_with_one_space() {
+        assert_eq!(join_transcript("hello there", "world"), "hello there world");
+        // The speaker stopped on a boundary, so there is no tail.
+        assert_eq!(join_transcript("hello there", "   "), "hello there");
+        // Nothing settled: a short dictation never reaches a segment.
+        assert_eq!(join_transcript("", "world"), "world");
+        assert_eq!(join_transcript("  ", "  "), "");
+    }
+
+    #[test]
+    fn a_segment_is_only_settled_once_it_is_long_enough() {
+        // Below the minimum there is nothing to settle and no pause to find.
+        let short = vec![0.1_f32; 16_000 * 5];
+        assert_eq!(settled_span(&short, 16_000), None);
+    }
+
+    #[test]
+    fn an_unbroken_talker_is_still_segmented_at_the_ceiling() {
+        // Constant energy, so no pause exists anywhere. The span must still be
+        // cut, or the segment would grow until the dictation ended and the whole
+        // point of streaming would be lost.
+        let relentless = vec![0.2_f32; 16_000 * 40];
+        let cut = settled_span(&relentless, 16_000).expect("a cut is forced");
+        assert!(cut >= STREAM_MINIMUM_SECONDS * 16_000);
+        assert!(cut <= STREAM_MAXIMUM_SECONDS * 16_000);
+    }
+
+    #[test]
+    fn the_cut_lands_on_the_pause_not_the_stopwatch() {
+        // Speech throughout, with a silent gap at 14 s — inside the search window
+        // that opens at the 10 s target.
+        let mut samples = vec![0.0_f32; 16_000 * 25];
+        for (index, sample) in samples.iter_mut().enumerate() {
+            *sample = if index % 2 == 0 { 0.25 } else { -0.25 };
+        }
+        let gap = 16_000 * 14;
+        samples[gap..gap + 16_000 / 2].fill(0.0);
+        let cut = settled_span(&samples, 16_000).expect("a cut exists");
+        assert!(
+            cut.abs_diff(gap) <= 16_000,
+            "cut at {cut} is not near the pause at {gap}"
+        );
     }
 }

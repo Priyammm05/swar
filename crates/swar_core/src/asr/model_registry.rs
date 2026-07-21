@@ -18,7 +18,6 @@ static MODEL_REGISTRY: LazyLock<ModelRegistry> = LazyLock::new(ModelRegistry::sp
 // can never hang the caller (and, through it, the reserved coordinator) forever.
 const MODEL_LOAD_TIMEOUT: Duration = Duration::from_secs(120);
 const FINAL_DECODE_TIMEOUT: Duration = Duration::from_secs(300);
-const PREVIEW_DECODE_TIMEOUT: Duration = Duration::from_secs(60);
 const UNLOAD_TIMEOUT: Duration = Duration::from_secs(30);
 
 // Upper bound handed to whisper.cpp (10 minutes at 16 kHz). Capture already
@@ -169,29 +168,6 @@ impl ModelRegistry {
         await_worker_response(&result, FINAL_DECODE_TIMEOUT, "transcribing")?
     }
 
-    fn transcribe_preview(
-        &self,
-        model_path: &str,
-        language: &str,
-        samples: &[f32],
-    ) -> Result<String, String> {
-        ensure_model_file(model_path)?;
-        let (response, result) = mpsc::channel();
-        self.commands
-            .send(ModelCommand::Transcribe {
-                model_path: model_path.to_owned(),
-                language: language.to_owned(),
-                samples: samples.to_vec(),
-                // Live preview stays unbiased and fast; hotwords apply to the
-                // final decode only.
-                hotwords: String::new(),
-                preview: true,
-                response,
-            })
-            .map_err(|_| "the ASR worker is unavailable".to_owned())?;
-        await_worker_response(&result, PREVIEW_DECODE_TIMEOUT, "generating a preview")?
-    }
-
     fn unload(&self) -> Result<(), String> {
         let (response, result) = mpsc::channel();
         self.commands
@@ -227,14 +203,6 @@ pub(crate) fn transcribe(
     hotwords: &str,
 ) -> Result<String, String> {
     MODEL_REGISTRY.transcribe(model_path, language, samples, hotwords)
-}
-
-pub(crate) fn transcribe_preview(
-    model_path: &str,
-    language: &str,
-    samples: &[f32],
-) -> Result<String, String> {
-    MODEL_REGISTRY.transcribe_preview(model_path, language, samples)
 }
 
 pub(crate) fn unload() -> Result<(), String> {

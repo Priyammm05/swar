@@ -144,7 +144,9 @@ impl CaptureAccumulator {
         self.finish(session_id).map(|_| ())
     }
 
-    fn snapshot(&self, session_id: &str) -> Result<Vec<f32>, String> {
+    /// Samples recorded after `offset`, so a caller that has already consumed the
+    /// earlier part of the utterance does not copy or re-read it.
+    fn snapshot_from(&self, session_id: &str, offset: usize) -> Result<Vec<f32>, String> {
         let active = self
             .active
             .as_ref()
@@ -152,7 +154,7 @@ impl CaptureAccumulator {
         if active.session_id != session_id {
             return Err("the requested microphone capture is not active".to_owned());
         }
-        Ok(active.samples.clone())
+        Ok(active.samples.get(offset..).unwrap_or(&[]).to_vec())
     }
 }
 
@@ -355,7 +357,12 @@ pub(crate) fn cancel_capture(session_id: &str) -> Result<(), String> {
     result
 }
 
-pub(crate) fn snapshot(session_id: &str) -> Result<(Vec<f32>, u32), String> {
+/// Audio recorded after `offset`, with the capture sample rate.
+///
+/// The streaming decoder uses this to read only what it has not already
+/// transcribed. Reading the whole buffer each time made every pass redo all the
+/// work of the previous one, and none of it was reused for the final transcript.
+pub(crate) fn snapshot_from(session_id: &str, offset: usize) -> Result<(Vec<f32>, u32), String> {
     let engine = AUDIO_ENGINE
         .lock()
         .map_err(|_| "audio engine lock poisoned".to_owned())?;
@@ -366,7 +373,7 @@ pub(crate) fn snapshot(session_id: &str) -> Result<(Vec<f32>, u32), String> {
         .accumulator
         .lock()
         .map_err(|_| "audio accumulator lock poisoned".to_owned())?
-        .snapshot(session_id)?;
+        .snapshot_from(session_id, offset)?;
     Ok((samples, engine.sample_rate))
 }
 
