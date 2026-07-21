@@ -219,6 +219,20 @@ final class _Feed extends StatelessWidget {
     final sections = <Widget>[];
     for (var g = 0; g < groups.length; g++) {
       final group = groups[g];
+      final isNewest = g == 0;
+      // The feed comes back newest first, so every day except the oldest one
+      // loaded is complete: its rows cannot be split across a page boundary.
+      // Only the oldest may still have records waiting in the database.
+      final isOldestLoaded = g == groups.length - 1;
+
+      final revealed = viewModel.revealedCountFor(
+        group.key,
+        isNewest: isNewest,
+      );
+      final visible = group.entries.take(revealed).toList(growable: false);
+      final hiddenHere = group.entries.length - visible.length;
+      final mayHaveMoreInDatabase = isOldestLoaded && viewModel.hasMore;
+
       if (g > 0) {
         sections.add(
           _SectionLabel(label: group.label, count: group.entries.length),
@@ -226,14 +240,23 @@ final class _Feed extends StatelessWidget {
       }
       sections.add(
         _DayCard(
-          isFirst: g == 0,
-          entries: group.entries,
+          isFirst: isNewest,
+          dayKey: group.key,
+          entries: visible,
           learningOptedIn: learningOptedIn,
-          // Pagination is global; the control lives inside the first (Today) card.
-          showMore: g == 0 && viewModel.hasMore,
-          remaining: viewModel.totalCount - viewModel.records.length,
+          showMore: hiddenHere > 0 || mayHaveMoreInDatabase,
+          remaining: hiddenHere > 0
+              ? hiddenHere
+              : viewModel.totalCount - viewModel.records.length,
           loadingMore: viewModel.isLoadingMore,
-          onLoadMore: viewModel.loadMore,
+          onLoadMore: () {
+            viewModel.revealMoreInDay(group.key, isNewest: isNewest);
+            // Everything loaded for this day is already on screen, so the next
+            // records have to come out of the database before they can show.
+            if (hiddenHere <= 0 && mayHaveMoreInDatabase) {
+              viewModel.loadMore();
+            }
+          },
           onCorrect: (record, value) => viewModel.correct(
             record,
             value,
@@ -256,7 +279,15 @@ final class _Feed extends StatelessWidget {
 
 @immutable
 final class _DayGroup {
-  const _DayGroup({required this.label, required this.entries});
+  const _DayGroup({
+    required this.key,
+    required this.label,
+    required this.entries,
+  });
+
+  /// The calendar day, as an ISO date. Used to remember how far this day has
+  /// been expanded. The label cannot serve: "12 Jul" repeats every year.
+  final String key;
   final String label;
   final List<_IndexedRecord> entries;
 }
@@ -272,24 +303,27 @@ List<_DayGroup> _groupByDay(List<DictationRecord> records) {
   final now = DateTime.now();
   final today = DateTime(now.year, now.month, now.day);
   final groups = <String, List<_IndexedRecord>>{};
+  final labels = <String, String>{};
   final order = <String>[];
   for (var i = 0; i < records.length; i++) {
     final record = records[i];
     final created = record.createdAt.toLocal();
     final day = DateTime(created.year, created.month, created.day);
     final diff = today.difference(day).inDays;
-    final label = switch (diff) {
+    final key = '${day.year}-${day.month}-${day.day}';
+    labels[key] = switch (diff) {
       0 => 'Today',
       1 => 'Yesterday',
       _ => _formatDay(day),
     };
-    (groups[label] ??= (
-      order..add(label),
+    (groups[key] ??= (
+      order..add(key),
       <_IndexedRecord>[],
     ).$2).add(_IndexedRecord(i, record));
   }
   return [
-    for (final label in order) _DayGroup(label: label, entries: groups[label]!),
+    for (final key in order)
+      _DayGroup(key: key, label: labels[key]!, entries: groups[key]!),
   ];
 }
 
@@ -345,6 +379,7 @@ final class _SectionLabel extends StatelessWidget {
 final class _DayCard extends StatelessWidget {
   const _DayCard({
     required this.isFirst,
+    required this.dayKey,
     required this.entries,
     required this.learningOptedIn,
     required this.showMore,
@@ -355,6 +390,7 @@ final class _DayCard extends StatelessWidget {
   });
 
   final bool isFirst;
+  final String dayKey;
   final List<_IndexedRecord> entries;
   final bool learningOptedIn;
   final bool showMore;
@@ -381,6 +417,12 @@ final class _DayCard extends StatelessWidget {
           ],
           if (showMore)
             _ShowMore(
+              // Every day carries its own control now, so the key has to name
+              // the day. The newest day keeps the bare key as well, because
+              // that is the one the user journey reaches for.
+              key: isFirst
+                  ? const Key('dictation-show-more')
+                  : Key('dictation-show-more-$dayKey'),
               remaining: remaining,
               loading: loadingMore,
               onPressed: onLoadMore,
@@ -396,6 +438,7 @@ final class _ShowMore extends StatelessWidget {
     required this.remaining,
     required this.loading,
     required this.onPressed,
+    super.key,
   });
 
   final int remaining;
@@ -409,7 +452,6 @@ final class _ShowMore extends StatelessWidget {
       children: [
         Container(height: 0.5, color: t.border),
         InkWell(
-          key: const Key('dictation-show-more'),
           onTap: loading ? null : onPressed,
           child: SizedBox(
             height: 36,
@@ -486,7 +528,10 @@ final class _EntryRowState extends State<_EntryRow> {
             ),
             const SizedBox(width: 16),
             Expanded(
-              child: Text(
+              // Selectable, so the transcript can be copied out of history and
+              // so the pointer becomes a text cursor over it. A plain Text left
+              // an arrow sitting over a paragraph nobody could select.
+              child: SelectableText(
                 record.finalText,
                 style: SwarType.body.copyWith(color: t.ink),
               ),

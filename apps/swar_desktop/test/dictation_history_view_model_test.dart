@@ -83,4 +83,24 @@ void main() {
     );
     expect(viewModel.records, hasLength(1));
   });
+
+  test('each day tracks its own reveal count, newest starting larger', () {
+    final viewModel = DictationHistoryViewModel(
+      repository: FakeDictationHistoryRepository(totalRecordCount: 0),
+    );
+    addTearDown(viewModel.dispose);
+
+    // The day at the top of the feed is the one being read.
+    expect(viewModel.revealedCountFor('2026-7-22', isNewest: true), 50);
+    expect(viewModel.revealedCountFor('2026-7-21', isNewest: false), 20);
+
+    // Expanding one day must not move any other.
+    viewModel.revealMoreInDay('2026-7-21', isNewest: false);
+    expect(viewModel.revealedCountFor('2026-7-21', isNewest: false), 70);
+    expect(viewModel.revealedCountFor('2026-7-22', isNewest: true), 50);
+    expect(viewModel.revealedCountFor('2026-7-20', isNewest: false), 20);
+
+    viewModel.revealMoreInDay('2026-7-21', isNewest: false);
+    expect(viewModel.revealedCountFor('2026-7-21', isNewest: false), 120);
+  });
 }
