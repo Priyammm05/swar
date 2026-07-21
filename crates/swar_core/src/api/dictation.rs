@@ -901,8 +901,27 @@ fn resolve_asr_language(configured: &str, model_path: &str, samples: &[f32]) -> 
     const DETECT_PREFIX_SAMPLES: usize = 16_000 * 5;
     let prefix = &samples[..samples.len().min(DETECT_PREFIX_SAMPLES)];
     match model_registry::detect_language(model_path, prefix) {
-        Ok(code) if is_indic_language(&code) => code,
-        _ => "english".to_owned(),
+        Ok(code) => {
+            let normalized = normalized_auto_language(&code);
+            if is_indic_language(&normalized) {
+                normalized
+            } else {
+                "english".to_owned()
+            }
+        }
+        Err(_) => "english".to_owned(),
+    }
+}
+
+/// Hindi and Urdu are the same spoken language (Hindustani) with different
+/// scripts, and whisper routinely reports `ur` (or Arabic/Persian) for Hindi
+/// speech. Auto must not silently switch the user into Urdu script because of a
+/// detector wobble, so Hindustani always resolves to Hindi/Devanagari. A user who
+/// genuinely wants Urdu selects it explicitly, which skips detection entirely.
+fn normalized_auto_language(code: &str) -> String {
+    match code {
+        "ur" | "ar" | "fa" => "hi".to_owned(),
+        other => other.to_owned(),
     }
 }
 
@@ -966,6 +985,31 @@ mod tests {
     fn speech_markers_filter_known_blank_tokens() {
         assert!(!transcript_contains_speech("[BLANK_AUDIO]"));
         assert!(transcript_contains_speech("hello"));
+    }
+
+    #[test]
+    fn auto_keeps_hindustani_in_devanagari_not_urdu() {
+        // Regression: whisper reports `ur` (and sometimes ar/fa) for ordinary
+        // Hindi/Hinglish speech, which routed dictation to IndicConformer's Urdu
+        // head and inserted Urdu script. Auto must resolve all of these to Hindi.
+        for detected in ["ur", "ar", "fa"] {
+            assert_eq!(normalized_auto_language(detected), "hi", "{detected}");
+            assert!(is_indic_language(&normalized_auto_language(detected)));
+        }
+        // Genuine Indian languages are untouched, and English stays non-Indic.
+        for detected in ["hi", "ta", "te", "bn", "kn", "ml", "mr", "gu", "pa", "or"] {
+            assert_eq!(normalized_auto_language(detected), detected);
+        }
+        assert!(!is_indic_language(&normalized_auto_language("en")));
+    }
+
+    #[test]
+    fn explicit_modes_skip_detection_entirely() {
+        // Explicit language choices must pass through untouched — only Auto
+        // detects, so choosing Urdu really does mean Urdu.
+        for mode in ["english", "hindi", "hinglish", "urdu", "tamil"] {
+            assert_eq!(resolve_asr_language(mode, "", &[]), mode);
+        }
     }
 
     #[test]
