@@ -25,11 +25,13 @@ export function Nav() {
         transition={{ duration: 0.25 }}
         className="mx-auto flex max-w-5xl items-center justify-between rounded-full border px-4 py-2.5 backdrop-blur-md sm:px-5"
       >
+        {/* Set larger than the rest of the bar on purpose: the mark is eleven
+            fine strokes and stops resolving below about thirty pixels. */}
         <a
           href="#top"
-          className="font-display text-xl tracking-tight text-ink sm:text-2xl"
+          className="font-display text-2xl tracking-tight text-ink sm:text-[1.75rem]"
         >
-          <SwarWordmark />
+          <SwarWordmark markClassName="h-[1.35em] w-[1.35em]" />
         </a>
         <div className="flex items-center gap-1.5 sm:gap-2">
           <a

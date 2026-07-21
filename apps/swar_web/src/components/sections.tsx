@@ -179,13 +179,16 @@ export function Supported() {
     ["English", "The only language Swar writes."],
     ["macOS", "Apple silicon and Intel."],
     ["Any app", "Native, browser, or Electron."],
-    ["Three styles", "Verbatim, tidied, or rewritten for intent."],
     ["Your vocabulary", "Names and jargon you add, spelled right."],
     ["Fully offline", "Works on a plane, in a basement, on a locked-down laptop."],
   ];
 
   const notYet = [
     ["Hindi and Hinglish", "Removed for now. It was not good enough to ship."],
+    [
+      "Choosing how much it edits",
+      "The Raw, Clean, and Intent switch is there, but all three currently produce the same text.",
+    ],
     ["Windows and Linux", "Not started."],
     ["iPhone and Android", "Not started."],
     ["Sync between devices", "There is no server, so there is nothing to sync through."],
@@ -286,7 +289,7 @@ export function Cta() {
               Try the demo
             </a>
             <p className="font-mono text-[11px] uppercase tracking-widest text-ink-faint">
-              macOS · English · always free
+              macOS · English · always free · MIT licence
             </p>
           </div>
         </Reveal>
@@ -314,7 +317,7 @@ export function Footer() {
             Dictation that runs on your own machine.
           </p>
           <p className="font-mono text-[11px] uppercase tracking-widest text-ink-faint">
-            macOS · English · always free
+            macOS · English · always free · MIT licence
           </p>
         </div>
       </div>

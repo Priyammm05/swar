@@ -73,7 +73,7 @@ export function Hero() {
             </span>
           </a>
           <p className="font-mono text-[11px] uppercase tracking-widest text-ink-faint">
-            macOS · English · always free
+            macOS · English · always free · MIT licence
           </p>
         </motion.div>
       </div>

@@ -5,7 +5,7 @@ resolver = "2"
 [workspace.package]
 version = "0.1.0"
 edition = "2021"
-license = "Proprietary"
+license = "MIT"
 
 # Vendored llama-cpp-2 with one change: its llama-cpp-sys-2 dependency is pinned
 # to default-features = false. Upstream 0.1.151 pulls llama-cpp-sys-2's default
