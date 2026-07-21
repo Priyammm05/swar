@@ -42,7 +42,8 @@ fn normalize_whitespace(value: &str) -> String {
 fn capitalize_sentences(value: &str) -> String {
     let mut result = String::with_capacity(value.len());
     let mut capitalize_next = true;
-    for character in value.chars() {
+    let mut characters = value.chars().peekable();
+    while let Some(character) = characters.next() {
         if capitalize_next && character.is_alphabetic() {
             result.extend(character.to_uppercase());
             capitalize_next = false;
@@ -50,7 +51,12 @@ fn capitalize_sentences(value: &str) -> String {
             result.push(character);
         }
         if matches!(character, '.' | '?' | '!' | '\n') {
-            capitalize_next = true;
+            // A full stop only ends a sentence when something separates it from
+            // the next word. Without that check this rewrote "hello@swar.dev"
+            // as "hello@swar.Dev", and did the same to every domain, file name,
+            // and version number a person dictated.
+            capitalize_next =
+                character == '\n' || characters.peek().is_none_or(char::is_ascii_whitespace);
         }
     }
     result
@@ -83,6 +89,23 @@ mod tests {
         assert_eq!(
             clean_transcript("haan theek hai comma kal milte hain", "clean"),
             "Haan theek hai, kal milte hain"
+        );
+    }
+
+    #[test]
+    fn a_dot_inside_a_word_does_not_start_a_sentence() {
+        assert_eq!(
+            clean_transcript("email hello@swar.dev to me", "clean"),
+            "Email hello@swar.dev to me"
+        );
+        assert_eq!(
+            clean_transcript("open notes.txt then close it", "clean"),
+            "Open notes.txt then close it"
+        );
+        // A real sentence boundary must still capitalise.
+        assert_eq!(
+            clean_transcript("that is done full stop next one starts", "clean"),
+            "That is done. Next one starts"
         );
     }
 
