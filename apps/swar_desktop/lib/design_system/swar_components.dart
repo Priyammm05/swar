@@ -147,14 +147,12 @@ final class SwarSegmented<T> extends StatelessWidget {
     required this.segments,
     required this.selected,
     required this.onChanged,
-    this.showCheckOnSelected = false,
     super.key,
   });
 
   final List<SwarSegment<T>> segments;
   final T selected;
   final ValueChanged<T> onChanged;
-  final bool showCheckOnSelected;
 
   @override
   Widget build(BuildContext context) {
@@ -173,7 +171,6 @@ final class SwarSegmented<T> extends StatelessWidget {
             _Segment(
               label: segment.label,
               isSelected: segment.value == selected,
-              showCheck: showCheckOnSelected,
               onTap: () => onChanged(segment.value),
             ),
         ],
@@ -182,46 +179,55 @@ final class SwarSegmented<T> extends StatelessWidget {
   }
 }
 
+/// One segment.
+///
+/// Nothing here is allowed to change size with selection. The earlier version
+/// showed a tick in front of the selected label, which added 19 logical pixels
+/// to whichever segment was chosen. Because the row sizes to its children, that
+/// resized the whole control and shunted every other label sideways on each
+/// tap. The colour faded over 150 ms while the geometry jumped in one frame,
+/// which is what read as flicker. The tinted pill already says which segment is
+/// selected, so the tick is gone and the layout is now fixed.
 final class _Segment extends StatelessWidget {
   const _Segment({
     required this.label,
     required this.isSelected,
-    required this.showCheck,
     required this.onTap,
   });
 
+  static const _transition = Duration(milliseconds: 160);
+  static const _curve = Curves.easeOutCubic;
+
   final String label;
   final bool isSelected;
-  final bool showCheck;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final t = context.tokens;
-    return GestureDetector(
-      onTap: onTap,
-      behavior: HitTestBehavior.opaque,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
-        padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 6),
-        decoration: BoxDecoration(
-          color: isSelected ? t.spruceTint2 : Colors.transparent,
-          borderRadius: BorderRadius.circular(SwarRadii.segmentItem),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (showCheck && isSelected) ...[
-              Icon(Icons.check_rounded, size: 14, color: t.spruce),
-              const SizedBox(width: 5),
-            ],
-            Text(
-              label,
-              style: SwarType.nav.copyWith(
-                color: isSelected ? t.spruce : t.inkSecondary,
-              ),
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        onTap: onTap,
+        behavior: HitTestBehavior.opaque,
+        child: AnimatedContainer(
+          duration: _transition,
+          curve: _curve,
+          padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 6),
+          decoration: BoxDecoration(
+            color: isSelected ? t.spruceTint2 : Colors.transparent,
+            borderRadius: BorderRadius.circular(SwarRadii.segmentItem),
+          ),
+          // The label's colour is animated on the same curve as the pill.
+          // Left as a plain Text it snapped a frame ahead of the background.
+          child: AnimatedDefaultTextStyle(
+            duration: _transition,
+            curve: _curve,
+            style: SwarType.nav.copyWith(
+              color: isSelected ? t.spruce : t.inkSecondary,
             ),
-          ],
+            child: Text(label),
+          ),
         ),
       ),
     );

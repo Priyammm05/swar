@@ -258,7 +258,6 @@ final class _GeneralSettings extends StatelessWidget {
                   'Choose how closely Swar shapes the words you speak.',
               trailing: SwarSegmented<SwarWritingMode>(
                 key: const Key('writing-mode-setting'),
-                showCheckOnSelected: true,
                 selected: settings.writingMode,
                 onChanged: viewModel.setWritingMode,
                 segments: const [
