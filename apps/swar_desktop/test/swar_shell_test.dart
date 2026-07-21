@@ -185,11 +185,14 @@ void main() {
     await tester.tap(find.byKey(const Key('settings-system-nav')));
     await tester.pumpAndSettle();
 
-    final launchToggle = find.descendant(
-      of: find.byKey(const Key('launch-at-login-setting')),
+    // Any persisted toggle proves the point; this one is used because it is
+    // one of the few that actually changes behaviour.
+    final warmToggle = find.descendant(
+      of: find.byKey(const Key('keep-models-warm-setting')),
       matching: find.byType(SwarToggle),
     );
-    await tester.tap(launchToggle);
+    final before = tester.widget<SwarToggle>(warmToggle).value;
+    await tester.tap(warmToggle);
     await tester.pump();
 
     // Leave Settings and return; the routed branch keeps its state, so the
@@ -199,7 +202,7 @@ void main() {
     await tester.tap(find.byKey(const Key('top-settings-nav')));
     await tester.pumpAndSettle();
 
-    expect(tester.widget<SwarToggle>(launchToggle).value, isTrue);
+    expect(tester.widget<SwarToggle>(warmToggle).value, !before);
   });
 
   testWidgets('settings test dictation explains the missing local model', (

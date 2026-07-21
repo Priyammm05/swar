@@ -415,12 +415,6 @@ final class _SystemSettings extends StatelessWidget {
         const _GroupLabel('App settings'),
         _GroupCard(
           children: [
-            _ToggleRow(
-              rowKey: const Key('launch-at-login-setting'),
-              title: 'Launch app at login',
-              value: settings.launchAtLogin,
-              onChanged: (value) => viewModel.setLaunchAtLogin(enabled: value),
-            ),
             _SettingRow(
               title: 'Export learning examples',
               description:
@@ -435,31 +429,11 @@ final class _SystemSettings extends StatelessWidget {
               ),
             ),
             _ToggleRow(
-              rowKey: const Key('show-swar-bar-setting'),
-              title: 'Show Swar bar at all times',
-              value: settings.showSwarBar,
-              onChanged: (value) => viewModel.setShowSwarBar(enabled: value),
-            ),
-            _ToggleRow(
-              rowKey: const Key('show-in-dock-setting'),
-              title: 'Show app in Dock or taskbar',
-              value: settings.showInDock,
-              onChanged: (value) => viewModel.setShowInDock(enabled: value),
-            ),
-            _ToggleRow(
               rowKey: const Key('keep-models-warm-setting'),
               title: 'Keep voice model ready',
               description: 'Uses more memory, but starts dictation faster.',
               value: settings.keepModelsWarm,
               onChanged: (value) => viewModel.setKeepModelsWarm(enabled: value),
-            ),
-            _ToggleRow(
-              rowKey: const Key('learn-from-edits-setting'),
-              title: 'Learn from my edits',
-              description:
-                  'Learn vocabulary and writing preferences locally on this device.',
-              value: settings.learnFromEdits,
-              onChanged: (value) => viewModel.setLearnFromEdits(enabled: value),
             ),
             _SettingRow(
               title: 'Keep history for',
@@ -473,54 +447,6 @@ final class _SystemSettings extends StatelessWidget {
                 items: const [30, 90, 180, 365],
                 onChanged: viewModel.setHistoryRetentionDays,
               ),
-            ),
-            _SettingRow(
-              title: 'Private applications',
-              description: settings.excludedApplications.isEmpty
-                  ? 'No foreground application names are excluded.'
-                  : '${settings.excludedApplications.length} applications excluded from context.',
-              trailing: _ExcludedApplicationsButton(viewModel: viewModel),
-            ),
-          ],
-        ),
-        const _GroupLabel('Sound'),
-        _GroupCard(
-          children: [
-            _ToggleRow(
-              rowKey: const Key('dictation-sounds-setting'),
-              title: 'Dictation and notification sounds',
-              value: settings.dictationSounds,
-              onChanged: (value) =>
-                  viewModel.setDictationSounds(enabled: value),
-            ),
-            _ToggleRow(
-              rowKey: const Key('mute-music-setting'),
-              title: 'Mute music while dictating',
-              value: settings.muteMusic,
-              onChanged: (value) => viewModel.setMuteMusic(enabled: value),
-            ),
-          ],
-        ),
-        const _GroupLabel('Notifications'),
-        _GroupCard(
-          children: [
-            _ToggleRow(
-              title: 'Suggestions',
-              description: 'Tips for improving how you use Swar.',
-              value: settings.suggestions,
-              onChanged: (value) => viewModel.setSuggestions(enabled: value),
-            ),
-            _ToggleRow(
-              title: 'Announcements',
-              description: 'New features or capabilities.',
-              value: settings.announcements,
-              onChanged: (value) => viewModel.setAnnouncements(enabled: value),
-            ),
-            _ToggleRow(
-              title: 'Milestones',
-              description: 'Word-count milestones and streaks.',
-              value: settings.milestones,
-              onChanged: (value) => viewModel.setMilestones(enabled: value),
             ),
           ],
         ),
@@ -731,58 +657,6 @@ final class _MenuDropdown<T> extends StatelessWidget {
 }
 
 // --- secondary surfaces (dialogs) — functional, restyled triggers ---
-
-final class _ExcludedApplicationsButton extends StatelessWidget {
-  const _ExcludedApplicationsButton({required this.viewModel});
-
-  final SettingsViewModel viewModel;
-
-  @override
-  Widget build(BuildContext context) {
-    return SwarGhostButton(
-      key: const Key('excluded-applications-button'),
-      label: 'Edit',
-      onPressed: () async {
-        final controller = TextEditingController(
-          text: viewModel.settings.excludedApplications.join(', '),
-        );
-        final result = await showDialog<String>(
-          context: context,
-          builder: (context) => AlertDialog(
-            title: const Text('Private applications'),
-            content: SizedBox(
-              width: 440,
-              child: TextField(
-                key: const Key('excluded-applications-field'),
-                controller: controller,
-                autofocus: true,
-                decoration: const InputDecoration(
-                  labelText: 'Application names, separated by commas',
-                  hintText: '1Password, Banking, Password Manager',
-                ),
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: const Text('Cancel'),
-              ),
-              FilledButton(
-                key: const Key('save-excluded-applications'),
-                onPressed: () => Navigator.of(context).pop(controller.text),
-                child: const Text('Save'),
-              ),
-            ],
-          ),
-        );
-        controller.dispose();
-        if (result != null) {
-          viewModel.setExcludedApplications(result.split(','));
-        }
-      },
-    );
-  }
-}
 
 final class _VocabularyButton extends StatelessWidget {
   const _VocabularyButton({required this.viewModel});
