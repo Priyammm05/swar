@@ -1,18 +1,30 @@
 // apps/swar_desktop/lib/insights/presentation/insights_page.dart
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:swar_desktop/design_system/swar_components.dart';
 import 'package:swar_desktop/design_system/swar_tokens.dart';
 import 'package:swar_desktop/design_system/swar_typography.dart';
+import 'package:swar_desktop/dictation/domain/dictation_completion_signal.dart';
 import 'package:swar_desktop/insights/domain/insights_repository.dart';
 import 'package:swar_desktop/insights/domain/insights_snapshot.dart';
 import 'package:swar_desktop/insights/presentation/insights_view_model.dart';
 
 /// Insights — locally computed usage, one calm view (spec §7). Presentation Layer.
 final class InsightsPage extends StatefulWidget {
-  const InsightsPage({required this.repository, super.key});
+  const InsightsPage({
+    required this.repository,
+    required this.completionSignal,
+    super.key,
+  });
 
   final InsightsRepository repository;
+
+  /// Tells the page a dictation has landed. The shell keeps all three pages
+  /// alive in an indexed stack, so without this Insights would show whatever
+  /// the database held at launch for the rest of the session.
+  final DictationCompletionSignal completionSignal;
 
   @override
   State<InsightsPage> createState() => _InsightsPageState();
@@ -20,17 +32,39 @@ final class InsightsPage extends StatefulWidget {
 
 final class _InsightsPageState extends State<InsightsPage> {
   late final InsightsViewModel _viewModel;
+  late int _completionRevision;
 
   @override
   void initState() {
     super.initState();
     _viewModel = InsightsViewModel(repository: widget.repository)..load();
+    _completionRevision = widget.completionSignal.completionRevision;
+    widget.completionSignal.addListener(_handleDictationCompleted);
+  }
+
+  @override
+  void didUpdateWidget(covariant InsightsPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.completionSignal == widget.completionSignal) return;
+    oldWidget.completionSignal.removeListener(_handleDictationCompleted);
+    _completionRevision = widget.completionSignal.completionRevision;
+    widget.completionSignal.addListener(_handleDictationCompleted);
   }
 
   @override
   void dispose() {
+    widget.completionSignal.removeListener(_handleDictationCompleted);
     _viewModel.dispose();
     super.dispose();
+  }
+
+  void _handleDictationCompleted() {
+    // The session notifies on every audio level and state change. Only a bump
+    // in the revision means new data exists to count.
+    final revision = widget.completionSignal.completionRevision;
+    if (revision == _completionRevision) return;
+    _completionRevision = revision;
+    unawaited(_viewModel.refresh());
   }
 
   @override

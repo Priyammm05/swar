@@ -1,9 +1,11 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:swar_desktop/dictation/domain/dictation_completion_signal.dart';
 import 'package:swar_desktop/dictation/domain/dictation_engine_gateway.dart';
 
-final class DictationSessionViewModel extends ChangeNotifier {
+final class DictationSessionViewModel extends ChangeNotifier
+    implements DictationCompletionSignal {
   DictationSessionViewModel({required DictationEngineGateway gateway})
     : _gateway = gateway;
 
@@ -35,6 +37,7 @@ final class DictationSessionViewModel extends ChangeNotifier {
 
   /// Percent complete of a model download, or -1 when none is running.
   int get downloadPercent => _gateway.modelDownloadPercent();
+  @override
   int get completionRevision => _completionRevision;
   String? get partialText => _partialText;
 

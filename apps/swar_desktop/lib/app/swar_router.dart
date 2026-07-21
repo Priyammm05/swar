@@ -38,8 +38,10 @@ GoRouter createSwarRouter({
             routes: [
               GoRoute(
                 path: SwarRoutes.insights,
-                builder: (context, state) =>
-                    InsightsPage(repository: insightsRepository),
+                builder: (context, state) => InsightsPage(
+                  repository: insightsRepository,
+                  completionSignal: dictationSessionViewModel,
+                ),
               ),
             ],
           ),

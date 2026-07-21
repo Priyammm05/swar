@@ -28,4 +28,22 @@ final class InsightsViewModel extends ChangeNotifier {
       notifyListeners();
     }
   }
+
+  /// Reloads without announcing a loading state.
+  ///
+  /// Used when a dictation finishes while Insights is already on screen: the
+  /// numbers should change in place. Going through [load] would blank the page
+  /// the person is reading, and a failed background reload keeps the figures
+  /// already shown rather than replacing them with an error.
+  Future<void> refresh() async {
+    final SwarInsightsSnapshot snapshot;
+    try {
+      snapshot = await _repository.loadSnapshot();
+    } catch (_) {
+      return;
+    }
+    _snapshot = snapshot;
+    _errorMessage = null;
+    notifyListeners();
+  }
 }
