@@ -26,6 +26,13 @@ const UNLOAD_TIMEOUT: Duration = Duration::from_secs(30);
 // buffer reaching native decoding.
 const MAX_DECODE_SAMPLES: usize = 16_000 * 600;
 
+/// Everything reaching whisper has already been resampled to this rate.
+const DECODE_SAMPLE_RATE: u32 = 16_000;
+
+/// Whisper's encoder window: 30 s at 16 kHz. `audio::segment` keeps every decode
+/// inside one window; this stays as the guard for anything that slips past it.
+const FULL_WINDOW_SAMPLES: usize = DECODE_SAMPLE_RATE as usize * 30;
+
 enum ModelCommand {
     Prepare {
         model_path: String,
@@ -371,6 +378,15 @@ fn detect_language_with_context(
     Ok(whisper_rs::get_lang_str(lang_id).unwrap_or("en").to_owned())
 }
 
+/// Decodes an utterance of any length, one whisper window at a time.
+///
+/// Whisper encodes 30 s at a time and decides where the next window starts from
+/// the timestamp it just emitted. Past one window that seeking goes wrong: a 45 s
+/// Hinglish passage came back with 71 of its 145 spoken words and a whole clause
+/// missing, and a 91 s clip duplicated text across the seam. Splitting the audio
+/// at the speaker's own pauses (`audio::segment`) means whisper is never asked to
+/// cross a seam, which measured better on both counts — word error over that
+/// passage fell from 0.669 to 0.324.
 fn transcribe_with_context(
     context: &WhisperContext,
     model_path: &Path,
@@ -386,6 +402,36 @@ fn transcribe_with_context(
         return Ok(String::new());
     };
     let samples = samples.as_ref();
+    let mut pieces = Vec::new();
+    for range in crate::audio::segment::split_at_pauses(samples, DECODE_SAMPLE_RATE) {
+        let piece = decode_one_window(
+            context,
+            model_path,
+            language,
+            &samples[range],
+            hotwords,
+            preview,
+        )?;
+        let piece = piece.trim();
+        if !piece.is_empty() {
+            pieces.push(piece.to_owned());
+        }
+    }
+    Ok(pieces.join(" "))
+}
+
+/// Decodes audio that already fits inside a single whisper window.
+fn decode_one_window(
+    context: &WhisperContext,
+    model_path: &Path,
+    language: &str,
+    samples: &[f32],
+    hotwords: &str,
+    preview: bool,
+) -> Result<String, String> {
+    if samples.is_empty() {
+        return Ok(String::new());
+    }
     let mut state = context.create_state().map_err(|error| error.to_string())?;
     // Beam-2 matches the previously accepted (Wispr-comparable) quality while
     // keeping decode fast. Beam-5 was tried for extra accuracy but its added decode
@@ -405,8 +451,20 @@ fn transcribe_with_context(
     params.set_print_progress(false);
     params.set_print_realtime(false);
     params.set_print_timestamps(false);
-    params.set_no_timestamps(true);
-    params.set_single_segment(true);
+    // Whisper decodes in 30 s windows, and it uses the timestamp token it emits
+    // to decide where the next window starts. With timestamps off it cannot make
+    // that decision, so it advances by a blind fixed stride and slices the audio
+    // mid-word; the fragment left straddling the seam decodes as fluent garbage.
+    // A 91 s count-to-ninety came back with "shambhar ... philadelphia ...
+    // inambek" spliced in at the seam, and the identical hallucination appeared
+    // under two different models, which is what ruled the model out as the cause.
+    //
+    // Single-segment plus no-timestamps stays on for the common case, where it is
+    // both correct and the cheaper path: a dictation that fits inside one window
+    // has no seam to get wrong.
+    let fits_one_window = samples.len() < FULL_WINDOW_SAMPLES;
+    params.set_no_timestamps(fits_one_window);
+    params.set_single_segment(fits_one_window);
     params.set_n_threads(available_threads());
     // Shrink the encoder's audio context to the clip's real length. Whisper's
     // encoder otherwise always processes a full 30 s mel window (1500 ctx tokens)
