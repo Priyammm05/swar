@@ -271,20 +271,13 @@ final class _GeneralSettings extends StatelessWidget {
             ),
             _SettingRow(
               title: 'Offline model',
-              descriptionWidget: Text(
-                settings.modelPath.isEmpty
-                    ? 'Install the private English voice model once.'
-                    : _shortenPath(settings.modelPath),
-                style: settings.modelPath.isEmpty
-                    ? SwarType.description.copyWith(
-                        color: context.tokens.inkSecondary,
-                      )
-                    : const TextStyle(
-                        fontFamily: 'monospace',
-                        fontSize: 12,
-                        height: 1.4,
-                      ).copyWith(color: context.tokens.inkSecondary),
-              ),
+              // Deliberately not the file path. It used to print
+              // "…/models/ggml-small-q5_1.bin", which names the whisper
+              // fallback rather than the engine doing the recognising, and
+              // reads as a diagnostic leak rather than a setting.
+              description: settings.modelPath.isEmpty
+                  ? 'Install the private English voice model once.'
+                  : 'Installed on this Mac. Speech never leaves the device.',
               trailing: SwarPrimaryButton(
                 key: const Key('install-offline-model-button'),
                 label: modelInstalled ? 'Use installed model' : 'Install model',
@@ -515,12 +508,6 @@ final class _SystemSettings extends StatelessWidget {
       ],
     );
   }
-}
-
-String _shortenPath(String path) {
-  final parts = path.split('/');
-  if (parts.length <= 4) return path;
-  return '…/${parts.sublist(parts.length - 4).join('/')}';
 }
 
 // --- shared row / group primitives (§8.2) ---
