@@ -6,7 +6,7 @@
 import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `asr_manifest`, `bundle_installed`, `directory_size`, `download_to_partial`, `download_verified`, `embedded_llm_model_path`, `ensure_embedded_llm_model_download`, `ensure_parakeet_download`, `expected_minimum_bytes`, `file_present_with_min_size`, `indic_models_installed`, `install_bundle`, `models_dir`, `parakeet_installed`, `recommended_model_path`, `status_for`, `verified_file`
+// These functions are ignored because they are not marked as `pub`: `asr_manifest`, `bundle_installed`, `directory_size`, `download_to_partial`, `download_verified`, `embedded_llm_model_path`, `ensure_embedded_llm_model_download`, `ensure_parakeet_download`, `expected_minimum_bytes`, `file_present_with_min_size`, `install_bundle`, `models_dir`, `parakeet_installed`, `recommended_model_path`, `status_for`, `verified_file`
 // These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `AsrBundle`, `AsrFile`, `AsrManifest`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `fmt`
 
@@ -23,17 +23,6 @@ Future<OfflineModelStatus> installRecommendedModel() =>
 /// verifying its SHA-256 before it atomically replaces any existing file.
 Future<OfflineModelStatus> installEmbeddedLlmModel() =>
     RustLib.instance.api.crateApiModelsInstallEmbeddedLlmModel();
-
-/// Downloads the optional Indian-languages pack (~670 MB). Exposed so a Settings
-/// action can install it on demand; until then Hindi/Hinglish/Indian speech uses
-/// the whisper fallback. Blocking, so Flutter must call it off the UI isolate.
-Future<OfflineModelStatus> installIndicModels() =>
-    RustLib.instance.api.crateApiModelsInstallIndicModels();
-
-/// The Indian-languages pack install state for Settings (presence + size only,
-/// cheap enough for a `#[frb(sync)]` render).
-OfflineModelStatus indicPackStatus() =>
-    RustLib.instance.api.crateApiModelsIndicPackStatus();
 
 class OfflineModelStatus {
   final String path;

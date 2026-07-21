@@ -251,7 +251,6 @@ fn run_worker(receiver: Receiver<ModelCommand>) {
                             .ok_or_else(|| "the offline model did not remain loaded".to_owned())?;
                         transcribe_with_context(
                             &model.context,
-                            Path::new(&model.path),
                             &language,
                             &samples,
                             &hotwords,
@@ -289,7 +288,6 @@ fn run_worker(receiver: Receiver<ModelCommand>) {
 /// passage fell from 0.669 to 0.324.
 fn transcribe_with_context(
     context: &WhisperContext,
-    model_path: &Path,
     language: &str,
     samples: &[f32],
     hotwords: &str,
@@ -304,14 +302,7 @@ fn transcribe_with_context(
     let samples = samples.as_ref();
     let mut pieces = Vec::new();
     for range in crate::audio::segment::split_at_pauses(samples, DECODE_SAMPLE_RATE) {
-        let piece = decode_one_window(
-            context,
-            model_path,
-            language,
-            &samples[range],
-            hotwords,
-            preview,
-        )?;
+        let piece = decode_one_window(context, language, &samples[range], hotwords, preview)?;
         let piece = piece.trim();
         if !piece.is_empty() {
             pieces.push(piece.to_owned());
@@ -323,7 +314,6 @@ fn transcribe_with_context(
 /// Decodes audio that already fits inside a single whisper window.
 fn decode_one_window(
     context: &WhisperContext,
-    model_path: &Path,
     language: &str,
     samples: &[f32],
     hotwords: &str,
@@ -412,12 +402,6 @@ fn decode_one_window(
     // gate and has been trimmed with edge padding. Running Silero again here
     // can discard valid sub-two-second utterances and return no segments.
     // Preview snapshots have not passed that final gate, so they retain VAD.
-    if uses_whisper_vad(preview) {
-        if let Some(vad_model) = vad_model_next_to(model_path) {
-            params.set_vad_model_path(vad_model.to_str());
-            params.enable_vad(true);
-        }
-    }
     state
         .full(params, samples)
         .map_err(|error| error.to_string())?;
@@ -428,10 +412,6 @@ fn decode_one_window(
         .join(" ")
         .trim()
         .to_owned())
-}
-
-fn uses_whisper_vad(preview: bool) -> bool {
-    preview
 }
 
 /// Returns decode-ready samples, or `None` when the buffer is empty. NaN/Inf are
@@ -471,11 +451,6 @@ fn language_decoding(_language: &str) -> LanguageDecoding {
         initial_prompt: None,
         detect_language: false,
     }
-}
-
-fn vad_model_next_to(model_path: &Path) -> Option<std::path::PathBuf> {
-    let candidate = model_path.parent()?.join("ggml-silero-v6.2.0.bin");
-    candidate.is_file().then_some(candidate)
 }
 
 fn ensure_model_file(model_path: &str) -> Result<(), String> {
@@ -565,12 +540,6 @@ mod tests {
             let value = dynamic_audio_ctx(16_000 * seconds);
             assert!((128..=1500).contains(&value), "{seconds}s -> {value}");
         }
-    }
-
-    #[test]
-    fn final_dictation_does_not_apply_a_second_vad_pass() {
-        assert!(!uses_whisper_vad(false));
-        assert!(uses_whisper_vad(true));
     }
 
     #[test]

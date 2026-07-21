@@ -149,10 +149,4 @@ abstract interface class DictationEngineGateway {
   OfflineModelInstallation recommendedModelStatus();
 
   Future<OfflineModelInstallation> installRecommendedModel();
-
-  /// Install state of the optional Indian-languages pack (IndicConformer).
-  OfflineModelInstallation indicPackStatus();
-
-  /// Downloads the optional Indian-languages pack (~670 MB) on demand.
-  Future<OfflineModelInstallation> installIndicModels();
 }

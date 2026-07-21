@@ -26,11 +26,6 @@ const VAD_MODEL_URL: &str =
     "https://huggingface.co/ggml-org/whisper-vad/resolve/main/ggml-silero-v6.2.0.bin";
 const VAD_MODEL_SHA256: &str = "2aa269b785eeb53a82983a20501ddf7c1d9c48e33ab63a41391ac6c9f7fb6987";
 const VAD_MODEL_BYTES: u64 = 885_098;
-const HINDI_MODEL_FILE: &str = "ggml-hi-small.bin";
-const HINDI_MODEL_URL: &str =
-    "https://huggingface.co/ukta-app/indic-whisper-ggml/resolve/main/ggml-hi-small.bin";
-const HINDI_MODEL_SHA256: &str = "6813fed7ffa6c3fa14490c1f1788d2d8b6e3b7badf59a2f75fb4c5c21cf00f3f";
-const HINDI_MODEL_BYTES: u64 = 190_085_487;
 // The on-device cleanup LLM (Qwen2.5-3B-Instruct, GGUF q4_k_m, Apache-2.0). Used
 // by the embedded-llm enhancer to do Wispr-style context cleanup — fixing
 // homophones ("Mike" -> "mic"), punctuation, and capitalisation that a pure
@@ -81,15 +76,6 @@ pub fn install_recommended_model() -> Result<OfflineModelStatus, String> {
             &vad_destination,
             VAD_MODEL_BYTES,
             VAD_MODEL_SHA256,
-        )?;
-    }
-    let hindi_destination = parent.join(HINDI_MODEL_FILE);
-    if !verified_file(&hindi_destination, HINDI_MODEL_BYTES, HINDI_MODEL_SHA256) {
-        download_verified(
-            HINDI_MODEL_URL,
-            &hindi_destination,
-            HINDI_MODEL_BYTES,
-            HINDI_MODEL_SHA256,
         )?;
     }
     Ok(status_for(destination))
@@ -158,7 +144,6 @@ pub(crate) fn expected_minimum_bytes(model_path: &str) -> u64 {
         .file_name()
         .and_then(|name| name.to_str())
     {
-        Some(HINDI_MODEL_FILE) => HINDI_MODEL_BYTES,
         Some(EMBEDDED_LLM_MODEL_FILE) => EMBEDDED_LLM_MODEL_BYTES,
         Some(VAD_MODEL_FILE) => VAD_MODEL_BYTES,
         _ => MINIMUM_MODEL_BYTES,
@@ -279,7 +264,6 @@ fn status_for(path: PathBuf) -> OfflineModelStatus {
             && size_bytes >= MINIMUM_MODEL_BYTES
             && path.parent().is_some_and(|parent| {
                 file_present_with_min_size(&parent.join(VAD_MODEL_FILE), VAD_MODEL_BYTES)
-                    && file_present_with_min_size(&parent.join(HINDI_MODEL_FILE), HINDI_MODEL_BYTES)
             }),
         size_bytes,
         model_id: "whisper-small-q5_1-multilingual".to_owned(),
@@ -312,7 +296,6 @@ struct AsrBundle {
 #[derive(serde::Deserialize)]
 struct AsrManifest {
     parakeet: AsrBundle,
-    indic: AsrBundle,
 }
 
 /// The pinned manifest of every fast-ASR file (URL + SHA-256 + size), embedded at
@@ -368,39 +351,14 @@ pub(crate) fn parakeet_installed() -> bool {
 }
 
 /// True when the optional Indian-languages pack (IndicConformer) is installed.
-pub(crate) fn indic_models_installed() -> bool {
-    asr_manifest().is_ok_and(|manifest| bundle_installed(&manifest.indic))
-}
 
 /// Downloads the optional Indian-languages pack (~670 MB). Exposed so a Settings
 /// action can install it on demand; until then Hindi/Hinglish/Indian speech uses
 /// the whisper fallback. Blocking, so Flutter must call it off the UI isolate.
-pub fn install_indic_models() -> Result<OfflineModelStatus, String> {
-    let manifest = asr_manifest()?;
-    install_bundle(&manifest.indic)?;
-    Ok(indic_pack_status())
-}
 
 /// The Indian-languages pack install state for Settings (presence + size only,
 /// cheap enough for a `#[frb(sync)]` render).
 #[frb(sync)]
-pub fn indic_pack_status() -> OfflineModelStatus {
-    let root = models_dir().ok();
-    let base = root.map(|root| {
-        asr_manifest()
-            .map(|manifest| root.join(manifest.indic.dir))
-            .unwrap_or(root)
-    });
-    let size_bytes = base.as_ref().map(|base| directory_size(base)).unwrap_or(0);
-    OfflineModelStatus {
-        path: base
-            .map(|base| base.to_string_lossy().into_owned())
-            .unwrap_or_default(),
-        installed: indic_models_installed(),
-        size_bytes,
-        model_id: "indic-conformer-600m-int8".to_owned(),
-    }
-}
 
 /// Best-effort recursive byte size of a directory tree; 0 when absent.
 fn directory_size(path: &Path) -> u64 {
@@ -452,14 +410,12 @@ mod tests {
         assert_eq!(RECOMMENDED_MODEL_FILE, "ggml-small-q5_1.bin");
         assert!(!RECOMMENDED_MODEL_FILE.contains(".en."));
         assert_eq!(VAD_MODEL_FILE, "ggml-silero-v6.2.0.bin");
-        assert_eq!(HINDI_MODEL_FILE, "ggml-hi-small.bin");
     }
 
     #[test]
     fn asr_manifest_parses_and_pins_every_file() {
         let manifest = asr_manifest().expect("embedded ASR manifest must parse");
         assert_eq!(manifest.parakeet.dir, "parakeet-v3");
-        assert_eq!(manifest.indic.dir, "indic-conformer");
         // The helper looks for these exact entrypoints (see asr_client::model_dirs
         // and swar_asr_server), so a manifest that dropped them would silently
         // disable fast ASR.
@@ -468,31 +424,15 @@ mod tests {
             .files
             .iter()
             .any(|f| f.path == "encoder.int8.onnx"));
-        assert!(manifest
-            .indic
-            .files
-            .iter()
-            .any(|f| f.path == "onnx/encoder_quantized_int8.onnx"));
-        assert!(manifest
-            .indic
-            .files
-            .iter()
-            .any(|f| f.path == "onnx/adapters/joint_post_net_hi_quantized_int8.onnx"));
-        for bundle in [&manifest.parakeet, &manifest.indic] {
-            for file in &bundle.files {
-                assert_eq!(file.sha256.len(), 64, "sha256 for {}", file.path);
-                assert!(file.bytes > 0, "size for {}", file.path);
-                assert!(file.url.starts_with("https://"), "url for {}", file.path);
-            }
+        for file in &manifest.parakeet.files {
+            assert_eq!(file.sha256.len(), 64, "sha256 for {}", file.path);
+            assert!(file.bytes > 0, "size for {}", file.path);
+            assert!(file.url.starts_with("https://"), "url for {}", file.path);
         }
     }
 
     #[test]
     fn expected_minimum_bytes_matches_each_known_model() {
-        assert_eq!(
-            expected_minimum_bytes("/models/ggml-hi-small.bin"),
-            HINDI_MODEL_BYTES
-        );
         assert_eq!(
             expected_minimum_bytes("/models/ggml-silero-v6.2.0.bin"),
             VAD_MODEL_BYTES

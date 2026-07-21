@@ -221,18 +221,6 @@ final class _EngineGateway implements DictationEngineGateway {
   @override
   Future<OfflineModelInstallation> installRecommendedModel() async =>
       recommendedModelStatus();
-
-  @override
-  OfflineModelInstallation indicPackStatus() => const OfflineModelInstallation(
-    path: '/test/indic-conformer',
-    installed: false,
-    sizeBytes: 0,
-  );
-
-  @override
-  Future<OfflineModelInstallation> installIndicModels() async =>
-      indicPackStatus();
-
   @override
   Stream<DictationEngineEvent> start(DictationEngineConfig config) {
     startCalls += 1;

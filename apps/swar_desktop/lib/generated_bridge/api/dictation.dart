@@ -6,9 +6,10 @@
 import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `abandon_coordinator_session`, `dictation_stage_error`, `disarm`, `emit_transition`, `event_kind_for_state`, `fail_start`, `finish_capture`, `is_builtin_microphone_name`, `is_indic_language`, `monotonic_timestamp_ms`, `new`, `normalized_auto_language`, `record_dictation_levels`, `record_dictation_stage`, `resolve_asr_language`, `select_input_device`, `should_write_history`, `spawn_preview_worker`, `stop_preview`, `take_capture`, `transcript_contains_speech`, `transition_capture`
-// These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `ActiveCapture`, `ReservationGuard`
+// These functions are ignored because they are not marked as `pub`: `abandon_coordinator_session`, `dictation_stage_error`, `disarm`, `emit_transition`, `event_kind_for_state`, `fail_start`, `finish_capture`, `frame_energy`, `is_builtin_microphone_name`, `is_degenerate_transcript`, `join_transcript`, `joined`, `longest_repeat_run`, `monotonic_timestamp_ms`, `new`, `record_dictation_levels`, `record_dictation_stage`, `select_input_device`, `settled_span`, `should_write_history`, `spawn_streaming_worker`, `stop_preview`, `take_capture`, `transcribe_english`, `transcript_contains_speech`, `transition_capture`
+// These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `ActiveCapture`, `ReservationGuard`, `StreamingTranscript`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_receiver_is_total_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `drop`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`
+// These functions are ignored (category: IgnoreBecauseOwnerTyShouldIgnore): `default`
 
 /// Lists the audio inputs visible to CoreAudio/WASAPI through CPAL.
 Future<List<MicrophoneDevice>> listMicrophones() =>

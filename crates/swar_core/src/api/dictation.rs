@@ -759,6 +759,7 @@ fn transcribe_english(samples: &[f32], whisper_model: &str) -> Result<String, St
 /// segment as it completes means only the final segment is still outstanding
 /// when the speaker stops, so the wait stops growing with the length of what was
 /// said.
+#[frb(ignore)]
 #[derive(Default)]
 struct StreamingTranscript {
     /// Samples, at the capture rate, already decoded into `segments`.

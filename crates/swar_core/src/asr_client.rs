@@ -96,20 +96,15 @@ pub(crate) fn transcribe(samples: &[f32], language: &str) -> Result<String, Stri
     outcome
 }
 
-/// Warms the fast engines so the first real dictation does not pay their cold
-/// load (~2-3 s for Parakeet's 622 MB encoder). Sends a short silent request for
-/// each available engine — English loads Parakeet, Hindi loads IndicConformer
-/// when its pack is installed. Best-effort; the transcript is discarded. Callers
-/// run this off the UI thread.
+/// Warms Parakeet so the first real dictation does not pay its cold load (~2-3 s
+/// for the 622 MB encoder). Best-effort; the transcript is discarded. Callers run
+/// this off the UI thread.
 pub(crate) fn warm() {
     if helper_path().is_none() || model_dirs().is_none() {
         return;
     }
     let silence = vec![0f32; 16_000 / 5]; // 200 ms is enough to force a model load.
     let _ = transcribe(&silence, "english");
-    if crate::api::models::indic_models_installed() {
-        let _ = transcribe(&silence, "hindi");
-    }
 }
 
 fn run_worker(receiver: Receiver<Job>) {
@@ -118,7 +113,7 @@ fn run_worker(receiver: Receiver<Job>) {
         // Resolve the model dirs per job (a couple of cheap `is_file` checks) so a
         // pack installed from Settings mid-session is picked up on the next
         // dictation without restarting the helper.
-        let (parakeet_dir, indic_dir) = model_dirs().unwrap_or_default();
+        let parakeet_dir = model_dirs().unwrap_or_default();
         if helper.is_none() {
             helper = match spawn_helper() {
                 Ok(h) => Some(h),
@@ -132,7 +127,6 @@ fn run_worker(receiver: Receiver<Job>) {
             "wav": job.wav,
             "language": job.language,
             "parakeet_dir": parakeet_dir,
-            "indic_dir": indic_dir,
         })
         .to_string();
         let result = exchange(
@@ -256,31 +250,24 @@ fn helper_path() -> Option<PathBuf> {
     .find(|candidate| candidate.exists())
 }
 
-/// The Parakeet and IndicConformer model directories, or `None` if either is
-/// missing. Env overrides support development against out-of-tree models.
-fn model_dirs() -> Option<(String, String)> {
-    let (parakeet, indic) = match (
-        std::env::var("SWAR_PARAKEET_DIR").ok(),
-        std::env::var("SWAR_INDIC_DIR").ok(),
-    ) {
-        (Some(p), Some(i)) => (PathBuf::from(p), PathBuf::from(i)),
-        _ => {
-            let models = ProjectDirs::from("dev", "Swar", "Swar")?
-                .data_local_dir()
-                .join("models");
-            (models.join("parakeet-v3"), models.join("indic-conformer"))
-        }
+/// The Parakeet model directory, or `None` when it is not installed. The env
+/// override supports development against an out-of-tree model.
+///
+/// This used to require the IndicConformer bundle alongside it and return `None`
+/// if either was missing, so removing that bundle would have silently disabled
+/// the fast engine and sent every dictation to the whisper fallback.
+fn model_dirs() -> Option<String> {
+    let parakeet = match std::env::var("SWAR_PARAKEET_DIR").ok() {
+        Some(dir) => PathBuf::from(dir),
+        None => ProjectDirs::from("dev", "Swar", "Swar")?
+            .data_local_dir()
+            .join("models")
+            .join("parakeet-v3"),
     };
-    let parakeet_ok = parakeet.join("encoder.int8.onnx").is_file();
-    let indic_ok = indic.join("onnx/encoder_quantized_int8.onnx").is_file();
-    if parakeet_ok && indic_ok {
-        Some((
-            parakeet.to_string_lossy().into_owned(),
-            indic.to_string_lossy().into_owned(),
-        ))
-    } else {
-        None
-    }
+    parakeet
+        .join("encoder.int8.onnx")
+        .is_file()
+        .then(|| parakeet.to_string_lossy().into_owned())
 }
 
 /// Writes mono f32 samples to a 16-bit PCM WAV at 16 kHz in the temp dir.

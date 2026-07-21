@@ -100,16 +100,6 @@ final class RustDictationEngineGateway implements DictationEngineGateway {
     return _modelInstallation(await models.installRecommendedModel());
   }
 
-  @override
-  OfflineModelInstallation indicPackStatus() {
-    return _modelInstallation(models.indicPackStatus());
-  }
-
-  @override
-  Future<OfflineModelInstallation> installIndicModels() async {
-    return _modelInstallation(await models.installIndicModels());
-  }
-
   OfflineModelInstallation _modelInstallation(
     models.OfflineModelStatus status,
   ) {
