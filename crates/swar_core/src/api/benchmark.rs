@@ -175,6 +175,130 @@ fn normalized_words(value: &str) -> Vec<String> {
         .collect()
 }
 
+/// One transcript put through the whole editing path, with every stage kept.
+#[derive(Clone, Debug, Serialize)]
+pub struct CleanupProbeCase {
+    pub label: String,
+    pub writing_mode: String,
+    pub raw: String,
+    /// After deterministic cleanup, before the model sees it.
+    pub deterministic: String,
+    /// What the user would actually get.
+    pub final_text: String,
+    /// The model was asked.
+    pub routed: bool,
+    /// The model's answer differed from the deterministic text and was kept.
+    pub applied: bool,
+    /// The model answered but the answer was thrown away, so `final_text` is
+    /// the deterministic text. This is the number that decides whether the
+    /// 2 GB of weights are earning their place.
+    pub validation_fallback: bool,
+    pub error_code: Option<String>,
+    pub elapsed_ms: u64,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct CleanupProbeReport {
+    pub provider: String,
+    pub model: String,
+    pub cases: Vec<CleanupProbeCase>,
+}
+
+/// Runs a fixed set of dictations through cleanup and reports what each stage
+/// did to them.
+///
+/// This answers a question a latency benchmark cannot: not "how fast is the
+/// editor" but "does the model change anything, and is the change kept". Every
+/// case is synthetic, so no transcript, name, or address here belongs to
+/// anybody.
+#[frb(ignore)]
+pub fn run_cleanup_probe(provider: &str, model: &str) -> CleanupProbeReport {
+    // Chosen to cover what the cleanup model is supposed to earn its size on:
+    // a homophone sound alone cannot resolve, a spoken self-correction, an
+    // unpunctuated run-on, filler, and three cases that must survive untouched.
+    let cases: [(&str, &str, &str); 8] = [
+        (
+            "homophone",
+            "clean",
+            "can you check the mike levels before the call",
+        ),
+        (
+            "self correction",
+            "clean",
+            "send it to the design team i mean the product team",
+        ),
+        (
+            "run on",
+            "clean",
+            "the migration touches about forty files which means it needs a proper review before friday",
+        ),
+        (
+            "filler",
+            "clean",
+            "um so i was thinking maybe we could push the release to friday",
+        ),
+        (
+            "protected tokens",
+            "clean",
+            "email the key APIKey42 to hello@swar.dev before five",
+        ),
+        (
+            "negation",
+            "clean",
+            "do not merge this until the tests have passed",
+        ),
+        (
+            "raw must not change",
+            "raw",
+            "um keep every word exactly as i said it",
+        ),
+        (
+            "intent",
+            "intent",
+            "make this an email telling the team the launch slipped to friday",
+        ),
+    ];
+
+    let cases = cases
+        .into_iter()
+        .map(|(label, mode, raw)| {
+            let deterministic = text_cleanup::clean_transcript(raw, mode);
+            let started = Instant::now();
+            let outcome = enhancement::enhance_transcript(
+                raw,
+                &deterministic,
+                mode,
+                "Probe",
+                "",
+                enhancement::EnhancementProviderConfig {
+                    provider,
+                    endpoint: "",
+                    model,
+                    api_key: "",
+                },
+            );
+            CleanupProbeCase {
+                label: label.to_owned(),
+                writing_mode: mode.to_owned(),
+                raw: raw.to_owned(),
+                deterministic,
+                final_text: outcome.text,
+                routed: outcome.routed,
+                applied: outcome.applied,
+                validation_fallback: outcome.validation_fallback,
+                error_code: outcome.error_code.map(str::to_owned),
+                elapsed_ms: started.elapsed().as_millis() as u64,
+            }
+        })
+        .collect();
+
+    CleanupProbeReport {
+        provider: provider.to_owned(),
+        model: model.to_owned(),
+        cases,
+    }
+}
+
 /// Benchmarks deterministic cleanup, routing, and protected-token validation.
 #[frb(ignore)]
 pub fn run_text_pipeline_benchmark(iterations: u32) -> TextPipelineBenchmarkReport {

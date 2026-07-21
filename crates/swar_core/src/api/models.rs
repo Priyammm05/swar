@@ -184,6 +184,12 @@ pub(crate) fn embedded_llm_model_path() -> Option<PathBuf> {
     file_present_with_min_size(&path, EMBEDDED_LLM_MODEL_BYTES).then_some(path)
 }
 
+/// The installed cleanup LLM's path as a string, for tools outside this module.
+#[frb(ignore)]
+pub fn embedded_llm_model_path_string() -> Option<String> {
+    embedded_llm_model_path().map(|path| path.to_string_lossy().into_owned())
+}
+
 /// Downloads the embedded cleanup LLM (~2 GB) into the models directory,
 /// verifying its SHA-256 before it atomically replaces any existing file.
 pub fn install_embedded_llm_model() -> Result<OfflineModelStatus, String> {
