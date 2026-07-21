@@ -661,6 +661,15 @@ pub fn offline_model_is_ready(model_path: String) -> bool {
 
 /// Loads the selected model on the dedicated ASR worker before the first dictation.
 pub fn prepare_dictation_engine(model_path: String) -> Result<bool, String> {
+    // Parakeet first, and before anything that can fail. It is the engine that
+    // actually does the recognition, and on a machine with no models at all the
+    // whisper prepare below returns Err, which used to take the `?` and leave
+    // this function before Parakeet was ever asked for. A fresh install
+    // therefore downloaded nothing and sat on "Download voice model" until the
+    // fallback was fetched by hand. Self-guarded and non-blocking.
+    crate::api::models::ensure_parakeet_download();
+    std::thread::spawn(crate::asr_client::warm);
+
     let already_loaded =
         model_registry::prepare(&model_path).map(|status| status.already_loaded)?;
     // If the cleanup model is installed, warm the helper off-thread so the
@@ -682,14 +691,6 @@ pub fn prepare_dictation_engine(model_path: String) -> Result<bool, String> {
             );
         });
     }
-    // Fetch the default English engine (Parakeet) once in the background too.
-    // Self-guarded and non-blocking: recognition stays on whisper until it lands.
-    // The Indian-languages pack (IndicConformer) is opt-in from Settings, so it is
-    // NOT downloaded here.
-    crate::api::models::ensure_parakeet_download();
-    // Warm the fast ASR engines off-thread so the first dictation does not pay
-    // their cold load (~2-3 s for Parakeet). Best-effort and non-blocking.
-    std::thread::spawn(crate::asr_client::warm);
     Ok(already_loaded)
 }
 
