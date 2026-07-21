@@ -21,11 +21,6 @@ const RECOMMENDED_MODEL_URL: &str =
 const RECOMMENDED_MODEL_SHA256: &str =
     "ae85e4a935d7a567bd102fe55afc16bb595bdb618e11b2fc7591bc08120411bb";
 const MINIMUM_MODEL_BYTES: u64 = 180_000_000;
-const VAD_MODEL_FILE: &str = "ggml-silero-v6.2.0.bin";
-const VAD_MODEL_URL: &str =
-    "https://huggingface.co/ggml-org/whisper-vad/resolve/main/ggml-silero-v6.2.0.bin";
-const VAD_MODEL_SHA256: &str = "2aa269b785eeb53a82983a20501ddf7c1d9c48e33ab63a41391ac6c9f7fb6987";
-const VAD_MODEL_BYTES: u64 = 885_098;
 // The on-device cleanup LLM (Qwen2.5-3B-Instruct, GGUF q4_k_m, Apache-2.0). Used
 // by the embedded-llm enhancer to do Wispr-style context cleanup — fixing
 // homophones ("Mike" -> "mic"), punctuation, and capitalisation that a pure
@@ -67,15 +62,6 @@ pub fn install_recommended_model() -> Result<OfflineModelStatus, String> {
             &destination,
             MINIMUM_MODEL_BYTES,
             RECOMMENDED_MODEL_SHA256,
-        )?;
-    }
-    let vad_destination = parent.join(VAD_MODEL_FILE);
-    if !verified_file(&vad_destination, VAD_MODEL_BYTES, VAD_MODEL_SHA256) {
-        download_verified(
-            VAD_MODEL_URL,
-            &vad_destination,
-            VAD_MODEL_BYTES,
-            VAD_MODEL_SHA256,
         )?;
     }
     Ok(status_for(destination))
@@ -145,7 +131,6 @@ pub(crate) fn expected_minimum_bytes(model_path: &str) -> u64 {
         .and_then(|name| name.to_str())
     {
         Some(EMBEDDED_LLM_MODEL_FILE) => EMBEDDED_LLM_MODEL_BYTES,
-        Some(VAD_MODEL_FILE) => VAD_MODEL_BYTES,
         _ => MINIMUM_MODEL_BYTES,
     }
 }
@@ -260,11 +245,14 @@ fn status_for(path: PathBuf) -> OfflineModelStatus {
         // presence + size check, not a full SHA-256 of ~190 MB models, which
         // would freeze the UI on every Settings render. The strong hash
         // guarantee still holds at install time and at model load.
+        // Only the whisper weights are required. This used to also demand a
+        // silero VAD file sitting beside them, which outlived the decode path
+        // that read it: once speech detection moved off whisper's own VAD,
+        // nothing loaded the file, but this check still refused to call the
+        // model installed without it. Deleting the unused file was enough to
+        // pin the overlay to "Download voice model" forever.
         installed: metadata.is_some_and(|value| value.is_file())
-            && size_bytes >= MINIMUM_MODEL_BYTES
-            && path.parent().is_some_and(|parent| {
-                file_present_with_min_size(&parent.join(VAD_MODEL_FILE), VAD_MODEL_BYTES)
-            }),
+            && size_bytes >= MINIMUM_MODEL_BYTES,
         size_bytes,
         model_id: "whisper-small-q5_1-multilingual".to_owned(),
     }
@@ -409,7 +397,31 @@ mod tests {
     fn recommended_model_is_multilingual() {
         assert_eq!(RECOMMENDED_MODEL_FILE, "ggml-small-q5_1.bin");
         assert!(!RECOMMENDED_MODEL_FILE.contains(".en."));
-        assert_eq!(VAD_MODEL_FILE, "ggml-silero-v6.2.0.bin");
+    }
+
+    /// The regression this guards: `status_for` once also required a silero VAD
+    /// file beside the weights, long after the decode path stopped reading it.
+    /// Deleting that unused file made the app report no model installed, which
+    /// pinned the overlay to "Download voice model" with a perfectly good model
+    /// on disk. Presence of the weights alone must settle it.
+    #[test]
+    fn model_counts_as_installed_on_the_weights_alone() {
+        let dir = std::env::temp_dir().join(format!("swar-model-status-{}", std::process::id()));
+        fs::create_dir_all(&dir).expect("temp dir");
+        let weights = dir.join(RECOMMENDED_MODEL_FILE);
+        // Sparse: `status_for` only reads the length, so there is no reason to
+        // actually write 180 MB on every test run.
+        fs::File::create(&weights)
+            .and_then(|file| file.set_len(MINIMUM_MODEL_BYTES + 1))
+            .expect("weights");
+
+        let status = status_for(weights);
+        assert!(
+            status.installed,
+            "weights alone must count as installed, with no companion file"
+        );
+
+        fs::remove_dir_all(&dir).ok();
     }
 
     #[test]
@@ -433,10 +445,6 @@ mod tests {
 
     #[test]
     fn expected_minimum_bytes_matches_each_known_model() {
-        assert_eq!(
-            expected_minimum_bytes("/models/ggml-silero-v6.2.0.bin"),
-            VAD_MODEL_BYTES
-        );
         assert_eq!(
             expected_minimum_bytes("/models/ggml-small-q5_1.bin"),
             MINIMUM_MODEL_BYTES
