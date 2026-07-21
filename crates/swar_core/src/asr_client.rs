@@ -21,15 +21,33 @@ use std::{
 use directories::ProjectDirs;
 
 const RESPONSE_SENTINEL: &str = "@@SWARASR@@ ";
-/// Covers a cold first transcription (model load ~3 s) plus decoding; warm calls
-/// return well under a second.
-const TRANSCRIBE_TIMEOUT: Duration = Duration::from_secs(30);
+/// Floor for one transcription: covers a cold model load (~3 s) plus decoding,
+/// and warm short clips return well under a second.
+const MINIMUM_TRANSCRIBE_TIMEOUT: Duration = Duration::from_secs(30);
+
+/// Share of real time allowed for a decode before the helper is given up on.
+///
+/// A flat 30 s ceiling silently failed long dictation. Capture allows 300 s, and
+/// the 1000-case corpus showed decodes climbing to 29.7 s against that ceiling
+/// with nothing left: every case past roughly 265 s of audio timed out and fell
+/// back to whisper, which is both slower and less accurate. Measured real-time
+/// factor is 0.086 to 0.119, so half of real time leaves a wide margin while
+/// still bounding a genuinely wedged helper.
+const TRANSCRIBE_TIMEOUT_SHARE: f64 = 0.5;
+
+/// How long to allow for `samples` at 16 kHz.
+fn transcribe_timeout(samples: usize) -> Duration {
+    let seconds = samples as f64 / 16_000.0;
+    Duration::from_secs_f64(seconds * TRANSCRIBE_TIMEOUT_SHARE).max(MINIMUM_TRANSCRIBE_TIMEOUT)
+}
 
 static ASR: LazyLock<AsrClient> = LazyLock::new(AsrClient::spawn);
 
 struct Job {
     wav: String,
     language: String,
+    /// Scaled to the clip's length by `transcribe_timeout`.
+    timeout: Duration,
     response: Sender<Result<String, String>>,
 }
 
@@ -56,16 +74,20 @@ pub(crate) fn transcribe(samples: &[f32], language: &str) -> Result<String, Stri
         return Err("fast ASR is not installed".to_owned());
     }
     let wav = write_temp_wav(samples)?;
+    let timeout = transcribe_timeout(samples.len());
     let (response, result) = mpsc::channel();
     ASR.jobs
         .send(Job {
             wav: wav.to_string_lossy().into_owned(),
             language: language.to_owned(),
+            timeout,
             response,
         })
         .map_err(|_| "the ASR worker is unavailable".to_owned())?;
     let outcome = result
-        .recv_timeout(TRANSCRIBE_TIMEOUT)
+        // The worker is bounded by the same deadline, so allow it a moment to
+        // report its own timeout before this side gives up and hides the reason.
+        .recv_timeout(timeout + Duration::from_secs(5))
         .map_err(|error| match error {
             RecvTimeoutError::Timeout => "the ASR helper timed out".to_owned(),
             RecvTimeoutError::Disconnected => "the ASR helper stopped".to_owned(),
@@ -113,7 +135,11 @@ fn run_worker(receiver: Receiver<Job>) {
             "indic_dir": indic_dir,
         })
         .to_string();
-        let result = exchange(helper.as_mut().expect("just spawned"), &request);
+        let result = exchange(
+            helper.as_mut().expect("just spawned"),
+            &request,
+            job.timeout,
+        );
         if result.is_err() {
             helper = None; // Restart a crashed/wedged helper next time.
         }
@@ -134,14 +160,14 @@ impl Drop for Helper {
     }
 }
 
-fn exchange(helper: &mut Helper, request: &str) -> Result<String, String> {
+fn exchange(helper: &mut Helper, request: &str, timeout: Duration) -> Result<String, String> {
     helper
         .stdin
         .write_all(format!("{request}\n").as_bytes())
         .and_then(|_| helper.stdin.flush())
         .map_err(|_| "could not send to the ASR helper".to_owned())?;
     loop {
-        match helper.lines.recv_timeout(TRANSCRIBE_TIMEOUT) {
+        match helper.lines.recv_timeout(timeout) {
             Ok(Some(line)) => {
                 let Some(payload) = line.strip_prefix(RESPONSE_SENTINEL) else {
                     continue;
@@ -286,4 +312,48 @@ fn write_temp_wav(samples: &[f32]) -> Result<PathBuf, String> {
     }
     std::fs::write(&path, &buf).map_err(|e| format!("write temp wav: {e}"))?;
     Ok(path)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn short_clips_keep_the_cold_load_floor() {
+        // Half of a two second clip is a second, which would not cover the ~3 s
+        // model load on the first call.
+        assert_eq!(
+            transcribe_timeout(16_000 * 2),
+            MINIMUM_TRANSCRIBE_TIMEOUT,
+            "short clips must not fall below the cold-load floor"
+        );
+    }
+
+    #[test]
+    fn the_longest_capture_gets_far_more_time_than_it_needs() {
+        // Capture allows 300 s. The 1000-case corpus measured a real-time factor
+        // of 0.086 to 0.119, so that clip decodes in roughly 26 to 36 s.
+        let longest = transcribe_timeout(16_000 * 300);
+        assert!(
+            longest >= Duration::from_secs(120),
+            "300 s of audio got only {longest:?}"
+        );
+    }
+
+    #[test]
+    fn the_length_that_used_to_time_out_now_fits() {
+        // The corpus cliff: every case past roughly 265 s of audio hit the old
+        // flat 30 s ceiling and fell back to whisper. The slowest decode that did
+        // succeed took 29.7 s of the 30 available.
+        let previously_failing = transcribe_timeout(16_000 * 265);
+        assert!(
+            previously_failing > Duration::from_secs(30),
+            "265 s of audio still capped at {previously_failing:?}"
+        );
+    }
+
+    #[test]
+    fn the_deadline_rises_with_the_clip() {
+        assert!(transcribe_timeout(16_000 * 300) > transcribe_timeout(16_000 * 120));
+    }
 }
