@@ -53,8 +53,8 @@ export default function Home() {
         <Install />
         <Cta />
       </main>
-      <Footer />
       <AskAi />
+      <Footer />
     </>
   );
 }
