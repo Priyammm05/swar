@@ -106,11 +106,17 @@ void main() {
     expect(find.byKey(const Key('general-settings-page')), findsOneWidget);
     await tester.tap(find.byKey(const Key('settings-system-nav')));
     await _settle(tester);
+    // Was the launch-at-login toggle. That row was removed when the setting
+    // turned out to have no implementation behind it, which left this step
+    // tapping a key that no longer existed. "Restore your clipboard" is a
+    // System toggle that genuinely changes behaviour, so the check is the same
+    // one and now against something real.
     await _pumpUntilFound(
       tester,
-      find.byKey(const Key('launch-at-login-setting')),
+      find.byKey(const Key('restore-clipboard-setting')),
     );
-    await tester.tap(find.byKey(const Key('launch-at-login-setting')));
+    expect(settings.read().restoreClipboard, isTrue);
+    await tester.tap(find.byKey(const Key('restore-clipboard-setting')));
     await _settle(tester);
     // Settings is a routed screen now: leave to Activity and return; the branch
     // keeps its state, so the change persists with no modal to reopen.
@@ -118,7 +124,7 @@ void main() {
     await _settle(tester);
     await tester.tap(find.byKey(const Key('top-settings-nav')));
     await _settle(tester);
-    expect(settings.read().launchAtLogin, isTrue);
+    expect(settings.read().restoreClipboard, isFalse);
     _recordCheck(
       binding,
       'SHELL-003 system settings persist across navigation',

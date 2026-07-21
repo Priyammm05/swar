@@ -192,6 +192,11 @@ void main() {
       matching: find.byType(SwarToggle),
     );
     final before = tester.widget<SwarToggle>(warmToggle).value;
+    // System settings grew a Dictating group above this row, so it now starts
+    // below the fold. Without this the tap lands on nothing and the assertion
+    // fails for a reason that has nothing to do with persistence.
+    await tester.ensureVisible(warmToggle);
+    await tester.pumpAndSettle();
     await tester.tap(warmToggle);
     await tester.pump();
 

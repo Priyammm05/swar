@@ -411,9 +411,61 @@ final class _SystemSettings extends StatelessWidget {
       onSection: onSection,
       scrollKey: const Key('system-settings-scroll'),
       children: [
+        // These four already changed how Swar behaves; they simply had no
+        // control, so everyone was stuck on whichever default shipped. The
+        // exclusion list matters most: without it there is no way to say
+        // "never dictate into my password manager".
+        const _GroupLabel('Dictating'),
+        _GroupCard(
+          children: [
+            _ToggleRow(
+              rowKey: const Key('show-swar-bar-setting'),
+              title: 'Show the Swar bar',
+              description:
+                  'The bar appears above whatever you are working in while you dictate. It never takes focus.',
+              value: settings.showSwarBar,
+              onChanged: (value) => viewModel.setShowSwarBar(enabled: value),
+            ),
+            _ToggleRow(
+              rowKey: const Key('paste-automatically-setting'),
+              title: 'Paste automatically',
+              description:
+                  'Put the words at your cursor when dictation finishes. Turn this off to have them copied instead.',
+              value: settings.pasteAutomatically,
+              onChanged: (value) =>
+                  viewModel.setPasteAutomatically(enabled: value),
+            ),
+            _ToggleRow(
+              rowKey: const Key('restore-clipboard-setting'),
+              title: 'Restore your clipboard',
+              description:
+                  'Pasting uses the clipboard, so Swar puts back whatever you had copied before.',
+              value: settings.restoreClipboard,
+              onChanged: (value) =>
+                  viewModel.setRestoreClipboard(enabled: value),
+            ),
+            _SettingRow(
+              title: 'Never dictate into',
+              description:
+                  'One application name per line. Swar will not insert text into these.',
+              trailing: _ExcludedApplicationsField(
+                values: settings.excludedApplications,
+                onChanged: viewModel.setExcludedApplications,
+              ),
+            ),
+          ],
+        ),
         const _GroupLabel('App settings'),
         _GroupCard(
           children: [
+            _ToggleRow(
+              rowKey: const Key('learn-from-edits-setting'),
+              title: 'Learn from your edits',
+              description:
+                  'Keeps a local record of corrections you make, so the export below has something in it. Off by default.',
+              value: settings.learnFromEdits,
+              onChanged: (value) => viewModel.setLearnFromEdits(enabled: value),
+            ),
             _SettingRow(
               title: 'Export learning examples',
               description:
@@ -781,6 +833,81 @@ final class _VocabularyDialogState extends State<_VocabularyDialog> {
         ),
       ],
     );
+  }
+}
+
+/// Editor for the applications Swar refuses to insert into.
+///
+/// A dialog rather than an inline field: the list is usually empty, and a
+/// multi-line box sitting open in a settings row is a lot of furniture for
+/// something most people set once. The button reports the count so the state
+/// is legible without opening it.
+final class _ExcludedApplicationsField extends StatelessWidget {
+  const _ExcludedApplicationsField({
+    required this.values,
+    required this.onChanged,
+  });
+
+  final List<String> values;
+  final ValueChanged<List<String>> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return SwarGhostButton(
+      key: const Key('excluded-applications-setting'),
+      label: values.isEmpty ? 'Add' : '${values.length} excluded',
+      onPressed: () => _show(context),
+    );
+  }
+
+  Future<void> _show(BuildContext context) async {
+    final field = TextEditingController(text: values.join('\n'));
+    await showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Never dictate into'),
+        content: SizedBox(
+          width: 420,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'One application name per line, as it appears in the menu bar. '
+                'Swar will not insert text into these.',
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                key: const Key('excluded-applications-field'),
+                controller: field,
+                minLines: 4,
+                maxLines: 8,
+                decoration: const InputDecoration(
+                  hintText: '1Password\nKeychain Access',
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            key: const Key('save-excluded-applications'),
+            onPressed: () {
+              // Trimming and de-duplication happen in the view model, so a
+              // trailing blank line or a repeated entry is not an error here.
+              onChanged(field.text.split('\n'));
+              Navigator.of(context).pop();
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    field.dispose();
   }
 }
 
