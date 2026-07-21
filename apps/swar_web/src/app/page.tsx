@@ -1,4 +1,5 @@
 import { Hero } from "@/components/hero";
+import { Install } from "@/components/install";
 import { LiveDemo } from "@/components/live-demo";
 import { Nav } from "@/components/nav";
 import {
@@ -48,6 +49,7 @@ export default function Home() {
           <Supported />
         </div>
         <Privacy />
+        <Install />
         <Cta />
       </main>
       <Footer />

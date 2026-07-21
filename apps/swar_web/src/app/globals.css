@@ -39,6 +39,12 @@
   --font-mono: var(--font-mono-stack);
 }
 
+/* The nav is fixed, so an anchor jump would otherwise park the heading
+   underneath it. Every jump target clears the bar by its own height. */
+[id] {
+  scroll-margin-top: 5.5rem;
+}
+
 html {
   scroll-behavior: smooth;
   background: var(--paper);

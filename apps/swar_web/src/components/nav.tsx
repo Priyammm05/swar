@@ -3,6 +3,7 @@
 import { motion, useMotionValueEvent, useScroll } from "motion/react";
 import { useState } from "react";
 
+import { GitHubGlyph, REPO_URL } from "@/components/install";
 import { SwarWordmark } from "@/components/mark";
 
 export function Nav() {
@@ -45,6 +46,24 @@ export function Nav() {
             className="hidden rounded-full px-3.5 py-2 text-sm text-ink-soft transition-colors hover:text-ink sm:block"
           >
             What it does
+          </a>
+          <a
+            href="#install"
+            className="hidden rounded-full px-3.5 py-2 text-sm text-ink-soft transition-colors hover:text-ink sm:block"
+          >
+            Install
+          </a>
+          {/* The mark alone on phones, where the label would push the row past
+              the edge. The accessible name is on the link either way. */}
+          <a
+            href={REPO_URL}
+            target="_blank"
+            rel="noreferrer noopener"
+            aria-label="Swar on GitHub"
+            className="inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm text-ink-soft transition-colors hover:text-ink sm:px-3.5"
+          >
+            <GitHubGlyph className="h-4 w-4" />
+            <span className="hidden md:inline">GitHub</span>
           </a>
           <a
             href="#demo"
