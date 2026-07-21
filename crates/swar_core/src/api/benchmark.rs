@@ -48,7 +48,12 @@ pub fn run_asr_file_benchmark(
     let started = Instant::now();
     // No vocabulary bias in the benchmark: results must stay reproducible and
     // independent of whatever a user happens to have saved.
-    let actual_text = model_registry::transcribe(model_path, language, &speech.samples, "")?;
+    let decoded = model_registry::transcribe(model_path, language, &speech.samples, "")?;
+    // Score the text the user actually receives. Hinglish and Automatic
+    // transliterate Devanagari spans to Roman before insertion, so measuring the
+    // raw decode marked a correct Hinglish transcript wrong purely for being in
+    // the other script, and understated every model on that route.
+    let actual_text = crate::language::to_output_script(&decoded, language);
     let processing_milliseconds = started.elapsed().as_millis() as u64;
     Ok(AsrFileBenchmarkReport {
         language: language.to_owned(),
