@@ -3,7 +3,8 @@
 import { motion, useMotionValueEvent, useScroll } from "motion/react";
 import { useState } from "react";
 
-/** Wordmark only, per the brief: no logo anywhere on this site. */
+import { SwarWordmark } from "@/components/mark";
+
 export function Nav() {
   const { scrollY } = useScroll();
   const [lifted, setLifted] = useState(false);
@@ -28,7 +29,7 @@ export function Nav() {
           href="#top"
           className="font-display text-xl tracking-tight text-ink sm:text-2xl"
         >
-          swar
+          <SwarWordmark />
         </a>
         <div className="flex items-center gap-1.5 sm:gap-2">
           <a

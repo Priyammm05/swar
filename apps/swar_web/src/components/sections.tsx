@@ -3,6 +3,8 @@
 import { motion, useReducedMotion } from "motion/react";
 import type { ReactNode } from "react";
 
+import { SwarWordmark } from "@/components/mark";
+
 /**
  * Every number on this page comes from the project's own benchmark corpus:
  * 986 saved English passages, 20 to 900 words, scored on the shipping engine.
@@ -295,14 +297,26 @@ export function Cta() {
 
 export function Footer() {
   return (
-    <footer className="border-t border-rule px-5 py-12 sm:px-8">
-      <div className="mx-auto flex max-w-5xl flex-col items-center justify-between gap-5 sm:flex-row">
-        <span className="font-display text-2xl tracking-tight text-ink">
-          swar
-        </span>
-        <p className="text-center text-sm text-ink-faint sm:text-right">
-          Dictation that runs on your own machine.
-        </p>
+    <footer className="overflow-hidden border-t border-rule px-5 pb-10 pt-16 sm:px-8">
+      <div className="mx-auto max-w-5xl">
+        {/* The sign-off mark. The meter keeps moving, because the whole promise
+            of the product is that it is still listening and still local. */}
+        <Reveal>
+          <SwarWordmark
+            animated
+            className="display-wonk block w-full justify-center font-display text-[clamp(5rem,26vw,17rem)] leading-[0.8] text-ink"
+            markClassName="h-[0.8em] w-[0.8em]"
+          />
+        </Reveal>
+
+        <div className="mt-10 flex flex-col items-center justify-between gap-4 border-t border-rule pt-6 sm:flex-row">
+          <p className="text-sm text-ink-faint">
+            Dictation that runs on your own machine.
+          </p>
+          <p className="font-mono text-[11px] uppercase tracking-widest text-ink-faint">
+            macOS · English · free while in beta
+          </p>
+        </div>
       </div>
     </footer>
   );
