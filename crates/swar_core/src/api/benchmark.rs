@@ -66,6 +66,40 @@ pub fn run_asr_file_benchmark(
     })
 }
 
+/// Runs the primary engine (the fast ONNX helper) against a 16-bit mono WAV.
+///
+/// The whisper entry point above cannot reach it, so before this existed the
+/// corpus could only be scored on the fallback engine — which is not what a user
+/// actually gets. Development and release-gate tooling only; never exposed across
+/// the Flutter bridge and it never stores microphone audio.
+#[frb(ignore)]
+pub fn run_fast_asr_file_benchmark(
+    wav_path: &str,
+    expected_text: &str,
+) -> Result<AsrFileBenchmarkReport, String> {
+    let (sample_rate, samples) = read_pcm16_mono_wav(Path::new(wav_path))?;
+    if sample_rate != 16_000 {
+        return Err("benchmark WAV must be mono 16 kHz PCM16".to_owned());
+    }
+    let audio_milliseconds = samples.len() as u64 * 1_000 / sample_rate as u64;
+    let speech = speech::retain_probable_speech(&samples, sample_rate);
+    if speech.samples.is_empty() {
+        return Err("benchmark fixture did not contain probable speech".to_owned());
+    }
+    let started = Instant::now();
+    let actual_text = crate::asr_client::transcribe(&speech.samples, "english")?;
+    let processing_milliseconds = started.elapsed().as_millis() as u64;
+    Ok(AsrFileBenchmarkReport {
+        language: "english".to_owned(),
+        expected_text: expected_text.to_owned(),
+        word_error_rate: word_error_rate(expected_text, &actual_text),
+        actual_text,
+        processing_milliseconds,
+        audio_milliseconds,
+        realtime_factor: processing_milliseconds as f64 / audio_milliseconds.max(1) as f64,
+    })
+}
+
 fn read_pcm16_mono_wav(path: &Path) -> Result<(u32, Vec<f32>), String> {
     let bytes = fs::read(path).map_err(|error| error.to_string())?;
     if bytes.len() < 44 || &bytes[..4] != b"RIFF" || &bytes[8..12] != b"WAVE" {
