@@ -421,16 +421,23 @@ fn finish_capture(capture: &mut ActiveCapture) -> Result<DictationCompletion, St
     // families (Parakeet is English/European, IndicConformer is Indian), so Auto
     // must first detect which family was spoken and route accordingly — otherwise
     // English spoken in Auto would be decoded as phonetic Hindi.
-    let asr_language = resolve_asr_language(
+    let route = resolve_asr_route(
         &capture.config.language,
         &capture.config.model_path,
         &speech.samples,
     );
-    // Fast path: the ONNX ASR helper (Parakeet for English, IndicConformer for
-    // Hindi, Hinglish, and Indian languages) is ~20-30x faster than whisper. It
-    // falls back to the whisper multilingual model whenever the helper, models, or
-    // a language route is missing or errors, so recognition never breaks.
-    let raw_text = match crate::asr_client::transcribe(&speech.samples, &asr_language) {
+    // Fast path: the ONNX ASR helper (Parakeet for English, IndicConformer for a
+    // single Indian language) is ~20-30x faster than whisper. It is used only
+    // when the audio is confidently monolingual, because a monolingual engine
+    // drops every word in the other language rather than failing loudly. Any
+    // hint of code-switching goes to whisper, which decodes the mixture in one
+    // pass. Whisper is also the fallback whenever the helper, the models, or a
+    // language route is missing or errors, so recognition never breaks.
+    let fast_text = match &route {
+        AsrRoute::Fast(language) => crate::asr_client::transcribe(&speech.samples, language),
+        AsrRoute::Multilingual => Err("code-switched audio routes to whisper".to_owned()),
+    };
+    let raw_text = match fast_text {
         Ok(text) if transcript_contains_speech(&text) => text,
         _ => {
             // Bias whisper toward the user's own proper nouns at the source (§7).
@@ -915,26 +922,79 @@ fn is_indic_language(code: &str) -> bool {
 /// The language string to hand the fast ASR helper. Explicit modes route directly;
 /// only Auto detects. On any detection failure Auto defaults to English (Parakeet),
 /// the app's default engine, rather than mis-decoding English as Hindi.
-fn resolve_asr_language(configured: &str, model_path: &str, samples: &[f32]) -> String {
+/// Which engine decodes the final audio.
+#[derive(Clone, Debug, Eq, PartialEq)]
+enum AsrRoute {
+    /// A monolingual fast ONNX engine: Parakeet for English, IndicConformer for
+    /// an Indian language. Roughly 20-30x faster than whisper, but it can only
+    /// produce the script it was trained on.
+    Fast(String),
+    /// whisper's multilingual model, which decodes a code-switched utterance in
+    /// a single pass. Slower, and the only correct answer for Hinglish.
+    Multilingual,
+}
+
+/// Length of one language-detection window.
+const DETECT_WINDOW_SAMPLES: usize = 16_000 * 4;
+
+/// Decides the engine for this utterance.
+///
+/// The fast engines are monolingual. Handing a code-switched sentence to one of
+/// them silently drops every word in the other language — Parakeet has never
+/// seen Devanagari, and IndicConformer mangles English. So the route is
+/// multilingual whenever code-switching is plausible, and fast only when the
+/// audio looks confidently monolingual English.
+fn resolve_asr_route(configured: &str, model_path: &str, samples: &[f32]) -> AsrRoute {
     let lower = configured.trim().to_ascii_lowercase();
     if !matches!(lower.as_str(), "" | "auto" | "automatic") {
-        return configured.to_owned();
-    }
-    // Detect on the first few seconds only — language is obvious from a short
-    // prefix, and a shorter mel keeps the whisper encoder pass cheap.
-    const DETECT_PREFIX_SAMPLES: usize = 16_000 * 5;
-    let prefix = &samples[..samples.len().min(DETECT_PREFIX_SAMPLES)];
-    match model_registry::detect_language(model_path, prefix) {
-        Ok(code) => {
-            let normalized = normalized_auto_language(&code);
-            if is_indic_language(&normalized) {
-                normalized
-            } else {
-                "english".to_owned()
-            }
+        // Hinglish is mixed by definition; no monolingual engine can serve it.
+        if lower == "hinglish" {
+            return AsrRoute::Multilingual;
         }
-        Err(_) => "english".to_owned(),
+        return AsrRoute::Fast(configured.to_owned());
     }
+
+    // Sample the start, middle, and end rather than the first few seconds alone.
+    // Detecting on a prefix is what made "let's ship this, phir kal baat karte
+    // hain" route to Parakeet: the opening is English, so the Hindi half was
+    // never transcribed.
+    let mut sawenglish = false;
+    for window in detection_windows(samples) {
+        match model_registry::detect_language(model_path, window) {
+            Ok(code) => {
+                if is_indic_language(&normalized_auto_language(&code)) {
+                    // Any Indic anywhere in the clip means it may be mixed.
+                    return AsrRoute::Multilingual;
+                }
+                sawenglish = true;
+            }
+            // Detection failed, so confidence is gone; take the engine that
+            // cannot lose a language.
+            Err(_) => return AsrRoute::Multilingual,
+        }
+    }
+    if sawenglish {
+        AsrRoute::Fast("english".to_owned())
+    } else {
+        AsrRoute::Multilingual
+    }
+}
+
+/// Up to three detection windows: the opening, the middle, and the tail. A short
+/// utterance yields one; there is nothing later for it to switch into.
+fn detection_windows(samples: &[f32]) -> Vec<&[f32]> {
+    if samples.is_empty() {
+        return Vec::new();
+    }
+    if samples.len() <= DETECT_WINDOW_SAMPLES * 2 {
+        return vec![&samples[..samples.len().min(DETECT_WINDOW_SAMPLES)]];
+    }
+    let middle_start = samples.len() / 2 - DETECT_WINDOW_SAMPLES / 2;
+    vec![
+        &samples[..DETECT_WINDOW_SAMPLES],
+        &samples[middle_start..middle_start + DETECT_WINDOW_SAMPLES],
+        &samples[samples.len() - DETECT_WINDOW_SAMPLES..],
+    ]
 }
 
 /// Hindi and Urdu are the same spoken language (Hindustani) with different
@@ -1104,9 +1164,58 @@ mod tests {
     fn explicit_modes_skip_detection_entirely() {
         // Explicit language choices must pass through untouched — only Auto
         // detects, so choosing Urdu really does mean Urdu.
-        for mode in ["english", "hindi", "hinglish", "urdu", "tamil"] {
-            assert_eq!(resolve_asr_language(mode, "", &[]), mode);
+        for mode in ["english", "hindi", "urdu", "tamil"] {
+            assert_eq!(
+                resolve_asr_route(mode, "", &[]),
+                AsrRoute::Fast(mode.to_owned()),
+                "{mode}"
+            );
         }
+    }
+
+    #[test]
+    fn hinglish_never_routes_to_a_monolingual_engine() {
+        // Hinglish is code-switched by definition. Parakeet has never seen
+        // Devanagari and IndicConformer mangles English, so either one silently
+        // drops half the sentence.
+        assert_eq!(
+            resolve_asr_route("hinglish", "", &[]),
+            AsrRoute::Multilingual
+        );
+    }
+
+    #[test]
+    fn auto_falls_back_to_multilingual_when_detection_is_unavailable() {
+        // No model path, so detection errors. Confidence is gone, so take the
+        // engine that cannot lose a language rather than guessing English.
+        let samples = vec![0.0_f32; 16_000];
+        assert_eq!(
+            resolve_asr_route("auto", "", &samples),
+            AsrRoute::Multilingual
+        );
+        // Empty audio yields no windows at all; same reasoning.
+        assert_eq!(resolve_asr_route("auto", "", &[]), AsrRoute::Multilingual);
+    }
+
+    #[test]
+    fn detection_samples_the_whole_clip_not_just_the_opening() {
+        // The reported failure: an utterance that opens in English and switches
+        // to Hindi. Detecting on a prefix alone routed it to Parakeet and the
+        // Hindi half was never transcribed, so the tail must be sampled too.
+        let long = vec![0.0_f32; DETECT_WINDOW_SAMPLES * 5];
+        let windows = detection_windows(&long);
+        assert_eq!(windows.len(), 3);
+        // The last window really is the end of the clip.
+        assert_eq!(windows[2].len(), DETECT_WINDOW_SAMPLES);
+        assert_eq!(
+            windows[2].as_ptr(),
+            long[long.len() - DETECT_WINDOW_SAMPLES..].as_ptr()
+        );
+
+        // A short utterance has no later half to switch into, so one window.
+        let short = vec![0.0_f32; DETECT_WINDOW_SAMPLES];
+        assert_eq!(detection_windows(&short).len(), 1);
+        assert!(detection_windows(&[]).is_empty());
     }
 
     #[test]

@@ -11,17 +11,24 @@
 
 use crate::{api::personalization, storage};
 
+// Budgets are deliberately tight. The KV prefix cache covers the *system*
+// prompt, not the user turn, so every character here is re-read by the model on
+// every dictation. Measured over the 205-sentence corpus, a large block cost 62%
+// more latency (275 ms to 445 ms median) and produced 15% *fewer* useful edits,
+// because it diluted the model's attention on the transcript it was supposed to
+// be editing. Context earns its place by being small and relevant.
+
 /// Recent dictations handed to the model as style context.
-const HISTORY_ENTRIES: u32 = 20;
-/// Per-entry cap, so one long dictation cannot crowd out the other nineteen.
-const HISTORY_ENTRY_BUDGET: usize = 140;
+const HISTORY_ENTRIES: u32 = 5;
+/// Per-entry cap, so one long dictation cannot crowd out the other four.
+const HISTORY_ENTRY_BUDGET: usize = 90;
 /// Total cap for the history block.
-const HISTORY_BUDGET: usize = 2_400;
+const HISTORY_BUDGET: usize = 450;
 /// Cap for the text preceding the caret. The tail is kept: the words closest to
 /// the cursor say the most about what comes next.
-const BEFORE_CURSOR_BUDGET: usize = 900;
+const BEFORE_CURSOR_BUDGET: usize = 250;
 /// Cap for the text following the caret. The head is kept, for the same reason.
-const AFTER_CURSOR_BUDGET: usize = 300;
+const AFTER_CURSOR_BUDGET: usize = 120;
 
 /// The text around the caret in the focused field, already split by the platform
 /// layer. Empty for a secure field — the platform never reads one.

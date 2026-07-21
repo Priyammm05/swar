@@ -61,7 +61,7 @@ The speaker's recent dictations, newest first:\n\
 - Let's ship the connector after the review\n\
 - Team ko bata dena release Friday ko hai\n\n\
 Text already in the field, with <CURSOR> where the new text goes:\n\
-Hi Priyam,\n\nThanks for the update on the migration. <CURSOR>\n\nBest,\nAsha"
+Thanks for the update on the migration. <CURSOR>"
 }
 
 #[test]
