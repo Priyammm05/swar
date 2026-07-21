@@ -4,20 +4,29 @@ use directories::ProjectDirs;
 use flutter_rust_bridge::frb;
 use serde::{Deserialize, Serialize};
 
+/// What Swar persists between launches.
+///
+/// Every field here must be read by something that changes behaviour. Eight
+/// were removed once nothing read them: `language`, `launch_at_login`,
+/// `show_in_dock`, `dictation_sounds`, `mute_music`, `suggestions`,
+/// `announcements`, and `milestones`. They survived the removal of their
+/// Settings rows and went on being written to disk, which left a settings file
+/// stating things about the product that were not true. `launch_at_login` in
+/// particular persisted as `true` on machines where no launch agent has ever
+/// existed.
+///
+/// `#[serde(default)]` plus serde's habit of ignoring unknown keys means an
+/// existing settings.json holding those keys still loads; they are simply
+/// dropped the next time it is written. No migration is needed.
+///
+/// When one of those features is built, its field comes back in the same
+/// commit as its implementation, so it is true from the first line.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(default)]
 pub struct NativeSettings {
-    pub language: String,
     pub writing_mode: String,
-    pub launch_at_login: bool,
-    pub show_in_dock: bool,
     pub keep_models_warm: bool,
     pub show_swar_bar: bool,
-    pub dictation_sounds: bool,
-    pub mute_music: bool,
-    pub suggestions: bool,
-    pub announcements: bool,
-    pub milestones: bool,
     pub paste_automatically: bool,
     pub restore_clipboard: bool,
     pub learn_from_edits: bool,
@@ -57,17 +66,9 @@ pub(crate) fn configured_history_retention_days() -> u32 {
 impl Default for NativeSettings {
     fn default() -> Self {
         Self {
-            language: "automatic".to_owned(),
             writing_mode: "clean".to_owned(),
-            launch_at_login: false,
-            show_in_dock: true,
             keep_models_warm: true,
             show_swar_bar: true,
-            dictation_sounds: true,
-            mute_music: false,
-            suggestions: true,
-            announcements: true,
-            milestones: true,
             paste_automatically: true,
             restore_clipboard: true,
             learn_from_edits: false,

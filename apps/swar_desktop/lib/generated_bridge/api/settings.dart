@@ -15,18 +15,27 @@ NativeSettings loadSettings() =>
 void saveSettings({required NativeSettings settings}) =>
     RustLib.instance.api.crateApiSettingsSaveSettings(settings: settings);
 
+/// What Swar persists between launches.
+///
+/// Every field here must be read by something that changes behaviour. Eight
+/// were removed once nothing read them: `language`, `launch_at_login`,
+/// `show_in_dock`, `dictation_sounds`, `mute_music`, `suggestions`,
+/// `announcements`, and `milestones`. They survived the removal of their
+/// Settings rows and went on being written to disk, which left a settings file
+/// stating things about the product that were not true. `launch_at_login` in
+/// particular persisted as `true` on machines where no launch agent has ever
+/// existed.
+///
+/// `#[serde(default)]` plus serde's habit of ignoring unknown keys means an
+/// existing settings.json holding those keys still loads; they are simply
+/// dropped the next time it is written. No migration is needed.
+///
+/// When one of those features is built, its field comes back in the same
+/// commit as its implementation, so it is true from the first line.
 class NativeSettings {
-  final String language;
   final String writingMode;
-  final bool launchAtLogin;
-  final bool showInDock;
   final bool keepModelsWarm;
   final bool showSwarBar;
-  final bool dictationSounds;
-  final bool muteMusic;
-  final bool suggestions;
-  final bool announcements;
-  final bool milestones;
   final bool pasteAutomatically;
   final bool restoreClipboard;
   final bool learnFromEdits;
@@ -43,17 +52,9 @@ class NativeSettings {
   final int historyRetentionDays;
 
   const NativeSettings({
-    required this.language,
     required this.writingMode,
-    required this.launchAtLogin,
-    required this.showInDock,
     required this.keepModelsWarm,
     required this.showSwarBar,
-    required this.dictationSounds,
-    required this.muteMusic,
-    required this.suggestions,
-    required this.announcements,
-    required this.milestones,
     required this.pasteAutomatically,
     required this.restoreClipboard,
     required this.learnFromEdits,
@@ -72,17 +73,9 @@ class NativeSettings {
 
   @override
   int get hashCode =>
-      language.hashCode ^
       writingMode.hashCode ^
-      launchAtLogin.hashCode ^
-      showInDock.hashCode ^
       keepModelsWarm.hashCode ^
       showSwarBar.hashCode ^
-      dictationSounds.hashCode ^
-      muteMusic.hashCode ^
-      suggestions.hashCode ^
-      announcements.hashCode ^
-      milestones.hashCode ^
       pasteAutomatically.hashCode ^
       restoreClipboard.hashCode ^
       learnFromEdits.hashCode ^
@@ -100,17 +93,9 @@ class NativeSettings {
       identical(this, other) ||
       other is NativeSettings &&
           runtimeType == other.runtimeType &&
-          language == other.language &&
           writingMode == other.writingMode &&
-          launchAtLogin == other.launchAtLogin &&
-          showInDock == other.showInDock &&
           keepModelsWarm == other.keepModelsWarm &&
           showSwarBar == other.showSwarBar &&
-          dictationSounds == other.dictationSounds &&
-          muteMusic == other.muteMusic &&
-          suggestions == other.suggestions &&
-          announcements == other.announcements &&
-          milestones == other.milestones &&
           pasteAutomatically == other.pasteAutomatically &&
           restoreClipboard == other.restoreClipboard &&
           learnFromEdits == other.learnFromEdits &&

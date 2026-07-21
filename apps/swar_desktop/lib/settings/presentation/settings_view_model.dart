@@ -22,35 +22,12 @@ final class SettingsViewModel extends ChangeNotifier {
     _save(_settings.copyWith(writingMode: writingMode));
   }
 
-  void setLaunchAtLogin({required bool enabled}) {
-    _save(_settings.copyWith(launchAtLogin: enabled));
-  }
-
-  void setShowInDock({required bool enabled}) {
-    _save(_settings.copyWith(showInDock: enabled));
-  }
-
   void setKeepModelsWarm({required bool enabled}) {
     _save(_settings.copyWith(keepModelsWarm: enabled));
   }
 
   void setShowSwarBar({required bool enabled}) =>
       _save(_settings.copyWith(showSwarBar: enabled));
-
-  void setDictationSounds({required bool enabled}) =>
-      _save(_settings.copyWith(dictationSounds: enabled));
-
-  void setMuteMusic({required bool enabled}) =>
-      _save(_settings.copyWith(muteMusic: enabled));
-
-  void setSuggestions({required bool enabled}) =>
-      _save(_settings.copyWith(suggestions: enabled));
-
-  void setAnnouncements({required bool enabled}) =>
-      _save(_settings.copyWith(announcements: enabled));
-
-  void setMilestones({required bool enabled}) =>
-      _save(_settings.copyWith(milestones: enabled));
 
   void setPasteAutomatically({required bool enabled}) =>
       _save(_settings.copyWith(pasteAutomatically: enabled));

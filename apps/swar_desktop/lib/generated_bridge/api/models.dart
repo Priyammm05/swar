@@ -9,6 +9,7 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 // These functions are ignored because they are not marked as `pub`: `asr_manifest`, `bundle_installed`, `directory_size`, `download_to_partial`, `download_verified`, `embedded_llm_model_path`, `ensure_embedded_llm_model_download`, `ensure_parakeet_download`, `expected_minimum_bytes`, `file_present_with_min_size`, `install_bundle`, `models_dir`, `parakeet_installed`, `recommended_model_path`, `status_for`, `verified_file`
 // These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `AsrBundle`, `AsrFile`, `AsrManifest`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `fmt`
+// These functions are ignored (category: IgnoreBecauseExplicitAttribute): `embedded_llm_model_path_string`
 
 /// Returns the supported multilingual starter model without accessing the network.
 OfflineModelStatus recommendedModelStatus() =>

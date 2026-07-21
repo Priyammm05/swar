@@ -11,15 +11,8 @@ enum SwarEnhancementProvider { local, byok }
 final class SwarSettings {
   const SwarSettings({
     this.writingMode = SwarWritingMode.clean,
-    this.launchAtLogin = false,
-    this.showInDock = true,
     this.keepModelsWarm = true,
     this.showSwarBar = true,
-    this.dictationSounds = true,
-    this.muteMusic = false,
-    this.suggestions = true,
-    this.announcements = true,
-    this.milestones = true,
     this.pasteAutomatically = true,
     this.restoreClipboard = true,
     this.learnFromEdits = false,
@@ -34,15 +27,8 @@ final class SwarSettings {
   });
 
   final SwarWritingMode writingMode;
-  final bool launchAtLogin;
-  final bool showInDock;
   final bool keepModelsWarm;
   final bool showSwarBar;
-  final bool dictationSounds;
-  final bool muteMusic;
-  final bool suggestions;
-  final bool announcements;
-  final bool milestones;
   final bool pasteAutomatically;
   final bool restoreClipboard;
   final bool learnFromEdits;
@@ -57,15 +43,8 @@ final class SwarSettings {
 
   SwarSettings copyWith({
     SwarWritingMode? writingMode,
-    bool? launchAtLogin,
-    bool? showInDock,
     bool? keepModelsWarm,
     bool? showSwarBar,
-    bool? dictationSounds,
-    bool? muteMusic,
-    bool? suggestions,
-    bool? announcements,
-    bool? milestones,
     bool? pasteAutomatically,
     bool? restoreClipboard,
     bool? learnFromEdits,
@@ -80,15 +59,8 @@ final class SwarSettings {
   }) {
     return SwarSettings(
       writingMode: writingMode ?? this.writingMode,
-      launchAtLogin: launchAtLogin ?? this.launchAtLogin,
-      showInDock: showInDock ?? this.showInDock,
       keepModelsWarm: keepModelsWarm ?? this.keepModelsWarm,
       showSwarBar: showSwarBar ?? this.showSwarBar,
-      dictationSounds: dictationSounds ?? this.dictationSounds,
-      muteMusic: muteMusic ?? this.muteMusic,
-      suggestions: suggestions ?? this.suggestions,
-      announcements: announcements ?? this.announcements,
-      milestones: milestones ?? this.milestones,
       pasteAutomatically: pasteAutomatically ?? this.pasteAutomatically,
       restoreClipboard: restoreClipboard ?? this.restoreClipboard,
       learnFromEdits: learnFromEdits ?? this.learnFromEdits,

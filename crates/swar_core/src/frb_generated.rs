@@ -1379,17 +1379,9 @@ impl SseDecode for crate::api::dictation::MicrophoneDevice {
 impl SseDecode for crate::api::settings::NativeSettings {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
-        let mut var_language = <String>::sse_decode(deserializer);
         let mut var_writingMode = <String>::sse_decode(deserializer);
-        let mut var_launchAtLogin = <bool>::sse_decode(deserializer);
-        let mut var_showInDock = <bool>::sse_decode(deserializer);
         let mut var_keepModelsWarm = <bool>::sse_decode(deserializer);
         let mut var_showSwarBar = <bool>::sse_decode(deserializer);
-        let mut var_dictationSounds = <bool>::sse_decode(deserializer);
-        let mut var_muteMusic = <bool>::sse_decode(deserializer);
-        let mut var_suggestions = <bool>::sse_decode(deserializer);
-        let mut var_announcements = <bool>::sse_decode(deserializer);
-        let mut var_milestones = <bool>::sse_decode(deserializer);
         let mut var_pasteAutomatically = <bool>::sse_decode(deserializer);
         let mut var_restoreClipboard = <bool>::sse_decode(deserializer);
         let mut var_learnFromEdits = <bool>::sse_decode(deserializer);
@@ -1402,17 +1394,9 @@ impl SseDecode for crate::api::settings::NativeSettings {
         let mut var_providerModel = <String>::sse_decode(deserializer);
         let mut var_historyRetentionDays = <u32>::sse_decode(deserializer);
         return crate::api::settings::NativeSettings {
-            language: var_language,
             writing_mode: var_writingMode,
-            launch_at_login: var_launchAtLogin,
-            show_in_dock: var_showInDock,
             keep_models_warm: var_keepModelsWarm,
             show_swar_bar: var_showSwarBar,
-            dictation_sounds: var_dictationSounds,
-            mute_music: var_muteMusic,
-            suggestions: var_suggestions,
-            announcements: var_announcements,
-            milestones: var_milestones,
             paste_automatically: var_pasteAutomatically,
             restore_clipboard: var_restoreClipboard,
             learn_from_edits: var_learnFromEdits,
@@ -1951,17 +1935,9 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::dictation::MicrophoneDevice>
 impl flutter_rust_bridge::IntoDart for crate::api::settings::NativeSettings {
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
         [
-            self.language.into_into_dart().into_dart(),
             self.writing_mode.into_into_dart().into_dart(),
-            self.launch_at_login.into_into_dart().into_dart(),
-            self.show_in_dock.into_into_dart().into_dart(),
             self.keep_models_warm.into_into_dart().into_dart(),
             self.show_swar_bar.into_into_dart().into_dart(),
-            self.dictation_sounds.into_into_dart().into_dart(),
-            self.mute_music.into_into_dart().into_dart(),
-            self.suggestions.into_into_dart().into_dart(),
-            self.announcements.into_into_dart().into_dart(),
-            self.milestones.into_into_dart().into_dart(),
             self.paste_automatically.into_into_dart().into_dart(),
             self.restore_clipboard.into_into_dart().into_dart(),
             self.learn_from_edits.into_into_dart().into_dart(),
@@ -2372,17 +2348,9 @@ impl SseEncode for crate::api::dictation::MicrophoneDevice {
 impl SseEncode for crate::api::settings::NativeSettings {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
-        <String>::sse_encode(self.language, serializer);
         <String>::sse_encode(self.writing_mode, serializer);
-        <bool>::sse_encode(self.launch_at_login, serializer);
-        <bool>::sse_encode(self.show_in_dock, serializer);
         <bool>::sse_encode(self.keep_models_warm, serializer);
         <bool>::sse_encode(self.show_swar_bar, serializer);
-        <bool>::sse_encode(self.dictation_sounds, serializer);
-        <bool>::sse_encode(self.mute_music, serializer);
-        <bool>::sse_encode(self.suggestions, serializer);
-        <bool>::sse_encode(self.announcements, serializer);
-        <bool>::sse_encode(self.milestones, serializer);
         <bool>::sse_encode(self.paste_automatically, serializer);
         <bool>::sse_encode(self.restore_clipboard, serializer);
         <bool>::sse_encode(self.learn_from_edits, serializer);

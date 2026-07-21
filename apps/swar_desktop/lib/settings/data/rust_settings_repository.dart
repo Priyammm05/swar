@@ -20,15 +20,8 @@ final class RustSettingsRepository implements SettingsRepository {
         : value.modelPath;
     return SwarSettings(
       writingMode: SwarWritingMode.values.byName(value.writingMode),
-      launchAtLogin: value.launchAtLogin,
-      showInDock: value.showInDock,
       keepModelsWarm: value.keepModelsWarm,
       showSwarBar: value.showSwarBar,
-      dictationSounds: value.dictationSounds,
-      muteMusic: value.muteMusic,
-      suggestions: value.suggestions,
-      announcements: value.announcements,
-      milestones: value.milestones,
       pasteAutomatically: value.pasteAutomatically,
       restoreClipboard: value.restoreClipboard,
       learnFromEdits: value.learnFromEdits,
@@ -55,19 +48,9 @@ final class RustSettingsRepository implements SettingsRepository {
   void save(SwarSettings settings) {
     native.saveSettings(
       settings: native.NativeSettings(
-        // Retained in the persisted record for compatibility; Swar
-        // recognises English only and the core ignores this field.
-        language: 'english',
         writingMode: settings.writingMode.name,
-        launchAtLogin: settings.launchAtLogin,
-        showInDock: settings.showInDock,
         keepModelsWarm: settings.keepModelsWarm,
         showSwarBar: settings.showSwarBar,
-        dictationSounds: settings.dictationSounds,
-        muteMusic: settings.muteMusic,
-        suggestions: settings.suggestions,
-        announcements: settings.announcements,
-        milestones: settings.milestones,
         pasteAutomatically: settings.pasteAutomatically,
         restoreClipboard: settings.restoreClipboard,
         learnFromEdits: settings.learnFromEdits,

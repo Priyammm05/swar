@@ -1274,31 +1274,23 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   NativeSettings dco_decode_native_settings(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 22)
-      throw Exception('unexpected arr length: expect 22 but see ${arr.length}');
+    if (arr.length != 14)
+      throw Exception('unexpected arr length: expect 14 but see ${arr.length}');
     return NativeSettings(
-      language: dco_decode_String(arr[0]),
-      writingMode: dco_decode_String(arr[1]),
-      launchAtLogin: dco_decode_bool(arr[2]),
-      showInDock: dco_decode_bool(arr[3]),
-      keepModelsWarm: dco_decode_bool(arr[4]),
-      showSwarBar: dco_decode_bool(arr[5]),
-      dictationSounds: dco_decode_bool(arr[6]),
-      muteMusic: dco_decode_bool(arr[7]),
-      suggestions: dco_decode_bool(arr[8]),
-      announcements: dco_decode_bool(arr[9]),
-      milestones: dco_decode_bool(arr[10]),
-      pasteAutomatically: dco_decode_bool(arr[11]),
-      restoreClipboard: dco_decode_bool(arr[12]),
-      learnFromEdits: dco_decode_bool(arr[13]),
-      modelPath: dco_decode_String(arr[14]),
-      microphoneId: dco_decode_String(arr[15]),
-      shortcutKey: dco_decode_String(arr[16]),
-      excludedApplications: dco_decode_list_String(arr[17]),
-      enhancementProvider: dco_decode_String(arr[18]),
-      providerEndpoint: dco_decode_String(arr[19]),
-      providerModel: dco_decode_String(arr[20]),
-      historyRetentionDays: dco_decode_u_32(arr[21]),
+      writingMode: dco_decode_String(arr[0]),
+      keepModelsWarm: dco_decode_bool(arr[1]),
+      showSwarBar: dco_decode_bool(arr[2]),
+      pasteAutomatically: dco_decode_bool(arr[3]),
+      restoreClipboard: dco_decode_bool(arr[4]),
+      learnFromEdits: dco_decode_bool(arr[5]),
+      modelPath: dco_decode_String(arr[6]),
+      microphoneId: dco_decode_String(arr[7]),
+      shortcutKey: dco_decode_String(arr[8]),
+      excludedApplications: dco_decode_list_String(arr[9]),
+      enhancementProvider: dco_decode_String(arr[10]),
+      providerEndpoint: dco_decode_String(arr[11]),
+      providerModel: dco_decode_String(arr[12]),
+      historyRetentionDays: dco_decode_u_32(arr[13]),
     );
   }
 
@@ -1733,17 +1725,9 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   @protected
   NativeSettings sse_decode_native_settings(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
-    var var_language = sse_decode_String(deserializer);
     var var_writingMode = sse_decode_String(deserializer);
-    var var_launchAtLogin = sse_decode_bool(deserializer);
-    var var_showInDock = sse_decode_bool(deserializer);
     var var_keepModelsWarm = sse_decode_bool(deserializer);
     var var_showSwarBar = sse_decode_bool(deserializer);
-    var var_dictationSounds = sse_decode_bool(deserializer);
-    var var_muteMusic = sse_decode_bool(deserializer);
-    var var_suggestions = sse_decode_bool(deserializer);
-    var var_announcements = sse_decode_bool(deserializer);
-    var var_milestones = sse_decode_bool(deserializer);
     var var_pasteAutomatically = sse_decode_bool(deserializer);
     var var_restoreClipboard = sse_decode_bool(deserializer);
     var var_learnFromEdits = sse_decode_bool(deserializer);
@@ -1756,17 +1740,9 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_providerModel = sse_decode_String(deserializer);
     var var_historyRetentionDays = sse_decode_u_32(deserializer);
     return NativeSettings(
-      language: var_language,
       writingMode: var_writingMode,
-      launchAtLogin: var_launchAtLogin,
-      showInDock: var_showInDock,
       keepModelsWarm: var_keepModelsWarm,
       showSwarBar: var_showSwarBar,
-      dictationSounds: var_dictationSounds,
-      muteMusic: var_muteMusic,
-      suggestions: var_suggestions,
-      announcements: var_announcements,
-      milestones: var_milestones,
       pasteAutomatically: var_pasteAutomatically,
       restoreClipboard: var_restoreClipboard,
       learnFromEdits: var_learnFromEdits,
@@ -2206,17 +2182,9 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     SseSerializer serializer,
   ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
-    sse_encode_String(self.language, serializer);
     sse_encode_String(self.writingMode, serializer);
-    sse_encode_bool(self.launchAtLogin, serializer);
-    sse_encode_bool(self.showInDock, serializer);
     sse_encode_bool(self.keepModelsWarm, serializer);
     sse_encode_bool(self.showSwarBar, serializer);
-    sse_encode_bool(self.dictationSounds, serializer);
-    sse_encode_bool(self.muteMusic, serializer);
-    sse_encode_bool(self.suggestions, serializer);
-    sse_encode_bool(self.announcements, serializer);
-    sse_encode_bool(self.milestones, serializer);
     sse_encode_bool(self.pasteAutomatically, serializer);
     sse_encode_bool(self.restoreClipboard, serializer);
     sse_encode_bool(self.learnFromEdits, serializer);

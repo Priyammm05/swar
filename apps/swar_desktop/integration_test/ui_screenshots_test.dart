@@ -47,9 +47,7 @@ void main() {
             modelPath:
                 '/Users/you/Library/Application Support/dev.Swar.Swar/models/ggml-small-q5_1.bin',
             microphoneId: 'built-in',
-            launchAtLogin: true,
             showSwarBar: true,
-            showInDock: true,
             keepModelsWarm: true,
           ),
         ),
