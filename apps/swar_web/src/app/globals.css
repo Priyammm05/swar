@@ -1,0 +1,126 @@
+@import "tailwindcss";
+
+/*
+  Swar runs entirely on the user's machine, so the palette is warm paper rather
+  than the cool blue-grey most AI products default to. The accent is an acid
+  lime: loud enough to carry a page that has no logo and no product
+  photography, and deliberately unlike the lavender the nearest comparable
+  product uses.
+*/
+:root {
+  --paper: #f2efe4;
+  --paper-deep: #e8e3d3;
+  --ink: #14140f;
+  --ink-soft: #4c4c40;
+  --ink-faint: #8b897a;
+  --acid: #d8f651;
+  --acid-deep: #b4d92a;
+  --violet: #cbbcff;
+  --rule: #dcd5c2;
+
+  --background: var(--paper);
+  --foreground: var(--ink);
+}
+
+@theme inline {
+  --color-paper: var(--paper);
+  --color-paper-deep: var(--paper-deep);
+  --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
+  --color-ink-faint: var(--ink-faint);
+  --color-acid: var(--acid);
+  --color-acid-deep: var(--acid-deep);
+  --color-violet: var(--violet);
+  --color-rule: var(--rule);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-inter);
+  --font-display: var(--font-fraunces);
+  --font-mono: var(--font-mono-stack);
+}
+
+html {
+  scroll-behavior: smooth;
+  background: var(--paper);
+  color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+}
+
+body {
+  background: var(--paper);
+  /* Paper grain. Without it a flat cream reads as "unstyled white" on a large
+     display; the noise is what makes the colour look chosen. */
+  background-image: radial-gradient(
+    rgba(20, 20, 15, 0.04) 1px,
+    transparent 1px
+  );
+  background-size: 3px 3px;
+  overflow-x: hidden;
+}
+
+::selection {
+  background: var(--acid);
+  color: var(--ink);
+}
+
+/*
+  Motion is the one thing a person with a vestibular disorder cannot opt out of
+  by looking away, so every animation on this page stops when the OS asks.
+*/
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+/* Duplicated track plus a -50% translate gives a seamless loop with no JS. */
+@keyframes swar-marquee {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    transform: translate3d(-50%, 0, 0);
+  }
+}
+
+.swar-marquee {
+  animation: swar-marquee 42s linear infinite;
+  will-change: transform;
+}
+
+.swar-marquee-reverse {
+  animation: swar-marquee 52s linear infinite reverse;
+  will-change: transform;
+}
+
+@keyframes swar-blink {
+  0%,
+  49% {
+    opacity: 1;
+  }
+  50%,
+  99% {
+    opacity: 0.1;
+  }
+}
+
+.swar-caret {
+  animation: swar-blink 1.05s steps(1, end) infinite;
+}
+
+/* Fraunces is a variable font with optical-size and "wonk" axes. Dialling both
+   up at display sizes is what stops the headline reading like a default serif. */
+.display-wonk {
+  font-variation-settings:
+    "SOFT" 40,
+    "WONK" 1,
+    "opsz" 144;
+  letter-spacing: -0.03em;
+}
