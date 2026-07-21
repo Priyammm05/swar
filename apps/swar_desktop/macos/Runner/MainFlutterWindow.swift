@@ -116,6 +116,51 @@ private enum FocusedFieldInspector {
     guard AXUIElementCopyAttributeValue(element, attribute, &value) == .success else { return nil }
     return value as? String
   }
+
+  /// The focused element's rect in Cocoa screen coordinates, so the overlay can
+  /// avoid parking on top of the caret (overlay spec §7). Read-only, like
+  /// `isSecure`: this never writes or inserts. Returns nil when Accessibility is
+  /// not granted or the element has no readable geometry.
+  static func focusedFrame() -> NSRect? {
+    guard AXIsProcessTrusted() else { return nil }
+    let systemWide = AXUIElementCreateSystemWide()
+    var focused: CFTypeRef?
+    guard
+      AXUIElementCopyAttributeValue(
+        systemWide, kAXFocusedUIElementAttribute as CFString, &focused) == .success,
+      let focusedElement = focused
+    else { return nil }
+    let element = focusedElement as! AXUIElement
+
+    var positionValue: CFTypeRef?
+    var sizeValue: CFTypeRef?
+    guard
+      AXUIElementCopyAttributeValue(
+        element, kAXPositionAttribute as CFString, &positionValue) == .success,
+      AXUIElementCopyAttributeValue(
+        element, kAXSizeAttribute as CFString, &sizeValue) == .success
+    else { return nil }
+
+    var origin = CGPoint.zero
+    var size = CGSize.zero
+    guard
+      let position = positionValue,
+      let extent = sizeValue,
+      AXValueGetValue(position as! AXValue, .cgPoint, &origin),
+      AXValueGetValue(extent as! AXValue, .cgSize, &size),
+      size.width > 0, size.height > 0
+    else { return nil }
+
+    // Accessibility reports a top-left origin with y growing downward; Cocoa
+    // screen coordinates grow upward from the primary display's bottom.
+    guard let primary = NSScreen.screens.first else { return nil }
+    return NSRect(
+      x: origin.x,
+      y: primary.frame.maxY - origin.y - size.height,
+      width: size.width,
+      height: size.height
+    )
+  }
 }
 
 private final class AccessibilityAccessController {
@@ -289,6 +334,13 @@ private final class DictationOverlayController {
   private var globalMouseMonitor: Any?
   private var localMouseMonitor: Any?
   private var hoverPollTimer: Timer?
+  // Drag and snap state (spec §7).
+  private var dragStartOrigin: NSPoint?
+  private var dragStartMouse: NSPoint?
+  private var snapTarget: NSPoint?
+  private var snapTimer: Timer?
+  /// Where the bar rests, remembered per display.
+  private var anchors: [CGDirectDisplayID: OverlayAnchor] = [:]
 
   init(channel: FlutterMethodChannel) {
     let commandOverlay = CommandScreenOverlayController()
@@ -308,12 +360,16 @@ private final class DictationOverlayController {
     )
     panel = DictationOverlayPanel(contentView: content)
     startMouseTracking()
+    content.onDragBegan = { [weak self] in self?.beginDrag() }
+    content.onDragChanged = { [weak self] in self?.continueDrag() }
+    content.onDragEnded = { [weak self] in self?.endDrag() }
   }
 
   deinit {
     if let globalMouseMonitor { NSEvent.removeMonitor(globalMouseMonitor) }
     if let localMouseMonitor { NSEvent.removeMonitor(localMouseMonitor) }
     hoverPollTimer?.invalidate()
+    snapTimer?.invalidate()
   }
 
   // Hover has to work while the user is in another app, so it cannot rely on the
@@ -332,6 +388,10 @@ private final class DictationOverlayController {
   }
 
   private func handleMouseMoved() {
+    // While dragging, the capsule travels with the cursor. Re-evaluating hover
+    // would let a moment of jitter collapse it to the resting dock and turn the
+    // panel click-through, dropping the drag halfway.
+    guard dragStartOrigin == nil else { return }
     guard panel.isVisible, content.stateIsIdle else {
       content.setHovering(false)
       stopHoverPolling()
@@ -389,15 +449,167 @@ private final class DictationOverlayController {
     panel.orderOut(nil)
   }
 
+  /// Places the panel from the remembered anchor for the screen it belongs to.
+  /// Skipped while a drag or a snap animation owns the origin.
   private func position() {
-    guard let screen = NSScreen.main ?? NSScreen.screens.first else { return }
-    let frame = panel.frame
-    let visible = screen.visibleFrame
+    guard dragStartOrigin == nil, snapTarget == nil else { return }
+    guard let screen = anchorScreen() else { return }
+    panel.setFrameOrigin(origin(for: anchor(for: screen), on: screen))
+  }
+
+  // MARK: Drag and snap (spec §7)
+
+  private func beginDrag() {
+    dragStartOrigin = panel.frame.origin
+    dragStartMouse = NSEvent.mouseLocation
+    // A new drag cancels any snap still easing into place.
+    snapTarget = nil
+  }
+
+  private func continueDrag() {
+    guard let startOrigin = dragStartOrigin, let startMouse = dragStartMouse else { return }
+    let mouse = NSEvent.mouseLocation
     panel.setFrameOrigin(NSPoint(
-      x: visible.midX - frame.width / 2,
-      y: visible.minY + 10
+      x: startOrigin.x + (mouse.x - startMouse.x),
+      y: startOrigin.y + (mouse.y - startMouse.y)
     ))
   }
+
+  private func endDrag() {
+    dragStartOrigin = nil
+    dragStartMouse = nil
+    guard let screen = screenForCapsule() ?? anchorScreen() else { return }
+    let visible = screen.visibleFrame
+    let capsule = capsuleScreenRect()
+
+    // Nearest horizontal edge wins: the bar belongs at the top or the bottom of
+    // the screen, never floating in the middle.
+    let distanceToBottom = capsule.midY - visible.minY
+    let distanceToTop = visible.maxY - capsule.midY
+    var resolved = OverlayAnchor(
+      edge: distanceToTop < distanceToBottom ? .top : .bottom,
+      centerXFraction: visible.width > 0
+        ? min(1, max(0, (capsule.midX - visible.minX) / visible.width))
+        : 0.5
+    )
+    // Spec §7: never cover the caret. If the snapped bar would sit over the
+    // focused field, send it to the opposite edge instead.
+    if let field = FocusedFieldInspector.focusedFrame(),
+       snappedCapsuleRect(for: resolved, on: screen).intersects(field) {
+      resolved.edge = resolved.edge == .bottom ? .top : .bottom
+    }
+
+    anchors[displayID(of: screen)] = resolved
+    snapTarget = origin(for: resolved, on: screen)
+    startSnapAnimation()
+  }
+
+  /// Eases the panel to its snapped origin. Moving the window for ~200 ms on
+  /// release is cheap; continuously resizing it every frame is what janks, which
+  /// is why the capsule morphs inside a fixed envelope instead.
+  private func startSnapAnimation() {
+    guard snapTimer == nil else { return }
+    let timer = Timer(timeInterval: 1.0 / 60.0, repeats: true) { [weak self] _ in
+      guard let self, let target = self.snapTarget else { self?.stopSnapAnimation(); return }
+      let current = self.panel.frame.origin
+      let next = NSPoint(
+        x: current.x + (target.x - current.x) * 0.22,
+        y: current.y + (target.y - current.y) * 0.22
+      )
+      if abs(target.x - next.x) < 0.5, abs(target.y - next.y) < 0.5 {
+        self.panel.setFrameOrigin(target)
+        self.snapTarget = nil
+        self.stopSnapAnimation()
+        return
+      }
+      self.panel.setFrameOrigin(next)
+    }
+    snapTimer = timer
+    RunLoop.main.add(timer, forMode: .common)
+  }
+
+  private func stopSnapAnimation() {
+    snapTimer?.invalidate()
+    snapTimer = nil
+  }
+
+  private func anchor(for screen: NSScreen) -> OverlayAnchor {
+    anchors[displayID(of: screen)] ?? OverlayAnchor(edge: .bottom, centerXFraction: 0.5)
+  }
+
+  /// The panel origin that puts the capsule at `anchor` on `screen`. The capsule
+  /// is centred horizontally in the envelope and sits `bottomMargin` above its
+  /// bottom, so the envelope is offset to compensate.
+  private func origin(for anchor: OverlayAnchor, on screen: NSScreen) -> NSPoint {
+    let visible = screen.visibleFrame
+    let frame = panel.frame
+    let margin: CGFloat = 10
+    let centerX = visible.minX + visible.width * anchor.centerXFraction
+    // Keep the whole envelope on screen so a wide capsule cannot run off an edge.
+    let clampedX = min(
+      max(centerX - frame.width / 2, visible.minX - frame.width / 2 + 60),
+      visible.maxX + frame.width / 2 - 60 - frame.width
+    )
+    switch anchor.edge {
+    case .bottom:
+      return NSPoint(x: clampedX, y: visible.minY + margin)
+    case .top:
+      // Anchor the capsule's top edge, which sits bottomMargin + its height up.
+      return NSPoint(x: clampedX, y: visible.maxY - margin - frame.height)
+    }
+  }
+
+  /// Where the capsule itself would land for a candidate anchor, used for the
+  /// caret-overlap check.
+  private func snappedCapsuleRect(for anchor: OverlayAnchor, on screen: NSScreen) -> NSRect {
+    let panelOrigin = origin(for: anchor, on: screen)
+    let local = content.hoverRectInView
+    return NSRect(
+      x: panelOrigin.x + local.minX,
+      y: panelOrigin.y + local.minY,
+      width: local.width,
+      height: local.height
+    )
+  }
+
+  private func capsuleScreenRect() -> NSRect {
+    let local = content.hoverRectInView
+    return NSRect(
+      x: panel.frame.minX + local.minX,
+      y: panel.frame.minY + local.minY,
+      width: local.width,
+      height: local.height
+    )
+  }
+
+  /// The screen the capsule currently sits on, for multi-display placement.
+  private func screenForCapsule() -> NSScreen? {
+    let capsule = capsuleScreenRect()
+    return NSScreen.screens.first { $0.frame.intersects(capsule) }
+  }
+
+  private func anchorScreen() -> NSScreen? {
+    screenForCapsule() ?? NSScreen.main ?? NSScreen.screens.first
+  }
+
+  private func displayID(of screen: NSScreen) -> CGDirectDisplayID {
+    (screen.deviceDescription[
+      NSDeviceDescriptionKey("NSScreenNumber")
+    ] as? NSNumber)?.uint32Value ?? 0
+  }
+}
+
+/// Which screen edge the bar rests against, and where along it (spec §7).
+private struct OverlayAnchor {
+  enum Edge {
+    case bottom
+    case top
+  }
+
+  var edge: Edge
+  /// 0-1 across the screen's visible width, so the bar returns to the same spot
+  /// after a resolution change.
+  var centerXFraction: CGFloat
 }
 
 private final class CommandScreenOverlayController {
@@ -603,6 +815,12 @@ private final class DictationOverlayView: NSView {
   private var longPressTimer: Timer?
   private var pointerIsDown = false
   private var longPressTriggered = false
+  /// Accumulated pointer travel for the current press, to tell a drag from a
+  /// click. Set by the controller, which owns the panel being moved.
+  private var dragDistance: CGFloat = 0
+  var onDragBegan: (() -> Void)?
+  var onDragChanged: (() -> Void)?
+  var onDragEnded: (() -> Void)?
 
   // Bottom margin inside the envelope so the capsule sits just above the screen
   // edge and its shadow is not clipped.
@@ -1260,11 +1478,13 @@ private final class DictationOverlayView: NSView {
   override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
   override func mouseDown(with event: NSEvent) {
+    dragDistance = 0
+    onDragBegan?()
     if state == "idle" {
       pointerIsDown = true
       longPressTriggered = false
       let timer = Timer(timeInterval: 0.45, repeats: false) { [weak self] _ in
-        guard let self, self.pointerIsDown else { return }
+        guard let self, self.pointerIsDown, self.dragDistance < Self.dragSlop else { return }
         self.longPressTriggered = true
         self.onLongPressStart()
       }
@@ -1282,14 +1502,34 @@ private final class DictationOverlayView: NSView {
     }
   }
 
+  /// How far the pointer must travel before the gesture counts as a drag rather
+  /// than a click, so a slightly shaky click still starts dictation.
+  private static let dragSlop: CGFloat = 4
+
+  override func mouseDragged(with event: NSEvent) {
+    dragDistance += abs(event.deltaX) + abs(event.deltaY)
+    guard dragDistance >= Self.dragSlop else { return }
+    // A drag is a reposition, never a long-press activation.
+    longPressTimer?.invalidate()
+    longPressTimer = nil
+    if longPressTriggered {
+      longPressTriggered = false
+      onLongPressEnd()
+    }
+    onDragChanged?()
+  }
+
   override func mouseUp(with event: NSEvent) {
+    let wasDragged = dragDistance >= Self.dragSlop
+    if wasDragged { onDragEnded?() }
     guard pointerIsDown else { return }
     pointerIsDown = false
     longPressTimer?.invalidate()
     longPressTimer = nil
     if longPressTriggered {
       onLongPressEnd()
-    } else {
+    } else if !wasDragged {
+      // Repositioning the bar must never also start a dictation.
       onDictate()
     }
     longPressTriggered = false

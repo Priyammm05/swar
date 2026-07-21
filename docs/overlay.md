@@ -288,9 +288,17 @@ mode). This is wiring, not new capability. Raw PCM still never crosses into Dart
   above the bottom (current behaviour).
 - **Draggable:** `mouseDragged` moves the panel; the capsule is the drag handle
   in every state that has controls, and the whole pill is draggable in Idle/Ready.
-- **Snap:** on release, ease to the nearest screen edge (left/right/bottom) with
-  a margin, using the same size spring. Remember the snapped anchor per screen so
-  it returns there next time.
+- **Snap:** on release, ease to the nearest screen edge with a margin. Remember
+  the snapped anchor per screen so it returns there next time.
+  - **Implemented as top/bottom, not left/right.** The capsule's width animates
+    across roughly a 15× range (28 pt resting to 420 pt for a long condition
+    label), so a left- or right-flush anchor either leaves the resting dock
+    stranded far from the edge or lets a grown capsule run off it. Correcting
+    that would mean moving the panel every frame as the capsule morphs, which is
+    exactly the window-server thrash the fixed envelope exists to avoid. The bar
+    therefore snaps to the top or bottom edge and keeps its dragged horizontal
+    position, stored as a fraction of the screen's visible width so it survives a
+    resolution change.
 - Multi-display: follow the screen that owns the focused window; re-clamp into
   that screen's `visibleFrame`.
 - Never cover the caret: if the snapped position would sit under the focused
@@ -330,6 +338,10 @@ Done:
    mode as one `DesktopOverlaySnapshot`.
 5. Hover release polls `NSEvent.mouseLocation` rather than relying on mouse-moved
    events, which stop arriving once the pill becomes hit-testable.
+6. **Drag and snap** (§7): the bar is draggable whenever it is interactive, eases
+   to the nearest horizontal edge on release, remembers its anchor per display,
+   and steps to the opposite edge when the snapped position would cover the
+   focused field. A drag never also starts a dictation.
 
 Remaining:
 
@@ -339,7 +351,8 @@ Remaining:
 2. **State 8 (permission)** and **state 10 (no text field)** are drawn but not
    yet reachable. Nothing in the pipeline distinguishes "invoked with no text
    field focused" from a failed insertion, which already surfaces as `copied`.
-3. **Drag + edge-snap** (§7).
+3. The anchor is remembered for the process lifetime but not persisted to
+   settings, so the bar returns to bottom-center after a restart.
 
 Do not change the app's light-mode theme, the focus/nonactivating guarantees, or
 the secure-field privacy behaviour while doing any of the above.
