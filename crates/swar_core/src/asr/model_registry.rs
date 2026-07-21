@@ -661,10 +661,11 @@ fn uses_hinglish_model(language: &str) -> bool {
 /// the Hinglish fine-tune when present, and otherwise stay on the user's
 /// multilingual model, whose Devanagari output the language stage romanises.
 ///
-/// Measured on the benchmark cases, the Hinglish fine-tune (whisper-medium,
-/// q5_0) cuts Hinglish word error rate from 0.696 to 0.174, and it is *worse*
-/// than the general model on monolingual Hindi (2.714), so the swap is
-/// deliberately narrow.
+/// Measured on saved fixtures with each model isolated, the Hinglish fine-tune
+/// (whisper-medium, q5_0) cuts Hinglish word error from 0.696 to 0.174, and from
+/// 0.814 to 0.310 on a 45 s realistic passage. On monolingual Hindi it measures
+/// 0.429, the same as the general model, so the narrow swap is about not paying
+/// 514 MB and its decode cost where it buys nothing, not about avoiding harm.
 fn model_path_for_language(model_path: &Path, language: &str) -> std::path::PathBuf {
     if uses_hindi_model(language) {
         if let Some(hindi) = sibling_model(model_path, HINDI_MODEL_FILE) {
@@ -872,8 +873,8 @@ mod tests {
         // Every other mode keeps the general model, Auto included. The fine-tune
         // repeats short English ("hello this is svar hello this is svar" for a
         // clip the general model gets exactly right), and Auto is the default
-        // mode, so it has to survive whatever it is handed. On monolingual Hindi
-        // the same fine-tune measured 2.714 against the general model's 0.429.
+        // mode, so it has to survive whatever it is handed. Auto picks its own
+        // model from detection instead; see api::dictation::AsrRoute.
         for mode in ["automatic", "auto", "", "english"] {
             assert_eq!(
                 model_path_for_language(&selected, mode),

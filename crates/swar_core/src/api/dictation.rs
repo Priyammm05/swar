@@ -444,11 +444,11 @@ fn finish_capture(capture: &mut ActiveCapture) -> Result<DictationCompletion, St
             let hotwords = personalization::hotword_prompt();
             // Auto has already detected what it is listening to, so let that
             // choose the whisper model rather than applying one model to every
-            // Auto utterance. Sending all of Auto to the code-switch fine-tune
-            // measured 2.714 on monolingual Hindi against the general model's
-            // 0.429, and it repeats short English. The decode language stays as
-            // configured: only the model file changes, so Auto still detects and
-            // transcribes in one pass (swar.md §7).
+            // Auto utterance: the code-switch fine-tune repeats short English,
+            // and on monolingual speech it measures no better than the general
+            // model, so it earns its 514 MB only where languages actually mix.
+            // The decode language stays as configured: only the model file
+            // changes, so Auto still detects and transcribes in one pass (§7).
             let model_path =
                 model_registry::whisper_model_for(&capture.config.model_path, route.model_hint());
             model_registry::transcribe(
@@ -1285,9 +1285,9 @@ mod tests {
             .model_hint(),
             "hinglish"
         );
-        // Every window agreed on Hindi. The code-switch fine-tune measured 2.714
-        // on monolingual Hindi against the general model's 0.429, so uniform
-        // speech must not be sent to it.
+        // Every window agreed on Hindi, so the clip is not code-switched and
+        // the fine-tune has nothing to offer it (0.429 either way on the long
+        // Hindi case). Uniform speech takes its own language's model.
         assert_eq!(
             AsrRoute::Multilingual {
                 heard: HeardLanguages::Uniform("hi".to_owned())

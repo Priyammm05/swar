@@ -94,20 +94,40 @@ the user actually receives rather than the raw decode. The earlier Hinglish
 numbers understated every model on that route by marking correct Devanagari
 wrong purely for being in the other script.
 
-| Model and mode | WER | RTF | Decision |
-| --- | ---: | ---: | --- |
-| Whisper small q5_1, Hinglish | 69.6% | — | Reject: English words inside Hindi come back phonetically respelled |
-| zero-stt-hinglish f16, Hinglish | 21.7% | — | Superseded by the quantisation below |
-| zero-stt-hinglish q5_0, Hinglish | **17.4%** | 0.26 | Route Hinglish and Auto here |
-| zero-stt-hinglish q5_0, English | 11.8% | 0.13 | Matches whisper small; no regression |
-| zero-stt-hinglish q5_0, Hindi | 271.4% | 0.52 | **Reject for explicit Hindi**: collapses into repetition loops |
+Measured on **saved** fixtures with each model isolated in its own directory, so
+that the sibling-file swap in `model_path_for_language` cannot silently redirect
+a run to a model it was not meant to test.
 
-The Hindi result is why the route in `model_registry::uses_hinglish_model` is
-deliberately narrow — the swap applies to `hinglish`, `automatic`, `auto`, and
-unset, and explicitly not to `hindi` or `english`. A regression test asserts
-exactly that. Quantising improved Hinglish rather than degrading it (21.7% to
-17.4%) and roughly doubled speed, which is unusual enough to be worth re-testing
-on a larger corpus before it is trusted.
+| Case (fixed WAV) | Whisper small | zero-stt-hinglish q5_0 |
+| --- | ---: | ---: |
+| Hinglish, short benchmark case | 69.6% | **17.4%** |
+| Hinglish, 45 s realistic passage | 81.4% | **31.0%** |
+| Hindi, long benchmark case | 42.9% | 42.9% |
+
+The Hinglish gain is large and reproducible: whisper small returns
+"invois bej dena" and drifts into Arabic script mid-sentence, while the
+fine-tune returns "invoice bhej dena client ne bola hai". That is what the
+514 MB buys.
+
+**Two earlier figures in this file were wrong and are withdrawn.** A previously
+recorded 271.4% for this model on Hindi does not reproduce; measured on a saved
+fixture it is 42.9%, identical to the general model. And a claimed Auto-mode
+Hindi improvement from 100% to 25% was a scripting artifact, not accuracy: Auto
+romanises its output, so correct Devanagari words scored as wholly wrong against
+a Devanagari reference. Both numbers came from freshly generated fixtures (see
+below) and neither should have been published.
+
+### The suite regenerates its audio on every run
+
+`run_asr_benchmark_suite.sh` synthesises its fixtures with `say` each time it
+runs, so two runs of identical code compare different audio. That is the entire
+source of the "flaky WER" recorded earlier — the same case has read 11.8%,
+17.6%, 38.2%, and 80.9% across runs.
+
+The decoder itself is deterministic: four consecutive runs against one saved WAV
+returned byte-identical transcripts. Any comparison between two builds must
+therefore hold the WAV fixed. Cross-run comparisons against regenerated audio
+measure the text-to-speech engine, not the change under test.
 
 Synthetic speech is a stable regression fixture, not a substitute for diverse
 human speakers. No model may be advertised as accurate for Hindi until it also
