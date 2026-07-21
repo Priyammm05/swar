@@ -1068,25 +1068,37 @@ private final class DictationOverlayView: NSView {
     return result
   }
 
-  /// `full` reduced to `keep` characters, half from the front and half from the
-  /// back, joined by an ellipsis. Attributes ride along, so the final/partial
-  /// white-and-grey split survives the trim.
+  /// `full` reduced to roughly `keep` characters, half from the front and half
+  /// from the back, joined by an ellipsis. Attributes ride along, so the
+  /// final/partial white-and-grey split survives the trim.
+  ///
+  /// Both cuts are snapped outward to whole composed character sequences. A
+  /// Devanagari syllable is several UTF-16 units — a consonant, a virama, a
+  /// vowel matra — and slicing between them strands a combining mark with no
+  /// base, which renders as the dotted-circle placeholder rather than a letter.
   private func middleTruncated(_ full: NSAttributedString, keeping keep: Int) -> NSAttributedString {
-    let total = full.length
-    guard keep < total else { return full }
-    let headLength = max(1, keep / 2)
-    let tailLength = max(1, keep - headLength)
-    guard headLength + tailLength < total else { return full }
+    let text = full.string as NSString
+    let total = text.length
+    guard keep < total, total > 0 else { return full }
+
+    let head = text.rangeOfComposedCharacterSequences(
+      for: NSRange(location: 0, length: min(max(1, keep / 2), total))
+    )
+    let requestedTail = min(max(1, keep - head.length), total)
+    let tail = text.rangeOfComposedCharacterSequences(
+      for: NSRange(location: total - requestedTail, length: requestedTail)
+    )
+    // Snapping outward can make the halves meet or overlap; then there is
+    // nothing to elide and the original is already the best answer.
+    guard tail.location > head.location + head.length else { return full }
+
     let output = NSMutableAttributedString()
-    output.append(full.attributedSubstring(from: NSRange(location: 0, length: headLength)))
+    output.append(full.attributedSubstring(from: head))
     output.append(NSAttributedString(string: " … ", attributes: [
       .font: NSFont.systemFont(ofSize: 12.5, weight: .regular),
       .foregroundColor: OverlayPalette.onPillMut,
     ]))
-    output.append(
-      full.attributedSubstring(
-        from: NSRange(location: total - tailLength, length: tailLength))
-    )
+    output.append(full.attributedSubstring(from: tail))
     return output
   }
 

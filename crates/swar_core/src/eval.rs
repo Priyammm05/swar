@@ -40,6 +40,30 @@ fn has_negation(text: &str) -> bool {
     words.iter().any(|word| NEGATIONS.contains(&word.as_str()))
 }
 
+/// A representative context block, shaped exactly like the one `crate::context`
+/// assembles in production: vocabulary, recent dictations, and surrounding field
+/// text with the caret marker.
+///
+/// Set `SWAR_LLM_EVAL_CONTEXT=0` to measure the no-context baseline instead.
+/// This matters because the context block is the thing most likely to make a 3B
+/// model wander — echoing the reference material, or answering it instead of
+/// editing the transcript. Evaluating cleanup without it would no longer be
+/// evaluating what actually ships.
+fn eval_local_context() -> &'static str {
+    if std::env::var("SWAR_LLM_EVAL_CONTEXT").as_deref() == Ok("0") {
+        return "";
+    }
+    "Known terms: Oynix, Niyo, Fi\n\n\
+The speaker's recent dictations, newest first:\n\
+- Please push the branch once CI is green\n\
+- Kal ka standup 10 baje hai, calendar check kar lena\n\
+- The invoice for March is still pending approval\n\
+- Let's ship the connector after the review\n\
+- Team ko bata dena release Friday ko hai\n\n\
+Text already in the field, with <CURSOR> where the new text goes:\n\
+Hi Priyam,\n\nThanks for the update on the migration. <CURSOR>\n\nBest,\nAsha"
+}
+
 #[test]
 fn cleanup_never_degenerates_across_the_corpus() {
     if std::env::var("SWAR_LLM_EVAL").is_err() {
@@ -88,7 +112,7 @@ fn cleanup_never_degenerates_across_the_corpus() {
             sentence,
             "clean",
             "",
-            "",
+            eval_local_context(),
             EnhancementProviderConfig {
                 provider: "embedded-llm",
                 endpoint: "",

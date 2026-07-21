@@ -755,6 +755,7 @@ fn spawn_preview_worker(
                 if partial.is_empty()
                     || partial == previous
                     || !transcript_contains_speech(&partial)
+                    || is_degenerate_preview(&partial)
                 {
                     continue;
                 }
@@ -948,6 +949,54 @@ fn normalized_auto_language(code: &str) -> String {
     }
 }
 
+/// Whether a live preview has collapsed into a repetition loop.
+///
+/// The preview re-decodes the whole growing buffer roughly once a second with
+/// greedy decoding, which is the classic way to make a decoder latch onto one
+/// token and emit it forever ("आगे आगे आगे आगे…"). The preview is tentative
+/// display only and never reaches the inserted text, so suppressing a degenerate
+/// one costs a second of stale preview and saves the user a screenful of
+/// garbage.
+///
+/// Deliberately strict about multi-word loops and lenient about single words:
+/// "no no no" is something a person says, "the cat the cat the cat" is not.
+fn is_degenerate_preview(value: &str) -> bool {
+    let words = value.split_whitespace().collect::<Vec<_>>();
+    if words.len() < 6 {
+        return false;
+    }
+    for window in 1..=3usize {
+        let threshold = if window == 1 { 4 } else { 3 };
+        if longest_repeat_run(&words, window) >= threshold {
+            return true;
+        }
+    }
+    false
+}
+
+/// The longest run of one `window`-sized phrase repeated back to back.
+fn longest_repeat_run(words: &[&str], window: usize) -> usize {
+    if words.len() < window * 2 {
+        return 0;
+    }
+    let mut longest = 0usize;
+    let mut index = 0usize;
+    while index + window * 2 <= words.len() {
+        let phrase = &words[index..index + window];
+        let mut run = 1usize;
+        let mut next = index + window;
+        while next + window <= words.len() && &words[next..next + window] == phrase {
+            run += 1;
+            next += window;
+        }
+        longest = longest.max(run);
+        // A run of one still advances by a single word, so an offset loop is
+        // found too.
+        index += if run > 1 { run * window } else { 1 };
+    }
+    longest
+}
+
 fn transcript_contains_speech(value: &str) -> bool {
     let normalized = value
         .trim()
@@ -1008,6 +1057,31 @@ mod tests {
     fn speech_markers_filter_known_blank_tokens() {
         assert!(!transcript_contains_speech("[BLANK_AUDIO]"));
         assert!(transcript_contains_speech("hello"));
+    }
+
+    #[test]
+    fn a_looping_preview_is_suppressed() {
+        // The real failure: greedy decoding latched onto one Devanagari token.
+        assert!(is_degenerate_preview("ये सब तो होगया और आगे आगे आगे आगे आगे आगे"));
+        assert!(is_degenerate_preview(
+            "so what we should do the cat the cat the cat the cat"
+        ));
+    }
+
+    #[test]
+    fn ordinary_speech_survives_the_repetition_guard() {
+        assert!(!is_degenerate_preview("अरे और क्या बाकी है ये सब तो हो गया"));
+        assert!(!is_degenerate_preview(
+            "no no no that is not what I meant at all"
+        ));
+        // Emphatic repetition is speech, not a decoder loop.
+        assert!(!is_degenerate_preview("बहुत बहुत धन्यवाद आपका दिन शुभ हो"));
+    }
+
+    #[test]
+    fn a_short_preview_is_never_called_degenerate() {
+        // Too little evidence to distinguish a loop from real emphasis.
+        assert!(!is_degenerate_preview("हाँ हाँ हाँ हाँ"));
     }
 
     #[test]
