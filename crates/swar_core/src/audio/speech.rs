@@ -1,6 +1,10 @@
 const FRAME_MILLISECONDS: usize = 20;
-const PRE_PAD_MILLISECONDS: usize = 350;
-const POST_PAD_MILLISECONDS: usize = 350;
+// Generous padding around the detected speech span. Slow or softly-trailing
+// speech dips below the energy threshold at the edges, so a tight pad clipped the
+// first and last words. The pad only widens the kept span — it never lowers the
+// bar for what counts as speech.
+const PRE_PAD_MILLISECONDS: usize = 500;
+const POST_PAD_MILLISECONDS: usize = 600;
 // Utterances shorter than this are dropped as clicks/blips rather than sent to
 // the model. Raised from 120ms: a large fine-tuned model (Apex) will hallucinate
 // a filler token ("Nan") on a very short, near-silent capture from an accidental
@@ -38,7 +42,10 @@ pub(crate) fn retain_probable_speech(samples: &[f32], sample_rate: u32) -> Speec
     let mut sorted = levels.clone();
     sorted.sort_by(f64::total_cmp);
     let noise_floor = sorted[sorted.len() / 5];
-    let threshold = ABSOLUTE_RMS_FLOOR.max(noise_floor * 3.0);
+    // 2.2x the room's noise floor (was 3.0): quiet, deliberate speech sits much
+    // closer to the floor than fast speech, and at 3.0 those frames were not
+    // counted as speech at all. The absolute floor still rejects true silence.
+    let threshold = ABSOLUTE_RMS_FLOOR.max(noise_floor * 2.2);
     let active = levels
         .iter_mut()
         .enumerate()
