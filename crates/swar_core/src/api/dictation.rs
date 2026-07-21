@@ -753,6 +753,13 @@ fn spawn_preview_worker(
                     continue;
                 }
                 previous.clone_from(&partial);
+                // The decode above takes seconds, and the speaker may have
+                // stopped during it. Re-check before emitting: a preview that
+                // arrives after the session has left Recording describes a state
+                // that no longer exists.
+                if !running.load(Ordering::Acquire) {
+                    break;
+                }
                 let _ = sink.add(DictationEvent {
                     session_id: session_id.clone(),
                     kind: DictationEventKind::PartialTranscript,

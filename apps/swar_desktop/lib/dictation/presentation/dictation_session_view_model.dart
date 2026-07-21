@@ -64,8 +64,15 @@ final class DictationSessionViewModel extends ChangeNotifier {
       _sessionId = event.sessionId;
       _audioLevel = event.audioLevel ?? _audioLevel;
       if (event.partialText != null) _partialText = event.partialText;
-      _state = event.currentState;
-      _message = _messageForState(event.currentState, event.message);
+      // A preview is content, not a lifecycle transition, and the core stamps
+      // every one of them `recording`. Its decode can still be in flight when
+      // the speaker stops, so the event lands after finish() has already moved
+      // on — applying its state dragged the overlay back to the waveform, then
+      // forward again, for every dictation long enough to preview.
+      if (event.kind != DictationEngineEventKind.partialTranscript) {
+        _state = event.currentState;
+        _message = _messageForState(event.currentState, event.message);
+      }
       notifyListeners();
     }, onError: (Object error) => _fail(_friendlyError(error)));
   }

@@ -95,6 +95,56 @@ void main() {
     },
   );
 
+  test('a late preview cannot drag the overlay back to recording', () async {
+    // The reported failure: on release the overlay showed "understanding", then
+    // jumped back to the waveform, then to "understanding" again before the text
+    // appeared. A preview decode still in flight when the speaker stops lands
+    // after the session has moved on, and every preview is stamped `recording`,
+    // so applying its state rewound the lifecycle.
+    final gateway = _EngineGateway(
+      modelReady: true,
+      events: const [
+        DictationEngineEvent(
+          sessionId: 'session-1',
+          kind: DictationEngineEventKind.finalising,
+          previousState: DictationLifecycleState.recording,
+          currentState: DictationLifecycleState.transcribing,
+          timestampMilliseconds: 1,
+          reason: 'capture finished',
+        ),
+        DictationEngineEvent(
+          sessionId: 'session-1',
+          kind: DictationEngineEventKind.partialTranscript,
+          previousState: DictationLifecycleState.recording,
+          currentState: DictationLifecycleState.recording,
+          timestampMilliseconds: 2,
+          reason: 'tentative local preview',
+          partialText: 'late preview',
+        ),
+      ],
+    );
+    final viewModel = DictationSessionViewModel(gateway: gateway);
+    addTearDown(viewModel.dispose);
+
+    await viewModel.start(
+      const DictationEngineConfig(
+        modelPath: '/test/model.bin',
+        microphoneId: 'built-in',
+        language: 'english',
+        writingMode: 'clean',
+        pasteAutomatically: true,
+        restoreClipboard: true,
+        enableLivePreview: true,
+      ),
+    );
+    await Future<void>.delayed(Duration.zero);
+
+    // The preview's text is still shown; only its stale state is ignored.
+    expect(viewModel.partialText, 'late preview');
+    expect(viewModel.state, DictationLifecycleState.transcribing);
+    expect(viewModel.message, isNot('Listening…'));
+  });
+
   test(
     'surfaces an empty local transcript as a transcription failure',
     () async {
