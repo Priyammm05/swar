@@ -110,6 +110,9 @@ final class _ShotDiagnostics implements CoreDiagnosticsGateway {
 }
 
 final class _ShotEngine implements DictationEngineGateway {
+  @override
+  int modelDownloadPercent() => -1;
+
   const _ShotEngine();
   @override
   Future<void> cancel(String sessionId) async {}

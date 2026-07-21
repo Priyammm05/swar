@@ -22,6 +22,7 @@ void main() {
         },
         cancel: () async {},
         modeChanged: () {},
+        installModel: () async {},
       );
       addTearDown(controller.dispose);
 
@@ -53,4 +54,30 @@ void main() {
       expect(startCalls, 2);
     },
   );
+
+  test('the overlay install click runs the install and no gesture', () async {
+    var startCalls = 0;
+    var installCalls = 0;
+    final controller = DictationActivationController(
+      start: () async {
+        startCalls += 1;
+        return true;
+      },
+      finish: () async {},
+      cancel: () async {},
+      modeChanged: () {},
+      installModel: () async => installCalls += 1,
+    );
+    addTearDown(controller.dispose);
+
+    await controller.handle(
+      const DesktopShortcutEvent(DesktopShortcutEventKind.installModel),
+    );
+
+    expect(installCalls, 1);
+    // The gesture machine must not have seen it: a click on the model capsule
+    // is not a press, and must not begin recording.
+    expect(startCalls, 0);
+    expect(controller.isLatched, isFalse);
+  });
 }

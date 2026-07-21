@@ -10,10 +10,12 @@ final class DictationActivationController {
     required Future<void> Function() finish,
     required Future<void> Function() cancel,
     required void Function() modeChanged,
+    required Future<void> Function() installModel,
   }) : _start = start,
        _finish = finish,
        _cancel = cancel,
-       _modeChanged = modeChanged;
+       _modeChanged = modeChanged,
+       _installModel = installModel;
 
   // Gap allowed between the first tap's release and the second press to latch.
   // Kept SHORT so only a deliberate quick double-tap locks: with a longer window
@@ -24,6 +26,7 @@ final class DictationActivationController {
   final Future<void> Function() _finish;
   final Future<void> Function() _cancel;
   final void Function() _modeChanged;
+  final Future<void> Function() _installModel;
   final ShortcutGestureMachine _machine = ShortcutGestureMachine();
 
   Timer? _releaseTimer;
@@ -47,6 +50,10 @@ final class DictationActivationController {
         await _advance(ShortcutGestureInput.toggled);
       case DesktopShortcutEventKind.cancel:
         await _advance(ShortcutGestureInput.cancelled);
+      case DesktopShortcutEventKind.installModel:
+        // Not a gesture: it starts an install, and must not touch the state
+        // machine or the recording it may be in the middle of.
+        await _installModel();
     }
   }
 

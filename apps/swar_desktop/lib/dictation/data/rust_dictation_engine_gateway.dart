@@ -100,6 +100,15 @@ final class RustDictationEngineGateway implements DictationEngineGateway {
     return _modelInstallation(await models.installRecommendedModel());
   }
 
+  @override
+  int modelDownloadPercent() {
+    final progress = models.modelDownloadProgress();
+    if (progress == null) return -1;
+    // Floor rather than round, so the label never shows 100% on a download that
+    // still has bytes to fetch and a hash to verify.
+    return (progress.fraction * 100).floor().clamp(0, 100);
+  }
+
   OfflineModelInstallation _modelInstallation(
     models.OfflineModelStatus status,
   ) {

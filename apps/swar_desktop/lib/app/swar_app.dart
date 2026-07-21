@@ -85,6 +85,7 @@ final class _SwarAppState extends State<SwarApp> {
       finish: _dictationSessionViewModel.finish,
       cancel: _dictationSessionViewModel.cancel,
       modeChanged: _syncOverlay,
+      installModel: _installModelFromOverlay,
     );
     _dictationSessionViewModel.addListener(_syncOverlay);
     _settingsViewModel.addListener(_settingsChanged);
@@ -228,6 +229,7 @@ final class _SwarAppState extends State<SwarApp> {
           // Swar recognises English only, so the chip is fixed.
           language: 'EN',
           elapsedMs: _recordingElapsed().inMilliseconds,
+          downloadPercent: _dictationSessionViewModel.downloadPercent,
           writingMode: switch (settings.writingMode) {
             SwarWritingMode.raw => SwarOverlayWritingMode.raw,
             SwarWritingMode.clean => SwarOverlayWritingMode.clean,
@@ -236,6 +238,16 @@ final class _SwarAppState extends State<SwarApp> {
         ),
       ),
     );
+  }
+
+  /// Runs the model install the overlay asked for.
+  ///
+  /// Deliberately the same call the Settings button makes. `installRecommendedModel`
+  /// returns immediately if one is already running, so clicking one entry point
+  /// while the other is working cannot start a second 190 MB download.
+  Future<void> _installModelFromOverlay() async {
+    final path = await _dictationSessionViewModel.installRecommendedModel();
+    if (path != null) _settingsViewModel.setModelPath(path);
   }
 
   /// The exceptional state the overlay should show, most urgent first, or `null`

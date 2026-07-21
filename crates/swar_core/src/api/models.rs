@@ -2,7 +2,7 @@ use std::{
     fs::{self, File},
     io::{Read, Write},
     path::{Path, PathBuf},
-    sync::atomic::{AtomicBool, Ordering},
+    sync::atomic::{AtomicBool, AtomicU64, Ordering},
     time::Duration,
 };
 
@@ -32,6 +32,42 @@ const EMBEDDED_LLM_MODEL_URL: &str =
 const EMBEDDED_LLM_MODEL_SHA256: &str =
     "626b4a6678b86442240e33df819e00132d3ba7dddfe1cdc4fbb18e0a9615c62d";
 const EMBEDDED_LLM_MODEL_BYTES: u64 = 2_104_932_768;
+
+/// Bytes fetched and bytes expected for whatever model is downloading now.
+///
+/// Published from the download loop so the overlay can say how far along it is.
+/// Zeroed when nothing is downloading. Two `u64`s in atomics rather than a
+/// mutex: the writer is one download thread, the reader is the Dart UI isolate
+/// polling on every overlay frame, and a torn read is one stale percentage.
+static DOWNLOAD_RECEIVED_BYTES: AtomicU64 = AtomicU64::new(0);
+static DOWNLOAD_TOTAL_BYTES: AtomicU64 = AtomicU64::new(0);
+
+/// How far the current model download has got, or `None` when none is running.
+#[derive(Clone, Debug)]
+pub struct ModelDownloadProgress {
+    pub received_bytes: u64,
+    pub total_bytes: u64,
+    /// 0.0 to 1.0. Zero when the total is not yet known.
+    pub fraction: f64,
+}
+
+/// Progress of the model download in flight, or `None` when nothing is running.
+///
+/// `#[frb(sync)]` because the overlay reads it once per frame while a download
+/// is on; two relaxed atomic loads are far cheaper than a bridge round trip.
+#[frb(sync)]
+pub fn model_download_progress() -> Option<ModelDownloadProgress> {
+    let total = DOWNLOAD_TOTAL_BYTES.load(Ordering::Relaxed);
+    if total == 0 {
+        return None;
+    }
+    let received = DOWNLOAD_RECEIVED_BYTES.load(Ordering::Relaxed).min(total);
+    Some(ModelDownloadProgress {
+        received_bytes: received,
+        total_bytes: total,
+        fraction: received as f64 / total as f64,
+    })
+}
 
 #[derive(Clone, Debug)]
 pub struct OfflineModelStatus {
@@ -77,6 +113,10 @@ fn download_verified(
     // Guarantee the partial is removed on every failure path (network error,
     // disk-full mid-write, or a verification mismatch), not only on mismatch.
     let outcome = download_to_partial(url, &partial, minimum_bytes, expected_sha256);
+    // Whether it finished or failed, nothing is in flight any more. Left set,
+    // the overlay would sit at a frozen percentage forever.
+    DOWNLOAD_TOTAL_BYTES.store(0, Ordering::Relaxed);
+    DOWNLOAD_RECEIVED_BYTES.store(0, Ordering::Relaxed);
     if outcome.is_err() {
         let _ = fs::remove_file(&partial);
     }
@@ -103,6 +143,11 @@ fn download_to_partial(
     let mut hasher = Sha256::new();
     let mut buffer = [0_u8; 64 * 1024];
     let mut size_bytes = 0_u64;
+    // Publish against the expected size rather than Content-Length: the minimum
+    // is pinned and verified, so it is the number we already trust, and it is
+    // available even when the server sends a chunked response with no length.
+    DOWNLOAD_TOTAL_BYTES.store(minimum_bytes, Ordering::Relaxed);
+    DOWNLOAD_RECEIVED_BYTES.store(0, Ordering::Relaxed);
     loop {
         let count = reader
             .read(&mut buffer)
@@ -114,6 +159,7 @@ fn download_to_partial(
             .map_err(|error| error.to_string())?;
         hasher.update(&buffer[..count]);
         size_bytes += count as u64;
+        DOWNLOAD_RECEIVED_BYTES.store(size_bytes, Ordering::Relaxed);
     }
     file.sync_all().map_err(|error| error.to_string())?;
     let digest = format!("{:x}", hasher.finalize());

@@ -1,4 +1,14 @@
-enum DesktopShortcutEventKind { pressed, released, toggle, stop, cancel }
+enum DesktopShortcutEventKind {
+  pressed,
+  released,
+  toggle,
+  stop,
+  cancel,
+
+  /// The overlay's "get the voice model" capsule was clicked. The same install
+  /// the Settings button runs, reachable from where the problem is reported.
+  installModel,
+}
 
 final class DesktopShortcutEvent {
   const DesktopShortcutEvent(this.kind);
@@ -58,6 +68,7 @@ final class DesktopOverlaySnapshot {
     this.language = '',
     this.elapsedMs = 0,
     this.writingMode = SwarOverlayWritingMode.clean,
+    this.downloadPercent = -1,
   });
 
   final DesktopOverlayState state;
@@ -69,6 +80,11 @@ final class DesktopOverlaySnapshot {
   /// `option` or `control` — picks the glyph shown in the Ready state.
   final String shortcutKey;
   final DesktopOverlayCondition? condition;
+
+  /// 0-100 while a model downloads, -1 when none is. The overlay says so rather
+  /// than sitting on "Download voice model" while one is already running, which
+  /// read as a button being ignored.
+  final int downloadPercent;
 
   /// Confirmed words, drawn in full white.
   final String transcriptFinal;

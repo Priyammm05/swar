@@ -6,10 +6,17 @@
 import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `asr_manifest`, `bundle_installed`, `directory_size`, `download_to_partial`, `download_verified`, `embedded_llm_model_path`, `ensure_embedded_llm_model_download`, `ensure_parakeet_download`, `expected_minimum_bytes`, `file_present_with_min_size`, `install_bundle`, `models_dir`, `parakeet_installed`, `recommended_model_path`, `status_for`, `verified_file`
+// These functions are ignored because they are not marked as `pub`: `asr_manifest`, `bundle_installed`, `directory_size`, `download_to_partial`, `download_verified`, `embedded_llm_model_path`, `ensure_parakeet_download`, `expected_minimum_bytes`, `file_present_with_min_size`, `install_bundle`, `models_dir`, `parakeet_installed`, `recommended_model_path`, `status_for`, `verified_file`
 // These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `AsrBundle`, `AsrFile`, `AsrManifest`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `fmt`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `fmt`, `fmt`
 // These functions are ignored (category: IgnoreBecauseExplicitAttribute): `embedded_llm_model_path_string`
+
+/// Progress of the model download in flight, or `None` when nothing is running.
+///
+/// `#[frb(sync)]` because the overlay reads it once per frame while a download
+/// is on; two relaxed atomic loads are far cheaper than a bridge round trip.
+ModelDownloadProgress? modelDownloadProgress() =>
+    RustLib.instance.api.crateApiModelsModelDownloadProgress();
 
 /// Returns the supported multilingual starter model without accessing the network.
 OfflineModelStatus recommendedModelStatus() =>
@@ -24,6 +31,34 @@ Future<OfflineModelStatus> installRecommendedModel() =>
 /// verifying its SHA-256 before it atomically replaces any existing file.
 Future<OfflineModelStatus> installEmbeddedLlmModel() =>
     RustLib.instance.api.crateApiModelsInstallEmbeddedLlmModel();
+
+/// How far the current model download has got, or `None` when none is running.
+class ModelDownloadProgress {
+  final BigInt receivedBytes;
+  final BigInt totalBytes;
+
+  /// 0.0 to 1.0. Zero when the total is not yet known.
+  final double fraction;
+
+  const ModelDownloadProgress({
+    required this.receivedBytes,
+    required this.totalBytes,
+    required this.fraction,
+  });
+
+  @override
+  int get hashCode =>
+      receivedBytes.hashCode ^ totalBytes.hashCode ^ fraction.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ModelDownloadProgress &&
+          runtimeType == other.runtimeType &&
+          receivedBytes == other.receivedBytes &&
+          totalBytes == other.totalBytes &&
+          fraction == other.fraction;
+}
 
 class OfflineModelStatus {
   final String path;

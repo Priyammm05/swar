@@ -160,6 +160,9 @@ final class _SyntheticDiagnosticsGateway implements CoreDiagnosticsGateway {
 }
 
 final class _SyntheticDictationEngineGateway implements DictationEngineGateway {
+  @override
+  int modelDownloadPercent() => -1;
+
   int finishCalls = 0;
 
   @override

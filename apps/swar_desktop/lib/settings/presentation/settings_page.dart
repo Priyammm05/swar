@@ -273,7 +273,7 @@ final class _GeneralSettings extends StatelessWidget {
               title: 'Offline model',
               descriptionWidget: Text(
                 settings.modelPath.isEmpty
-                    ? 'Install the private multilingual voice model once.'
+                    ? 'Install the private English voice model once.'
                     : _shortenPath(settings.modelPath),
                 style: settings.modelPath.isEmpty
                     ? SwarType.description.copyWith(

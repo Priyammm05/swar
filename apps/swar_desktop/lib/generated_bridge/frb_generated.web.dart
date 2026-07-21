@@ -54,6 +54,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   double dco_decode_box_autoadd_f_64(dynamic raw);
 
   @protected
+  ModelDownloadProgress dco_decode_box_autoadd_model_download_progress(
+    dynamic raw,
+  );
+
+  @protected
   NativeSettings dco_decode_box_autoadd_native_settings(dynamic raw);
 
   @protected
@@ -111,6 +116,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   MicrophoneDevice dco_decode_microphone_device(dynamic raw);
 
   @protected
+  ModelDownloadProgress dco_decode_model_download_progress(dynamic raw);
+
+  @protected
   NativeSettings dco_decode_native_settings(dynamic raw);
 
   @protected
@@ -121,6 +129,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   double? dco_decode_opt_box_autoadd_f_64(dynamic raw);
+
+  @protected
+  ModelDownloadProgress? dco_decode_opt_box_autoadd_model_download_progress(
+    dynamic raw,
+  );
 
   @protected
   StoredDictation dco_decode_stored_dictation(dynamic raw);
@@ -172,6 +185,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   double sse_decode_box_autoadd_f_64(SseDeserializer deserializer);
+
+  @protected
+  ModelDownloadProgress sse_decode_box_autoadd_model_download_progress(
+    SseDeserializer deserializer,
+  );
 
   @protected
   NativeSettings sse_decode_box_autoadd_native_settings(
@@ -247,6 +265,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   MicrophoneDevice sse_decode_microphone_device(SseDeserializer deserializer);
 
   @protected
+  ModelDownloadProgress sse_decode_model_download_progress(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   NativeSettings sse_decode_native_settings(SseDeserializer deserializer);
 
   @protected
@@ -259,6 +282,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   double? sse_decode_opt_box_autoadd_f_64(SseDeserializer deserializer);
+
+  @protected
+  ModelDownloadProgress? sse_decode_opt_box_autoadd_model_download_progress(
+    SseDeserializer deserializer,
+  );
 
   @protected
   StoredDictation sse_decode_stored_dictation(SseDeserializer deserializer);
@@ -318,6 +346,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_box_autoadd_f_64(double self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_box_autoadd_model_download_progress(
+    ModelDownloadProgress self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_box_autoadd_native_settings(
@@ -416,6 +450,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_model_download_progress(
+    ModelDownloadProgress self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_native_settings(
     NativeSettings self,
     SseSerializer serializer,
@@ -432,6 +472,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_opt_box_autoadd_f_64(double? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_opt_box_autoadd_model_download_progress(
+    ModelDownloadProgress? self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_stored_dictation(

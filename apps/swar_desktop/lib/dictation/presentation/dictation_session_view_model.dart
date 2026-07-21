@@ -32,6 +32,9 @@ final class DictationSessionViewModel extends ChangeNotifier {
     _ => false,
   };
   bool get isInstallingModel => _isInstallingModel;
+
+  /// Percent complete of a model download, or -1 when none is running.
+  int get downloadPercent => _gateway.modelDownloadPercent();
   int get completionRevision => _completionRevision;
   String? get partialText => _partialText;
 
@@ -106,7 +109,7 @@ final class DictationSessionViewModel extends ChangeNotifier {
   Future<String?> installRecommendedModel() async {
     if (_isInstallingModel) return null;
     _isInstallingModel = true;
-    _message = 'Downloading the multilingual model…';
+    _message = 'Downloading the voice model…';
     notifyListeners();
     try {
       final installation = await _gateway.installRecommendedModel();

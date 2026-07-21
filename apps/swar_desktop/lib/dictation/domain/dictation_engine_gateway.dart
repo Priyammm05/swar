@@ -149,4 +149,8 @@ abstract interface class DictationEngineGateway {
   OfflineModelInstallation recommendedModelStatus();
 
   Future<OfflineModelInstallation> installRecommendedModel();
+
+  /// Percent complete of the model download in flight, or -1 when none is.
+  /// Read once per overlay frame, so implementations must be cheap.
+  int modelDownloadPercent();
 }

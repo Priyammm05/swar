@@ -38,7 +38,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.12.0";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -1768661800;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -20476285;
 
 // Section: executor
 
@@ -666,6 +666,35 @@ fn wire__crate__api__settings__load_settings_impl(
             deserializer.end();
             transform_result_sse::<_, String>((move || {
                 let output_ok = crate::api::settings::load_settings()?;
+                Ok(output_ok)
+            })())
+        },
+    )
+}
+fn wire__crate__api__models__model_download_progress_impl(
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "model_download_progress",
+            port: None,
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            deserializer.end();
+            transform_result_sse::<_, ()>((move || {
+                let output_ok = Result::<_, ()>::Ok(crate::api::models::model_download_progress())?;
                 Ok(output_ok)
             })())
         },
@@ -1376,6 +1405,20 @@ impl SseDecode for crate::api::dictation::MicrophoneDevice {
     }
 }
 
+impl SseDecode for crate::api::models::ModelDownloadProgress {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_receivedBytes = <u64>::sse_decode(deserializer);
+        let mut var_totalBytes = <u64>::sse_decode(deserializer);
+        let mut var_fraction = <f64>::sse_decode(deserializer);
+        return crate::api::models::ModelDownloadProgress {
+            received_bytes: var_receivedBytes,
+            total_bytes: var_totalBytes,
+            fraction: var_fraction,
+        };
+    }
+}
+
 impl SseDecode for crate::api::settings::NativeSettings {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -1444,6 +1487,19 @@ impl SseDecode for Option<f64> {
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
         if (<bool>::sse_decode(deserializer)) {
             return Some(<f64>::sse_decode(deserializer));
+        } else {
+            return None;
+        }
+    }
+}
+
+impl SseDecode for Option<crate::api::models::ModelDownloadProgress> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        if (<bool>::sse_decode(deserializer)) {
+            return Some(<crate::api::models::ModelDownloadProgress>::sse_decode(
+                deserializer,
+            ));
         } else {
             return None;
         }
@@ -1624,43 +1680,43 @@ fn pde_ffi_dispatcher_primary_impl(
             rust_vec_len,
             data_len,
         ),
-        20 => wire__crate__api__settings__native_settings_default_impl(
+        21 => wire__crate__api__settings__native_settings_default_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        22 => wire__crate__api__dictation__prepare_audio_capture_impl(
+        23 => wire__crate__api__dictation__prepare_audio_capture_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        23 => wire__crate__api__dictation__prepare_dictation_engine_impl(
+        24 => wire__crate__api__dictation__prepare_dictation_engine_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        25 => wire__crate__api__personalization__record_user_edit_impl(
+        26 => wire__crate__api__personalization__record_user_edit_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        26 => wire__crate__api__dictation__release_dictation_engine_impl(
+        27 => wire__crate__api__dictation__release_dictation_engine_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        28 => wire__crate__api__dictation__start_dictation_session_impl(
+        29 => wire__crate__api__dictation__start_dictation_session_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        29 => wire__crate__api__diagnostics__stream_demo_events_impl(
+        30 => wire__crate__api__diagnostics__stream_demo_events_impl(
             port,
             ptr,
             rust_vec_len,
@@ -1680,9 +1736,10 @@ fn pde_ffi_dispatcher_sync_impl(
     match func_id {
         9 => wire__crate__api__diagnostics__get_core_version_impl(ptr, rust_vec_len, data_len),
         19 => wire__crate__api__settings__load_settings_impl(ptr, rust_vec_len, data_len),
-        21 => wire__crate__api__dictation__offline_model_is_ready_impl(ptr, rust_vec_len, data_len),
-        24 => wire__crate__api__models__recommended_model_status_impl(ptr, rust_vec_len, data_len),
-        27 => wire__crate__api__settings__save_settings_impl(ptr, rust_vec_len, data_len),
+        20 => wire__crate__api__models__model_download_progress_impl(ptr, rust_vec_len, data_len),
+        22 => wire__crate__api__dictation__offline_model_is_ready_impl(ptr, rust_vec_len, data_len),
+        25 => wire__crate__api__models__recommended_model_status_impl(ptr, rust_vec_len, data_len),
+        28 => wire__crate__api__settings__save_settings_impl(ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -1928,6 +1985,28 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::dictation::MicrophoneDevice>
     for crate::api::dictation::MicrophoneDevice
 {
     fn into_into_dart(self) -> crate::api::dictation::MicrophoneDevice {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::models::ModelDownloadProgress {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.received_bytes.into_into_dart().into_dart(),
+            self.total_bytes.into_into_dart().into_dart(),
+            self.fraction.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::models::ModelDownloadProgress
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::models::ModelDownloadProgress>
+    for crate::api::models::ModelDownloadProgress
+{
+    fn into_into_dart(self) -> crate::api::models::ModelDownloadProgress {
         self
     }
 }
@@ -2345,6 +2424,15 @@ impl SseEncode for crate::api::dictation::MicrophoneDevice {
     }
 }
 
+impl SseEncode for crate::api::models::ModelDownloadProgress {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <u64>::sse_encode(self.received_bytes, serializer);
+        <u64>::sse_encode(self.total_bytes, serializer);
+        <f64>::sse_encode(self.fraction, serializer);
+    }
+}
+
 impl SseEncode for crate::api::settings::NativeSettings {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -2391,6 +2479,16 @@ impl SseEncode for Option<f64> {
         <bool>::sse_encode(self.is_some(), serializer);
         if let Some(value) = self {
             <f64>::sse_encode(value, serializer);
+        }
+    }
+}
+
+impl SseEncode for Option<crate::api::models::ModelDownloadProgress> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <bool>::sse_encode(self.is_some(), serializer);
+        if let Some(value) = self {
+            <crate::api::models::ModelDownloadProgress>::sse_encode(value, serializer);
         }
     }
 }

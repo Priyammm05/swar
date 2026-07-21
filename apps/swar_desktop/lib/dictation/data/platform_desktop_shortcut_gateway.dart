@@ -20,6 +20,7 @@ final class PlatformDesktopShortcutGateway implements DesktopShortcutGateway {
         'shortcutPressed' => DesktopShortcutEventKind.toggle,
         'overlayStopPressed' => DesktopShortcutEventKind.stop,
         'overlayCancelPressed' => DesktopShortcutEventKind.cancel,
+        'overlayInstallModelPressed' => DesktopShortcutEventKind.installModel,
         _ => null,
       };
       if (kind != null) _events.add(DesktopShortcutEvent(kind));
@@ -82,6 +83,7 @@ final class PlatformDesktopShortcutGateway implements DesktopShortcutGateway {
       'language': snapshot.language,
       'elapsedMs': snapshot.elapsedMs,
       'writingMode': snapshot.writingMode.name,
+      'downloadPercent': snapshot.downloadPercent,
     });
   }
 

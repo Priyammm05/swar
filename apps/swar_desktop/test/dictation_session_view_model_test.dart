@@ -238,4 +238,7 @@ final class _EngineGateway implements DictationEngineGateway {
           ],
     );
   }
+
+  @override
+  int modelDownloadPercent() => -1;
 }

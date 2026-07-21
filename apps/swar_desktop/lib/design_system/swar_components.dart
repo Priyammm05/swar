@@ -142,6 +142,16 @@ final class SwarSegment<T> {
 }
 
 /// Segmented control — sunken track, spruce-tint-2 selected segment (§8.6).
+///
+/// One pill slides between segments rather than each segment fading its own
+/// background in and out. Two independent crossfades read as a blink: the old
+/// tint is still leaving while the new one arrives, so for most of the
+/// transition there are two half-lit segments and no clear selection. A single
+/// pill that travels is one continuous object, and it is what the eye follows.
+///
+/// Every segment is laid out at the same width for the same reason. Raw, Clean,
+/// and Intent are different lengths, and a pill sized to its own label would
+/// change shape as it moved.
 final class SwarSegmented<T> extends StatelessWidget {
   const SwarSegmented({
     required this.segments,
@@ -150,6 +160,9 @@ final class SwarSegmented<T> extends StatelessWidget {
     super.key,
   });
 
+  static const _transition = Duration(milliseconds: 220);
+  static const _curve = Curves.easeOutCubic;
+
   final List<SwarSegment<T>> segments;
   final T selected;
   final ValueChanged<T> onChanged;
@@ -157,6 +170,13 @@ final class SwarSegmented<T> extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = context.tokens;
+    final index = segments.indexWhere((segment) => segment.value == selected);
+    // -1 to 1 across the track, which is what AnimatedAlign wants. A single
+    // segment has nowhere to travel, so it sits in the middle.
+    final alignment = segments.length < 2
+        ? 0.0
+        : (index.clamp(0, segments.length - 1) / (segments.length - 1)) * 2 - 1;
+
     return Container(
       padding: const EdgeInsets.all(3),
       decoration: BoxDecoration(
@@ -164,42 +184,67 @@ final class SwarSegmented<T> extends StatelessWidget {
         borderRadius: BorderRadius.circular(SwarRadii.segmentOuter),
         border: Border.all(color: t.border, width: 0.5),
       ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          for (final segment in segments)
-            _Segment(
-              label: segment.label,
-              isSelected: segment.value == selected,
-              onTap: () => onChanged(segment.value),
+      child: IntrinsicWidth(
+        child: Stack(
+          children: [
+            // The travelling pill, behind the labels. FractionallySized to one
+            // segment's share of the track so it never has to know pixel widths.
+            Positioned.fill(
+              child: AnimatedAlign(
+                duration: _transition,
+                curve: _curve,
+                alignment: Alignment(alignment, 0),
+                child: FractionallySizedBox(
+                  widthFactor: 1 / segments.length,
+                  heightFactor: 1,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: t.spruceTint2,
+                      borderRadius: BorderRadius.circular(
+                        SwarRadii.segmentItem,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
             ),
-        ],
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                for (final segment in segments)
+                  Expanded(
+                    child: _Segment(
+                      label: segment.label,
+                      isSelected: segment.value == selected,
+                      transition: _transition,
+                      curve: _curve,
+                      onTap: () => onChanged(segment.value),
+                    ),
+                  ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
 }
 
-/// One segment.
-///
-/// Nothing here is allowed to change size with selection. The earlier version
-/// showed a tick in front of the selected label, which added 19 logical pixels
-/// to whichever segment was chosen. Because the row sizes to its children, that
-/// resized the whole control and shunted every other label sideways on each
-/// tap. The colour faded over 150 ms while the geometry jumped in one frame,
-/// which is what read as flicker. The tinted pill already says which segment is
-/// selected, so the tick is gone and the layout is now fixed.
+/// One segment: the label and its hit target. The selected background is not
+/// drawn here; it is the pill sliding underneath.
 final class _Segment extends StatelessWidget {
   const _Segment({
     required this.label,
     required this.isSelected,
+    required this.transition,
+    required this.curve,
     required this.onTap,
   });
 
-  static const _transition = Duration(milliseconds: 160);
-  static const _curve = Curves.easeOutCubic;
-
   final String label;
   final bool isSelected;
+  final Duration transition;
+  final Curve curve;
   final VoidCallback onTap;
 
   @override
@@ -210,23 +255,18 @@ final class _Segment extends StatelessWidget {
       child: GestureDetector(
         onTap: onTap,
         behavior: HitTestBehavior.opaque,
-        child: AnimatedContainer(
-          duration: _transition,
-          curve: _curve,
+        child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 6),
-          decoration: BoxDecoration(
-            color: isSelected ? t.spruceTint2 : Colors.transparent,
-            borderRadius: BorderRadius.circular(SwarRadii.segmentItem),
-          ),
-          // The label's colour is animated on the same curve as the pill.
-          // Left as a plain Text it snapped a frame ahead of the background.
+          // Animated on the same curve as the pill, so the text darkens as the
+          // pill arrives instead of snapping a frame ahead of it.
           child: AnimatedDefaultTextStyle(
-            duration: _transition,
-            curve: _curve,
+            duration: transition,
+            curve: curve,
             style: SwarType.nav.copyWith(
               color: isSelected ? t.spruce : t.inkSecondary,
             ),
-            child: Text(label),
+            textAlign: TextAlign.center,
+            child: Text(label, textAlign: TextAlign.center),
           ),
         ),
       ),

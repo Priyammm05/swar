@@ -358,6 +358,9 @@ final class _SilentDiagnosticsGateway implements CoreDiagnosticsGateway {
 }
 
 final class _FakeDictationEngineGateway implements DictationEngineGateway {
+  @override
+  int modelDownloadPercent() => -1;
+
   const _FakeDictationEngineGateway();
 
   @override
@@ -452,6 +455,9 @@ final class _EventDictationEngineGateway implements DictationEngineGateway {
   }
 
   @override
+  int modelDownloadPercent() => -1;
+
+  @override
   Stream<DictationEngineEvent> start(DictationEngineConfig config) =>
       _events.stream;
 }
@@ -501,6 +507,9 @@ final class _RecordingDesktopShortcutGateway implements DesktopShortcutGateway {
 }
 
 final class _BlockingFinishEngineGateway implements DictationEngineGateway {
+  @override
+  int modelDownloadPercent() => -1;
+
   final Completer<DictationEngineCompletion> _completion =
       Completer<DictationEngineCompletion>();
   int finishCalls = 0;

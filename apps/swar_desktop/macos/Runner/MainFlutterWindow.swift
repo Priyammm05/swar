@@ -70,7 +70,10 @@ class MainFlutterWindow: NSWindow {
               transcriptPartial: arguments["transcriptPartial"] as? String ?? "",
               language: arguments["language"] as? String ?? "",
               elapsedMs: arguments["elapsedMs"] as? Int ?? 0,
-              writingMode: arguments["writingMode"] as? String ?? "clean"
+              writingMode: arguments["writingMode"] as? String ?? "clean",
+              // -1 when no download is running, so the label can tell "not
+              // downloading" apart from "downloading, 0% so far".
+              downloadPercent: arguments["downloadPercent"] as? Int ?? -1
             )
           )
         }
@@ -323,12 +326,18 @@ private enum OverlayCondition {
     return true
   }
 
-  var label: String {
+  func label(downloadPercent: Int) -> String {
     switch self {
     case .inserted: return "Inserted"
     case .copied: return "Couldn't insert — copied"
     case .permission: return "Allow microphone"
-    case .model: return "Download voice model"
+    // Saying only "Download voice model" during a download reads as a button
+    // that is being ignored. The percentage says the wait is progressing and
+    // roughly how much is left.
+    case .model:
+      return downloadPercent >= 0
+        ? "Getting voice model… \(downloadPercent)%"
+        : "Download voice model"
     case .noField: return "Click a text field first"
     case .secure: return "Private field — history off"
     }
@@ -379,6 +388,8 @@ struct DictationOverlaySnapshot {
   let elapsedMs: Int
   /// `raw` / `clean` / `intent` — picks the Processing label.
   let writingMode: String
+  /// 0-100 while a model is downloading, -1 when none is.
+  let downloadPercent: Int
 }
 
 private final class DictationOverlayController {
@@ -410,7 +421,8 @@ private final class DictationOverlayController {
         channel.invokeMethod("overlayStopPressed", arguments: nil)
       },
       onStop: { channel.invokeMethod("overlayStopPressed", arguments: nil) },
-      onCancel: { channel.invokeMethod("overlayCancelPressed", arguments: nil) }
+      onCancel: { channel.invokeMethod("overlayCancelPressed", arguments: nil) },
+      onInstallModel: { channel.invokeMethod("overlayInstallModelPressed", arguments: nil) }
     )
     panel = DictationOverlayPanel(contentView: content)
     startMouseTracking()
@@ -837,6 +849,7 @@ private final class DictationOverlayView: NSView {
   private let onLongPressEnd: () -> Void
   private let onStop: () -> Void
   private let onCancel: () -> Void
+  private let onInstallModel: () -> Void
   private var state = "idle"
   // True only in the locked (double-press) hands-free state.
   private var isLatched = false
@@ -848,6 +861,8 @@ private final class DictationOverlayView: NSView {
   private var shortcutSymbol = "⌥"
   // Extended contract (spec §6).
   private var condition: OverlayCondition?
+  /// 0-100 while a model downloads, -1 when none is. Feeds the model label.
+  private var downloadPercent = -1
   private var transcriptFinal = ""
   private var transcriptPartial = ""
   private var languageLabel = ""
@@ -888,13 +903,15 @@ private final class DictationOverlayView: NSView {
     onLongPressStart: @escaping () -> Void,
     onLongPressEnd: @escaping () -> Void,
     onStop: @escaping () -> Void,
-    onCancel: @escaping () -> Void
+    onCancel: @escaping () -> Void,
+    onInstallModel: @escaping () -> Void
   ) {
     self.onDictate = onDictate
     self.onLongPressStart = onLongPressStart
     self.onLongPressEnd = onLongPressEnd
     self.onStop = onStop
     self.onCancel = onCancel
+    self.onInstallModel = onInstallModel
     super.init(frame: NSRect(x: 0, y: 0, width: 460, height: 190))
     wantsLayer = true
   }
@@ -908,6 +925,7 @@ private final class DictationOverlayView: NSView {
     isLatched = snapshot.isLatched
     shortcutSymbol = snapshot.shortcutKey == "control" ? "⌃" : "⌥"
     condition = OverlayCondition(snapshot.condition)
+    downloadPercent = snapshot.downloadPercent
     transcriptFinal = snapshot.transcriptFinal
     transcriptPartial = snapshot.transcriptPartial
     languageLabel = snapshot.language
@@ -1103,7 +1121,7 @@ private final class DictationOverlayView: NSView {
   }
 
   private func conditionLabelWidth(_ condition: OverlayCondition) -> CGFloat {
-    let text = NSAttributedString(string: condition.label, attributes: [
+    let text = NSAttributedString(string: condition.label(downloadPercent: downloadPercent), attributes: [
       .font: NSFont.systemFont(ofSize: 12, weight: .medium),
     ])
     return ceil(text.size().width)
@@ -1360,7 +1378,7 @@ private final class DictationOverlayView: NSView {
 
   /// Spec states 6-11: one glyph plus one sentence, centred in the capsule.
   private func drawCondition(_ condition: OverlayCondition, in rect: NSRect, opacity: CGFloat) {
-    let text = NSAttributedString(string: condition.label, attributes: [
+    let text = NSAttributedString(string: condition.label(downloadPercent: downloadPercent), attributes: [
       .font: NSFont.systemFont(ofSize: 12, weight: .medium),
       .foregroundColor: OverlayPalette.onPill.withAlphaComponent(opacity),
     ])
@@ -1628,6 +1646,12 @@ private final class DictationOverlayView: NSView {
   override func mouseDown(with event: NSEvent) {
     dragDistance = 0
     onDragBegan?()
+    // A click on the model capsule starts the download and nothing else: it must
+    // not also arm the long-press that begins a dictation.
+    if condition == .model && downloadPercent < 0 {
+      onInstallModel()
+      return
+    }
     if state == "idle" {
       pointerIsDown = true
       longPressTriggered = false
@@ -1668,6 +1692,7 @@ private final class DictationOverlayView: NSView {
   }
 
   override func mouseUp(with event: NSEvent) {
+    if condition == .model { return }
     let wasDragged = dragDistance >= Self.dragSlop
     if wasDragged { onDragEnded?() }
     guard pointerIsDown else { return }
@@ -1688,7 +1713,15 @@ private final class DictationOverlayView: NSView {
     // action: the hovered Ready pill (click to dictate) or a locked recording
     // (cancel/stop). The tiny resting dock is passive, so a stray click can never
     // start dictation.
-    let interactive = (state == "idle" && isHovering) || (state == "recording" && isLatched)
+    // The model capsule is clickable whenever it is showing and no download is
+    // already running, since it is the thing standing between the user and a
+    // working app. Once a download starts it goes passive: a second click would
+    // be a second download.
+    let modelActionable = condition == .model && downloadPercent < 0
+    let interactive =
+      modelActionable
+      || (state == "idle" && isHovering)
+      || (state == "recording" && isLatched)
     guard interactive else { return nil }
     let local = convert(point, from: nil)
     return capsuleRect.insetBy(dx: -4, dy: -4).contains(local) ? self : nil
