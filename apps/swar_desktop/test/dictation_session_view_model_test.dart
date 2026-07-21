@@ -173,6 +173,22 @@ void main() {
       expect(viewModel.completionRevision, 0);
     },
   );
+
+  test(
+    'preparing with no model still asks the engine, so it can fetch',
+    () async {
+      final gateway = _EngineGateway(modelReady: false);
+      final viewModel = DictationSessionViewModel(gateway: gateway);
+      addTearDown(viewModel.dispose);
+
+      final ready = await viewModel.prepare('');
+
+      expect(ready, isFalse);
+      // The point of the call: preparing is what starts the background download.
+      // Returning early here left a fresh install with no models at all.
+      expect(gateway.prepareCalls, 1);
+    },
+  );
 }
 
 final class _EngineGateway implements DictationEngineGateway {
@@ -182,12 +198,16 @@ final class _EngineGateway implements DictationEngineGateway {
   final List<DictationEngineEvent>? events;
   final Object? finishError;
   int startCalls = 0;
+  int prepareCalls = 0;
 
   @override
   Future<void> cancel(String sessionId) async {}
 
   @override
-  Future<bool> prepare(String modelPath) async => modelReady;
+  Future<bool> prepare(String modelPath) async {
+    prepareCalls += 1;
+    return modelReady;
+  }
 
   @override
   Future<void> prepareAudio(String microphoneId) async {}

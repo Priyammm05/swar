@@ -44,7 +44,19 @@ final class DictationSessionViewModel extends ChangeNotifier {
   Future<List<SwarMicrophone>> listMicrophones() => _gateway.listMicrophones();
 
   Future<bool> prepare(String modelPath) async {
-    if (!_gateway.modelIsReady(modelPath)) return false;
+    if (!_gateway.modelIsReady(modelPath)) {
+      // Ask anyway. Preparing is what starts the background fetch of the speech
+      // engine, so returning early here meant a machine with no models
+      // downloaded nothing at all and sat on "Download voice model" forever.
+      // With no weights on disk the call reports failure, which on a first run
+      // is the ordinary case rather than a fault, so it is swallowed.
+      try {
+        await _gateway.prepare(modelPath);
+      } catch (_) {
+        // Nothing to load yet. The fetch it kicked off is the point.
+      }
+      return false;
+    }
     return _gateway.prepare(modelPath);
   }
 
