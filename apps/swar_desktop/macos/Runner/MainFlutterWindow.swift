@@ -51,10 +51,19 @@ class MainFlutterWindow: NSWindow {
       case "updateDictationOverlay":
         if let arguments = call.arguments as? [String: Any] {
           overlay.update(
-            state: arguments["state"] as? String ?? "recording",
-            audioLevel: arguments["audioLevel"] as? Double ?? 0,
-            isLatched: arguments["isLatched"] as? Bool ?? false,
-            shortcutKey: arguments["shortcutKey"] as? String ?? "option"
+            DictationOverlaySnapshot(
+              state: arguments["state"] as? String ?? "recording",
+              audioLevel: arguments["audioLevel"] as? Double ?? 0,
+              isLatched: arguments["isLatched"] as? Bool ?? false,
+              shortcutKey: arguments["shortcutKey"] as? String ?? "option",
+              // Absent means the ordinary recording/processing flow.
+              condition: arguments["condition"] as? String,
+              transcriptFinal: arguments["transcriptFinal"] as? String ?? "",
+              transcriptPartial: arguments["transcriptPartial"] as? String ?? "",
+              language: arguments["language"] as? String ?? "",
+              elapsedMs: arguments["elapsedMs"] as? Int ?? 0,
+              writingMode: arguments["writingMode"] as? String ?? "clean"
+            )
           )
         }
         result(nil)
@@ -184,6 +193,95 @@ private final class OptionKeyMonitor {
   }
 }
 
+/// Spec states 6-11: the outcomes and blockers that replace the recording row.
+/// Each is the same capsule showing one glyph and one short sentence, so they
+/// share a single renderer and differ only in glyph, tint, and label.
+private enum OverlayCondition {
+  case inserted
+  case copied
+  case permission
+  case model
+  case noField
+  case secure
+
+  init?(_ raw: String?) {
+    switch raw {
+    case "inserted": self = .inserted
+    case "copied": self = .copied
+    case "permission": self = .permission
+    case "model": self = .model
+    case "noField": self = .noField
+    case "secure": self = .secure
+    default: return nil
+    }
+  }
+
+  /// Whether this condition takes over the capsule. `secure` is a persistent
+  /// badge shown alongside recording rather than a terminal outcome, so it is
+  /// drawn as a chip in the recording row instead.
+  var replacesContent: Bool {
+    if case .secure = self { return false }
+    return true
+  }
+
+  var label: String {
+    switch self {
+    case .inserted: return "Inserted"
+    case .copied: return "Couldn't insert — copied"
+    case .permission: return "Allow microphone"
+    case .model: return "Download voice model"
+    case .noField: return "Click a text field first"
+    case .secure: return "Private field — history off"
+    }
+  }
+
+  var glyph: OverlayGlyph {
+    switch self {
+    case .inserted: return .check
+    case .copied, .permission, .noField: return .warning
+    case .model: return .download
+    case .secure: return .lock
+    }
+  }
+
+  var tint: NSColor {
+    switch self {
+    case .inserted: return OverlayPalette.spruce
+    case .copied, .permission, .noField: return OverlayPalette.amber
+    case .model: return OverlayPalette.saffron
+    case .secure: return OverlayPalette.onPillMut
+    }
+  }
+}
+
+private enum OverlayGlyph {
+  case check
+  case warning
+  case download
+  case lock
+}
+
+/// One immutable frame of overlay state pushed from Dart (overlay spec section 6).
+/// Raw PCM never crosses this boundary — only the smoothed numeric `audioLevel`.
+struct DictationOverlaySnapshot {
+  let state: String
+  let audioLevel: Double
+  let isLatched: Bool
+  let shortcutKey: String
+  /// `inserted` / `copied` / `permission` / `model` / `noField` / `secure`, or
+  /// nil for the ordinary recording and processing flow (spec states 6-11).
+  let condition: String?
+  /// Confirmed words, drawn in full white.
+  let transcriptFinal: String
+  /// The not-yet-final tail, drawn muted.
+  let transcriptPartial: String
+  /// Chip label such as `EN`, `HI`, or `HI+EN`.
+  let language: String
+  let elapsedMs: Int
+  /// `raw` / `clean` / `intent` — picks the Processing label.
+  let writingMode: String
+}
+
 private final class DictationOverlayController {
   private let panel: DictationOverlayPanel
   private let content: DictationOverlayView
@@ -273,20 +371,15 @@ private final class DictationOverlayController {
     hoverPollTimer = nil
   }
 
-  func update(state: String, audioLevel: Double, isLatched: Bool, shortcutKey: String) {
-    let idle = state == "idle"
+  func update(_ snapshot: DictationOverlaySnapshot) {
+    let idle = snapshot.state == "idle"
     if idle { commandOverlay.hide() }
     // At rest the capsule is a passive status indicator: ignore mouse so
     // hovering near it never expands to "Dictate" and a stray click can't start
     // dictation. It only accepts clicks while active (cancel/stop). Dictation is
     // started with the global shortcut key.
     panel.ignoresMouseEvents = idle
-    content.update(
-      state: state,
-      audioLevel: audioLevel,
-      isLatched: isLatched,
-      shortcutKey: shortcutKey
-    )
+    content.update(snapshot)
     position()
     panel.orderFrontRegardless()
   }
@@ -445,6 +538,8 @@ private enum OverlayPalette {
   static let onPillSoft = NSColor(srgbRed: 0xC9 / 255.0, green: 0xD2 / 255.0, blue: 0xCE / 255.0, alpha: 1)
   static let spruce = NSColor(srgbRed: 0x2F / 255.0, green: 0x55 / 255.0, blue: 0x47 / 255.0, alpha: 1)
   static let saffron = NSColor(srgbRed: 0xF4 / 255.0, green: 0xB2 / 255.0, blue: 0x4A / 255.0, alpha: 1)
+  /// Warning tint for the copied-fallback, permission, and no-field states.
+  static let amber = NSColor(srgbRed: 0xE8 / 255.0, green: 0x8B / 255.0, blue: 0x2E / 255.0, alpha: 1)
 }
 
 /// A lightweight critically-ish damped spring, integrated with semi-implicit
@@ -485,6 +580,13 @@ private final class DictationOverlayView: NSView {
   private var animationTimer: Timer?
   private(set) var isHovering = false
   private var shortcutSymbol = "⌥"
+  // Extended contract (spec §6).
+  private var condition: OverlayCondition?
+  private var transcriptFinal = ""
+  private var transcriptPartial = ""
+  private var languageLabel = ""
+  private var elapsedMs = 0
+  private var writingMode = "clean"
 
   // Spring-morphed capsule geometry (spec §5.1). Resting "dock" is intentionally
   // tiny — a subtle indicator, not a button.
@@ -496,6 +598,7 @@ private final class DictationOverlayView: NSView {
   private var readyC: CGFloat = 0
   private var recordingC: CGFloat = 0
   private var processingC: CGFloat = 0
+  private var conditionC: CGFloat = 0
 
   private var longPressTimer: Timer?
   private var pointerIsDown = false
@@ -523,12 +626,18 @@ private final class DictationOverlayView: NSView {
 
   required init?(coder: NSCoder) { nil }
 
-  func update(state: String, audioLevel: Double, isLatched: Bool, shortcutKey: String) {
-    self.state = state
+  func update(_ snapshot: DictationOverlaySnapshot) {
+    state = snapshot.state
     if state != "idle", isHovering { isHovering = false }
-    targetAudioLevel = min(max(audioLevel * 9, 0), 1)
-    self.isLatched = isLatched
-    shortcutSymbol = shortcutKey == "control" ? "⌃" : "⌥"
+    targetAudioLevel = min(max(snapshot.audioLevel * 9, 0), 1)
+    isLatched = snapshot.isLatched
+    shortcutSymbol = snapshot.shortcutKey == "control" ? "⌃" : "⌥"
+    condition = OverlayCondition(snapshot.condition)
+    transcriptFinal = snapshot.transcriptFinal
+    transcriptPartial = snapshot.transcriptPartial
+    languageLabel = snapshot.language
+    elapsedMs = snapshot.elapsedMs
+    writingMode = snapshot.writingMode
     startAnimating()
     needsDisplay = true
   }
@@ -556,17 +665,79 @@ private final class DictationOverlayView: NSView {
   /// - Parameter holdingReady: the Ready label is still fading out, so keep the
   ///   expanded size for now (see `tick`).
   private func targetGeometry(holdingReady: Bool = false) -> (w: CGFloat, h: CGFloat, r: CGFloat) {
+    // A terminal or blocking condition takes over the capsule entirely: one
+    // glyph and one sentence, sized to its own text (spec states 6-11).
+    if let condition, condition.replacesContent {
+      let width = min(maxCapsuleWidth, conditionLabelWidth(condition) + 52)
+      return (width, 30, 15)
+    }
     switch state {
     // Preparing is the arming moment before audio arrives; it opens straight into
     // the recording row (spec §4), never the processing dots — otherwise pressing
     // the key flashes "Understanding…" for a frame.
     case "recording", "preparing":
-      return (162, 30, 15)
+      // State 3b: once partial text exists the SAME capsule grows taller to hold
+      // it above the recording row. It never spawns a second floating element.
+      let transcriptHeight = transcriptBlockHeight(forWidth: recordingWidth - 2 * transcriptInset)
+      return (recordingWidth, recordingRowHeight + transcriptHeight, 15)
     case "finalising":
-      return (130, 30, 15)
+      return (processingWidth, 30, 15)
     default: // idle
       return (isHovering || holdingReady) ? (134, 34, 17) : (28, 7, 3.5)
     }
+  }
+
+  /// Recording is wider than the bare waveform pill because the row also carries
+  /// the language chip and the elapsed timer (spec state 3).
+  private var recordingWidth: CGFloat { 224 }
+  private var recordingRowHeight: CGFloat { 30 }
+  private var processingWidth: CGFloat { 146 }
+  private var maxCapsuleWidth: CGFloat { 420 }
+  /// Horizontal padding for the transcript block inside the capsule.
+  private let transcriptInset: CGFloat = 14
+
+  /// The live transcript, final words white and the not-yet-final tail muted.
+  /// Empty when nothing has been recognised yet.
+  private func transcriptText(opacity: CGFloat = 1) -> NSAttributedString? {
+    let final = transcriptFinal.trimmingCharacters(in: .whitespacesAndNewlines)
+    let partial = transcriptPartial.trimmingCharacters(in: .whitespacesAndNewlines)
+    if final.isEmpty, partial.isEmpty { return nil }
+    let font = NSFont.systemFont(ofSize: 12.5, weight: .regular)
+    let result = NSMutableAttributedString()
+    if !final.isEmpty {
+      result.append(NSAttributedString(string: final, attributes: [
+        .font: font,
+        .foregroundColor: OverlayPalette.onPill.withAlphaComponent(opacity),
+      ]))
+    }
+    if !partial.isEmpty {
+      if result.length > 0 { result.append(NSAttributedString(string: " ")) }
+      result.append(NSAttributedString(string: partial, attributes: [
+        .font: font,
+        .foregroundColor: OverlayPalette.onPillMut.withAlphaComponent(opacity),
+      ]))
+    }
+    return result
+  }
+
+  /// How much taller the capsule must grow to hold the transcript, capped so a
+  /// long dictation cannot grow the pill without bound.
+  private func transcriptBlockHeight(forWidth width: CGFloat) -> CGFloat {
+    guard let text = transcriptText(), width > 0 else { return 0 }
+    let bounds = text.boundingRect(
+      with: NSSize(width: width, height: .greatestFiniteMagnitude),
+      options: [.usesLineFragmentOrigin, .usesFontLeading]
+    )
+    let maxLines: CGFloat = 3
+    let lineHeight: CGFloat = 16
+    return min(ceil(bounds.height), maxLines * lineHeight) + 12
+  }
+
+  private func conditionLabelWidth(_ condition: OverlayCondition) -> CGFloat {
+    let text = NSAttributedString(string: condition.label, attributes: [
+      .font: NSFont.systemFont(ofSize: 12, weight: .medium),
+    ])
+    return ceil(text.size().width)
   }
 
   /// The capsule rect at its current animated size, anchored bottom-center.
@@ -606,6 +777,9 @@ private final class DictationOverlayView: NSView {
       path.setClip()
       if recordingC > 0.001 { drawRecordingRow(in: rect, opacity: recordingC) }
       if processingC > 0.001 { drawProcessing(in: rect, opacity: processingC) }
+      if conditionC > 0.001, let condition, condition.replacesContent {
+        drawCondition(condition, in: rect, opacity: conditionC)
+      }
       // Idle contributes no content — it is an empty pill.
       NSGraphicsContext.restoreGraphicsState()
     }
@@ -694,22 +868,227 @@ private final class DictationOverlayView: NSView {
     cradle.stroke()
   }
 
-  /// Spec state 3: cancel · waveform · confirm, laid out relative to the capsule.
-  /// (Language chip + elapsed timer + live transcript arrive with the extended
-  /// data contract in the next slice.)
+  /// Spec state 3: cancel · waveform · language chip · elapsed · confirm. When a
+  /// partial transcript exists (state 3b) the row sits at the bottom of the same
+  /// capsule and the text is drawn above it — one element, never two.
   private func drawRecordingRow(in rect: NSRect, opacity: CGFloat) {
-    let cancelCenter = NSPoint(x: rect.minX + 15, y: rect.midY)
-    let confirmCenter = NSPoint(x: rect.maxX - 15, y: rect.midY)
-    drawCancel(center: cancelCenter, opacity: opacity)
+    // The row keeps its own height at the bottom; anything above it is transcript.
+    let row = NSRect(
+      x: rect.minX,
+      y: rect.minY,
+      width: rect.width,
+      height: min(rect.height, recordingRowHeight)
+    )
+    if rect.height > row.height + 1 {
+      drawTranscript(
+        in: NSRect(
+          x: rect.minX + transcriptInset,
+          y: row.maxY,
+          width: rect.width - 2 * transcriptInset,
+          height: rect.height - row.height
+        ),
+        opacity: opacity
+      )
+    }
+
+    let cancelCenter = NSPoint(x: row.minX + 15, y: row.midY)
+    let confirmCenter = NSPoint(x: row.maxX - 15, y: row.midY)
+    // Latched (spec state 4): the cancel slot becomes a lock chip, so the row
+    // reads as hands-free rather than one tap from discarding the dictation.
+    if isLatched {
+      drawLockChip(center: cancelCenter, opacity: opacity)
+    } else {
+      drawCancel(center: cancelCenter, opacity: opacity)
+    }
     drawConfirm(center: confirmCenter, opacity: opacity)
+
+    // Right-hand metadata: elapsed first (fixed width), then the language chip.
+    var metadataX = confirmCenter.x - 17
+    let elapsed = NSAttributedString(string: elapsedLabel, attributes: [
+      .font: NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .medium),
+      .foregroundColor: OverlayPalette.onPillMut.withAlphaComponent(opacity),
+    ])
+    let elapsedSize = elapsed.size()
+    metadataX -= elapsedSize.width
+    elapsed.draw(at: NSPoint(x: metadataX, y: row.midY - elapsedSize.height / 2))
+
+    // Spec state 11: a secure field keeps the full recording row — the user is
+    // still dictating into it — but the chip becomes a lock so the "history off"
+    // guarantee is visible for the whole session.
+    let isSecureField = condition.map { if case .secure = $0 { return true } else { return false } } ?? false
+    let chipLabel = isSecureField ? "private" : (isLatched ? "locked" : languageLabel)
+    if !chipLabel.isEmpty {
+      let chip = NSAttributedString(string: chipLabel, attributes: [
+        .font: NSFont.systemFont(ofSize: 10, weight: .semibold),
+        .foregroundColor: OverlayPalette.onPillSoft.withAlphaComponent(opacity),
+      ])
+      let chipSize = chip.size()
+      let glyphSpace: CGFloat = isSecureField ? 13 : 0
+      let chipRect = NSRect(
+        x: metadataX - 8 - (chipSize.width + 12 + glyphSpace),
+        y: row.midY - 8,
+        width: chipSize.width + 12 + glyphSpace,
+        height: 16
+      )
+      OverlayPalette.pillBgAlt.withAlphaComponent(0.85 * opacity).setFill()
+      NSBezierPath(roundedRect: chipRect, xRadius: 8, yRadius: 8).fill()
+      if isSecureField {
+        drawGlyph(
+          .lock,
+          center: NSPoint(x: chipRect.minX + 10, y: chipRect.midY),
+          tint: OverlayPalette.onPillSoft,
+          opacity: opacity
+        )
+      }
+      chip.draw(at: NSPoint(
+        x: chipRect.minX + 6 + glyphSpace,
+        y: chipRect.midY - chipSize.height / 2
+      ))
+      metadataX = chipRect.minX
+    }
+
     // Clear the icon radius (9) plus real breathing room so the wave never
-    // touches the buttons.
+    // touches the buttons or the metadata.
     drawWaveform(
       from: cancelCenter.x + 17,
-      to: confirmCenter.x - 17,
-      midY: rect.midY,
+      to: max(cancelCenter.x + 17, metadataX - 10),
+      midY: row.midY,
       opacity: opacity
     )
+  }
+
+  /// `m:ss`, matching the reference image's `0:07`.
+  private var elapsedLabel: String {
+    let totalSeconds = max(0, elapsedMs / 1000)
+    return String(format: "%d:%02d", totalSeconds / 60, totalSeconds % 60)
+  }
+
+  /// Spec state 3b: the live transcript drawn inside the capsule, above the
+  /// recording row. Truncated at the tail so the newest words stay visible.
+  private func drawTranscript(in rect: NSRect, opacity: CGFloat) {
+    guard let text = transcriptText(opacity: opacity) else { return }
+    let paragraph = NSMutableParagraphStyle()
+    paragraph.lineBreakMode = .byTruncatingHead
+    let styled = NSMutableAttributedString(attributedString: text)
+    styled.addAttribute(
+      .paragraphStyle,
+      value: paragraph,
+      range: NSRange(location: 0, length: styled.length)
+    )
+    // Inset the top so the text is not flush against the capsule's shoulder.
+    styled.draw(with: NSRect(
+      x: rect.minX,
+      y: rect.minY,
+      width: rect.width,
+      height: max(0, rect.height - 6)
+    ), options: [.usesLineFragmentOrigin, .usesFontLeading])
+  }
+
+  /// Spec state 4: the locked (hands-free) chip that replaces cancel.
+  private func drawLockChip(center: NSPoint, opacity: CGFloat) {
+    let circle = NSRect(x: center.x - 9, y: center.y - 9, width: 18, height: 18)
+    OverlayPalette.pillBgAlt.withAlphaComponent(opacity).setFill()
+    NSBezierPath(ovalIn: circle).fill()
+    drawGlyph(.lock, center: center, tint: OverlayPalette.onPillSoft, opacity: opacity)
+  }
+
+  /// Spec states 6-11: one glyph plus one sentence, centred in the capsule.
+  private func drawCondition(_ condition: OverlayCondition, in rect: NSRect, opacity: CGFloat) {
+    let text = NSAttributedString(string: condition.label, attributes: [
+      .font: NSFont.systemFont(ofSize: 12, weight: .medium),
+      .foregroundColor: OverlayPalette.onPill.withAlphaComponent(opacity),
+    ])
+    let textSize = text.size()
+    let glyphWidth: CGFloat = 20
+    let gap: CGFloat = 9
+    let groupWidth = glyphWidth + gap + textSize.width
+    let originX = rect.midX - groupWidth / 2
+    drawGlyph(
+      condition.glyph,
+      center: NSPoint(x: originX + glyphWidth / 2, y: rect.midY),
+      tint: condition.tint,
+      opacity: opacity
+    )
+    text.draw(at: NSPoint(
+      x: originX + glyphWidth + gap,
+      y: rect.midY - textSize.height / 2
+    ))
+  }
+
+  /// The small vector glyphs shared by the condition states. Drawn rather than
+  /// set as emoji so they inherit the tint and stay crisp at this size.
+  private func drawGlyph(
+    _ glyph: OverlayGlyph,
+    center: NSPoint,
+    tint: NSColor,
+    opacity: CGFloat
+  ) {
+    let color = tint.withAlphaComponent(opacity)
+    switch glyph {
+    case .check:
+      color.setFill()
+      NSBezierPath(ovalIn: NSRect(
+        x: center.x - 8, y: center.y - 8, width: 16, height: 16)).fill()
+      OverlayPalette.onPill.withAlphaComponent(opacity).setStroke()
+      let check = NSBezierPath()
+      check.lineWidth = 1.7
+      check.lineCapStyle = .round
+      check.lineJoinStyle = .round
+      check.move(to: NSPoint(x: center.x - 3.6, y: center.y - 0.4))
+      check.line(to: NSPoint(x: center.x - 0.9, y: center.y - 3.1))
+      check.line(to: NSPoint(x: center.x + 3.9, y: center.y + 3.1))
+      check.stroke()
+    case .warning:
+      color.setStroke()
+      let triangle = NSBezierPath()
+      triangle.lineWidth = 1.5
+      triangle.lineJoinStyle = .round
+      triangle.move(to: NSPoint(x: center.x, y: center.y + 7))
+      triangle.line(to: NSPoint(x: center.x + 7.5, y: center.y - 6))
+      triangle.line(to: NSPoint(x: center.x - 7.5, y: center.y - 6))
+      triangle.close()
+      triangle.stroke()
+      let bang = NSBezierPath()
+      bang.lineWidth = 1.6
+      bang.lineCapStyle = .round
+      bang.move(to: NSPoint(x: center.x, y: center.y + 3.2))
+      bang.line(to: NSPoint(x: center.x, y: center.y - 1.4))
+      bang.stroke()
+      color.setFill()
+      NSBezierPath(ovalIn: NSRect(
+        x: center.x - 0.9, y: center.y - 4.4, width: 1.8, height: 1.8)).fill()
+    case .download:
+      color.setStroke()
+      let arrow = NSBezierPath()
+      arrow.lineWidth = 1.6
+      arrow.lineCapStyle = .round
+      arrow.lineJoinStyle = .round
+      arrow.move(to: NSPoint(x: center.x, y: center.y + 6.5))
+      arrow.line(to: NSPoint(x: center.x, y: center.y - 2.2))
+      arrow.move(to: NSPoint(x: center.x - 3.6, y: center.y + 1.4))
+      arrow.line(to: NSPoint(x: center.x, y: center.y - 2.2))
+      arrow.line(to: NSPoint(x: center.x + 3.6, y: center.y + 1.4))
+      arrow.move(to: NSPoint(x: center.x - 6, y: center.y - 5.6))
+      arrow.line(to: NSPoint(x: center.x + 6, y: center.y - 5.6))
+      arrow.stroke()
+    case .lock:
+      color.setStroke()
+      let shackle = NSBezierPath()
+      shackle.lineWidth = 1.5
+      shackle.lineCapStyle = .round
+      shackle.move(to: NSPoint(x: center.x - 3.2, y: center.y + 0.8))
+      shackle.line(to: NSPoint(x: center.x - 3.2, y: center.y + 3.2))
+      shackle.curve(
+        to: NSPoint(x: center.x + 3.2, y: center.y + 3.2),
+        controlPoint1: NSPoint(x: center.x - 3.2, y: center.y + 6.6),
+        controlPoint2: NSPoint(x: center.x + 3.2, y: center.y + 6.6))
+      shackle.line(to: NSPoint(x: center.x + 3.2, y: center.y + 0.8))
+      shackle.stroke()
+      color.setFill()
+      NSBezierPath(roundedRect: NSRect(
+        x: center.x - 5, y: center.y - 5.4, width: 10, height: 6.6),
+        xRadius: 1.6, yRadius: 1.6).fill()
+    }
   }
 
   private func drawCancel(center: NSPoint, opacity: CGFloat) {
@@ -770,15 +1149,14 @@ private final class DictationOverlayView: NSView {
     }
   }
 
-  /// Spec state 5: three sequenced dots + a label, centered in the pill. (The
-  /// writing-mode-specific label — Transcribing / Cleaning / Understanding —
-  /// arrives with the extended data contract.)
+  /// Spec state 5: three sequenced dots + the writing-mode label, centered in the
+  /// pill.
   private func drawProcessing(in rect: NSRect, opacity: CGFloat) {
     let label: [NSAttributedString.Key: Any] = [
       .font: NSFont.systemFont(ofSize: 11.5, weight: .medium),
       .foregroundColor: OverlayPalette.onPill.withAlphaComponent(opacity),
     ]
-    let text = NSAttributedString(string: "Understanding…", attributes: label)
+    let text = NSAttributedString(string: processingLabel, attributes: label)
     let textSize = text.size()
     let dotsWidth: CGFloat = 22
     let gap: CGFloat = 7
@@ -800,6 +1178,16 @@ private final class DictationOverlayView: NSView {
     text.draw(at: NSPoint(x: originX + dotsWidth + gap, y: rect.midY - textSize.height / 2))
   }
 
+  /// The Processing verb tracks what Swar is actually doing to the words, so
+  /// Raw mode never claims to be "understanding" text it will not rewrite.
+  private var processingLabel: String {
+    switch writingMode {
+    case "raw": return "Transcribing…"
+    case "intent": return "Understanding…"
+    default: return "Cleaning…"
+    }
+  }
+
   // MARK: Animation
 
   private func startAnimating() {
@@ -819,10 +1207,15 @@ private final class DictationOverlayView: NSView {
 
     // Content cross-fades (~150 ms), computed before the geometry so the label's
     // opacity can gate the collapse below.
-    let idleT: CGFloat = (state == "idle" && !isHovering) ? 1 : 0
-    let readyT: CGFloat = (state == "idle" && isHovering) ? 1 : 0
-    let recordingT: CGFloat = (state == "recording" || state == "preparing") ? 1 : 0
-    let processingT: CGFloat = (state == "finalising") ? 1 : 0
+    // A condition that replaces the content wins over every ordinary state, so
+    // Success or Copied is never drawn on top of the processing dots.
+    let takeover = condition?.replacesContent ?? false
+    let conditionT: CGFloat = takeover ? 1 : 0
+    let idleT: CGFloat = (!takeover && state == "idle" && !isHovering) ? 1 : 0
+    let readyT: CGFloat = (!takeover && state == "idle" && isHovering) ? 1 : 0
+    let recordingT: CGFloat = (!takeover && (state == "recording" || state == "preparing")) ? 1 : 0
+    let processingT: CGFloat = (!takeover && state == "finalising") ? 1 : 0
+    conditionC += (conditionT - conditionC) * 0.22
     idleC += (idleT - idleC) * 0.22
     // Ready fades out far faster than it fades in. On hover-out the mic and
     // "Dictate" label have to be gone *before* the capsule collapses, or the text
@@ -846,11 +1239,11 @@ private final class DictationOverlayView: NSView {
     needsDisplay = true
 
     // Park the timer once fully idle and settled to save power.
-    if state == "idle", !isHovering,
-       readyC < 0.003, recordingC < 0.003, processingC < 0.003,
+    if state == "idle", !isHovering, !takeover,
+       readyC < 0.003, recordingC < 0.003, processingC < 0.003, conditionC < 0.003,
        geoW.isSettled, geoH.isSettled
     {
-      readyC = 0; recordingC = 0; processingC = 0
+      readyC = 0; recordingC = 0; processingC = 0; conditionC = 0
       stopAnimating()
     }
   }

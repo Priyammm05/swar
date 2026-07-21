@@ -118,6 +118,59 @@ void main() {
     expect(desktop.lastState, DesktopOverlayState.finalising);
   });
 
+  testWidgets('overlay snapshot carries transcript, language and mode', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1200, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final engine = _EventDictationEngineGateway();
+    final desktop = _RecordingDesktopShortcutGateway();
+    await tester.pumpWidget(
+      SwarApp(
+        diagnosticsGateway: const _SilentDiagnosticsGateway(),
+        dictationRepository: FakeDictationHistoryRepository(),
+        insightsRepository: FakeInsightsRepository(),
+        dictationEngineGateway: engine,
+        desktopShortcutGateway: desktop,
+        settingsRepository: InMemorySettingsRepository(
+          initial: const SwarSettings(
+            modelPath: '/test/model.bin',
+            language: SwarLanguagePreference.hindi,
+            writingMode: SwarWritingMode.intent,
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    desktop.emit(DesktopShortcutEventKind.toggle);
+    await tester.pump();
+    engine.emit(
+      const DictationEngineEvent(
+        sessionId: 'overlay-session',
+        kind: DictationEngineEventKind.recording,
+        previousState: DictationLifecycleState.preparing,
+        currentState: DictationLifecycleState.recording,
+        timestampMilliseconds: 1,
+        reason: 'microphone ready',
+        partialText: 'kal milte',
+      ),
+    );
+    await tester.pump();
+
+    final snapshot = desktop.lastSnapshot;
+    expect(snapshot, isNotNull);
+    // The not-yet-final tail is drawn muted inside the capsule; there is no
+    // confirmed segment until the final text is inserted.
+    expect(snapshot!.transcriptPartial, 'kal milte');
+    expect(snapshot.transcriptFinal, isEmpty);
+    expect(snapshot.language, 'HI');
+    expect(snapshot.writingMode, SwarOverlayWritingMode.intent);
+    // An installed model, granted permission and a non-secure field leave the
+    // ordinary recording flow with no exceptional condition.
+    expect(snapshot.condition, isNull);
+  });
+
   testWidgets('settings repository preserves changes across navigation', (
     tester,
   ) async {
@@ -422,6 +475,7 @@ final class _EventDictationEngineGateway implements DictationEngineGateway {
 final class _RecordingDesktopShortcutGateway implements DesktopShortcutGateway {
   final _events = StreamController<DesktopShortcutEvent>.broadcast();
   DesktopOverlayState? lastState;
+  DesktopOverlaySnapshot? lastSnapshot;
 
   void emit(DesktopShortcutEventKind kind) =>
       _events.add(DesktopShortcutEvent(kind));
@@ -451,12 +505,10 @@ final class _RecordingDesktopShortcutGateway implements DesktopShortcutGateway {
   Future<bool> focusedFieldIsSecure() async => false;
 
   @override
-  Future<void> updateOverlay({
-    required DesktopOverlayState state,
-    required double audioLevel,
-    required bool isLatched,
-    required String shortcutKey,
-  }) async => lastState = state;
+  Future<void> updateOverlay(DesktopOverlaySnapshot snapshot) async {
+    lastState = snapshot.state;
+    lastSnapshot = snapshot;
+  }
 }
 
 final class _BlockingFinishEngineGateway implements DictationEngineGateway {

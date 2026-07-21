@@ -8,6 +8,78 @@ final class DesktopShortcutEvent {
 
 enum DesktopOverlayState { idle, preparing, recording, finalising }
 
+/// The exceptional situation the overlay must surface (overlay spec section 3,
+/// states 6-11). `null` means the ordinary recording and processing flow.
+enum DesktopOverlayCondition {
+  /// Text landed at the cursor.
+  inserted,
+
+  /// Insertion failed, so the words went to the clipboard instead.
+  copied,
+
+  /// Microphone or Accessibility permission is missing.
+  permission,
+
+  /// No verified offline voice model is installed.
+  model,
+
+  /// Dictation was invoked with no text field focused.
+  noField,
+
+  /// The focused field is a password, OTP, or payment field.
+  secure,
+}
+
+/// One immutable snapshot of everything the native overlay renders.
+///
+/// Passed as a single value rather than a growing parameter list, so adding a
+/// field to the overlay does not change the signature of every implementation
+/// and test fake. Raw PCM never crosses this boundary — only the smoothed
+/// numeric [audioLevel] does.
+final class DesktopOverlaySnapshot {
+  const DesktopOverlaySnapshot({
+    required this.state,
+    required this.audioLevel,
+    required this.isLatched,
+    required this.shortcutKey,
+    this.condition,
+    this.transcriptFinal = '',
+    this.transcriptPartial = '',
+    this.language = '',
+    this.elapsedMs = 0,
+    this.writingMode = SwarOverlayWritingMode.clean,
+  });
+
+  final DesktopOverlayState state;
+
+  /// 0-1 smoothed input level driving the waveform.
+  final double audioLevel;
+  final bool isLatched;
+
+  /// `option` or `control` — picks the glyph shown in the Ready state.
+  final String shortcutKey;
+  final DesktopOverlayCondition? condition;
+
+  /// Confirmed words, drawn in full white.
+  final String transcriptFinal;
+
+  /// The not-yet-final tail, drawn muted.
+  final String transcriptPartial;
+
+  /// Chip label such as `EN`, `HI`, or `HI+EN`.
+  final String language;
+
+  /// Recording elapsed time, for the timer in the recording row.
+  final int elapsedMs;
+
+  /// Picks the Processing label: Transcribing, Cleaning, or Understanding.
+  final SwarOverlayWritingMode writingMode;
+}
+
+/// Mirrors `SwarWritingMode` without making the dictation layer depend on
+/// settings, so the overlay contract stays self-contained.
+enum SwarOverlayWritingMode { raw, clean, intent }
+
 abstract interface class DesktopShortcutGateway {
   Stream<DesktopShortcutEvent> get events;
 
@@ -23,12 +95,7 @@ abstract interface class DesktopShortcutGateway {
   /// suppress history storage for that dictation (privacy P0).
   Future<bool> focusedFieldIsSecure();
 
-  Future<void> updateOverlay({
-    required DesktopOverlayState state,
-    required double audioLevel,
-    required bool isLatched,
-    required String shortcutKey,
-  });
+  Future<void> updateOverlay(DesktopOverlaySnapshot snapshot);
 
   Future<void> hideOverlay();
 
@@ -57,12 +124,7 @@ final class NoopDesktopShortcutGateway implements DesktopShortcutGateway {
   Future<bool> focusedFieldIsSecure() async => false;
 
   @override
-  Future<void> updateOverlay({
-    required DesktopOverlayState state,
-    required double audioLevel,
-    required bool isLatched,
-    required String shortcutKey,
-  }) async {}
+  Future<void> updateOverlay(DesktopOverlaySnapshot snapshot) async {}
 
   @override
   Future<void> hideOverlay() async {}

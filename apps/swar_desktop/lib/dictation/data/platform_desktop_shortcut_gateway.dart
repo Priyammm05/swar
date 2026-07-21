@@ -54,17 +54,20 @@ final class PlatformDesktopShortcutGateway implements DesktopShortcutGateway {
   }
 
   @override
-  Future<void> updateOverlay({
-    required DesktopOverlayState state,
-    required double audioLevel,
-    required bool isLatched,
-    required String shortcutKey,
-  }) {
+  Future<void> updateOverlay(DesktopOverlaySnapshot snapshot) {
     return _channel.invokeMethod<void>('updateDictationOverlay', {
-      'state': state.name,
-      'audioLevel': audioLevel,
-      'isLatched': isLatched,
-      'shortcutKey': shortcutKey,
+      'state': snapshot.state.name,
+      'audioLevel': snapshot.audioLevel,
+      'isLatched': snapshot.isLatched,
+      'shortcutKey': snapshot.shortcutKey,
+      // Absent rather than null when there is no exceptional condition, so the
+      // native side reads one shape.
+      if (snapshot.condition != null) 'condition': snapshot.condition!.name,
+      'transcriptFinal': snapshot.transcriptFinal,
+      'transcriptPartial': snapshot.transcriptPartial,
+      'language': snapshot.language,
+      'elapsedMs': snapshot.elapsedMs,
+      'writingMode': snapshot.writingMode.name,
     });
   }
 

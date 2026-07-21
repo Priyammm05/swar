@@ -14,6 +14,7 @@ import 'package:swar_desktop/dictation/domain/desktop_shortcut_gateway.dart';
 import 'package:swar_desktop/dictation/presentation/dictation_session_view_model.dart';
 import 'package:swar_desktop/insights/domain/insights_repository.dart';
 import 'package:swar_desktop/settings/domain/settings_repository.dart';
+import 'package:swar_desktop/settings/domain/swar_settings.dart';
 import 'package:swar_desktop/settings/domain/personalization_repository.dart';
 import 'package:swar_desktop/settings/data/in_memory_personalization_repository.dart';
 import 'package:swar_desktop/settings/presentation/personalization_view_model.dart';
@@ -52,6 +53,18 @@ final class _SwarAppState extends State<SwarApp> {
   late final PersonalizationViewModel _personalizationViewModel;
   StreamSubscription<DesktopShortcutEvent>? _shortcutSubscription;
   String? _configuredShortcut;
+
+  /// Whether the field focused when this dictation started was a password, OTP,
+  /// or payment field. Captured at start (the focus can move afterwards) so the
+  /// overlay can show the private-field state for the whole session.
+  bool _sessionFieldIsSecure = false;
+
+  /// Whether the last insertion-permission request was granted. Drives the
+  /// permission state on the overlay.
+  bool _insertionPermissionGranted = true;
+
+  /// When the current recording began, for the overlay's elapsed timer.
+  DateTime? _recordingStartedAt;
 
   @override
   void initState() {
@@ -126,8 +139,11 @@ final class _SwarAppState extends State<SwarApp> {
     // (password) field means the dictation still inserts but is never persisted.
     final isSensitive = await widget.desktopShortcutGateway
         .focusedFieldIsSecure();
+    _sessionFieldIsSecure = isSensitive;
+    _recordingStartedAt = DateTime.now();
     if (settings.pasteAutomatically) {
-      await widget.desktopShortcutGateway.requestInsertionPermission();
+      _insertionPermissionGranted = await widget.desktopShortcutGateway
+          .requestInsertionPermission();
     }
     await _dictationSessionViewModel.start(
       DictationEngineConfig(
@@ -182,17 +198,72 @@ final class _SwarAppState extends State<SwarApp> {
             : null,
     };
     if (overlayState == null) {
+      _recordingStartedAt = null;
       unawaited(widget.desktopShortcutGateway.hideOverlay());
       return;
     }
+    final settings = _settingsViewModel.settings;
     unawaited(
       widget.desktopShortcutGateway.updateOverlay(
-        state: overlayState,
-        audioLevel: _dictationSessionViewModel.audioLevel,
-        isLatched: _activationController.isLatched,
-        shortcutKey: _settingsViewModel.settings.shortcutKey.name,
+        DesktopOverlaySnapshot(
+          state: overlayState,
+          audioLevel: _dictationSessionViewModel.audioLevel,
+          isLatched: _activationController.isLatched,
+          shortcutKey: settings.shortcutKey.name,
+          condition: _overlayCondition(),
+          // The engine only ever reports a not-yet-final tail while recording,
+          // so there is no confirmed segment to draw in white until the final
+          // text is inserted.
+          transcriptPartial: _dictationSessionViewModel.partialText ?? '',
+          language: _overlayLanguageLabel(settings.language),
+          elapsedMs: _recordingElapsed().inMilliseconds,
+          writingMode: switch (settings.writingMode) {
+            SwarWritingMode.raw => SwarOverlayWritingMode.raw,
+            SwarWritingMode.clean => SwarOverlayWritingMode.clean,
+            SwarWritingMode.intent => SwarOverlayWritingMode.intent,
+          },
+        ),
       ),
     );
+  }
+
+  /// The exceptional state the overlay should show, most urgent first, or `null`
+  /// for the ordinary recording and processing flow.
+  ///
+  /// `noField` is deliberately absent: nothing in the current pipeline reports
+  /// "invoked with no text field focused" distinctly from a failed insertion,
+  /// which already surfaces as `copied`. Wiring it needs a native focused-role
+  /// check, so the state is drawn but never triggered yet.
+  DesktopOverlayCondition? _overlayCondition() {
+    if (!_dictationSessionViewModel.recommendedModelStatus.installed) {
+      return DesktopOverlayCondition.model;
+    }
+    if (!_insertionPermissionGranted) {
+      return DesktopOverlayCondition.permission;
+    }
+    return switch (_dictationSessionViewModel.state) {
+      DictationLifecycleState.copiedFallback => DesktopOverlayCondition.copied,
+      DictationLifecycleState.completed => DesktopOverlayCondition.inserted,
+      _ when _sessionFieldIsSecure => DesktopOverlayCondition.secure,
+      _ => null,
+    };
+  }
+
+  /// The language chip. Automatic reads `HI+EN` because Swar's automatic route
+  /// detects between Hindustani and English rather than committing to one.
+  String _overlayLanguageLabel(SwarLanguagePreference language) {
+    return switch (language) {
+      SwarLanguagePreference.automatic => 'HI+EN',
+      SwarLanguagePreference.english => 'EN',
+      SwarLanguagePreference.hindi => 'HI',
+      SwarLanguagePreference.hinglish => 'HI+EN',
+    };
+  }
+
+  Duration _recordingElapsed() {
+    final startedAt = _recordingStartedAt;
+    if (startedAt == null) return Duration.zero;
+    return DateTime.now().difference(startedAt);
   }
 
   @override

@@ -314,24 +314,32 @@ mode). This is wiring, not new capability. Raw PCM still never crosses into Dart
 
 ## 9. Gap vs. today (implementation checklist)
 
-Current: `MainFlutterWindow.swift` draws a fixed 108×60 view with idle /
-hover / recording / processing (dots + spinner arc), fixed bottom-center, not
-draggable. To reach this spec:
+Done:
 
-1. Make the panel **size-following** (dynamic width/height from the view's target
-   geometry each frame) instead of fixed 108×60.
-2. Replace the geometry lerps with the **spring integrator** (§5.1); add
-   `radius` as an animated scalar.
-3. Add the missing states: Ready-on-focus (2), the language/elapsed items in the
-   recording row (3), in-capsule **live transcript** (3b) with final/partial
-   split, Locked lock-chip + `locked` label (4), Processing **writing-mode
-   label** (5, drop the spinner arc), Success check + collapse (6), and the five
-   message states (7–11).
-4. Extend the method-channel contract (§6) and the Dart `_syncOverlay` mapping in
-   `swar_app.dart` to send condition, transcript, language, elapsed, writing mode.
-5. Add **drag + edge-snap** (§7).
-6. Keep the waveform, audio smoothing, and 60 fps timer; retune bar count to
-   14–16 and confirm saffron/spruce match the reference.
+1. A **fixed transparent envelope** panel with the capsule anchored bottom-center
+   inside it, rather than resizing the window each frame. Resizing an `NSPanel`
+   at 60 fps thrashes the window server and janks the morph.
+2. The **spring integrator** (§5.1) drives width, height, and radius.
+3. States implemented: Idle (1), Ready (2), Recording (3) with language chip and
+   elapsed timer, in-capsule **live transcript** (3b), Locked lock-chip and
+   `locked` label (4), Processing with the **writing-mode label** (5, no spinner
+   arc), Success (6), and the message states (7, 9, 11). Each condition is the
+   same capsule with one glyph and one sentence, sized to its own text.
+4. The method-channel contract (§6) is extended and `_syncOverlay` in
+   `swar_app.dart` sends condition, transcript, language, elapsed, and writing
+   mode as one `DesktopOverlaySnapshot`.
+5. Hover release polls `NSEvent.mouseLocation` rather than relying on mouse-moved
+   events, which stop arriving once the pill becomes hit-testable.
+
+Remaining:
+
+1. **Ready on focus** (2). Ready is currently hover-driven. Driving it from
+   text-field focus needs a native focused-role watcher, not just the existing
+   secure-field check.
+2. **State 8 (permission)** and **state 10 (no text field)** are drawn but not
+   yet reachable. Nothing in the pipeline distinguishes "invoked with no text
+   field focused" from a failed insertion, which already surfaces as `copied`.
+3. **Drag + edge-snap** (§7).
 
 Do not change the app's light-mode theme, the focus/nonactivating guarantees, or
 the secure-field privacy behaviour while doing any of the above.
