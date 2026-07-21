@@ -1,3 +1,4 @@
+import { AskAi } from "@/components/ask-ai";
 import { Hero } from "@/components/hero";
 import { Install } from "@/components/install";
 import { LiveDemo } from "@/components/live-demo";
@@ -53,6 +54,7 @@ export default function Home() {
         <Cta />
       </main>
       <Footer />
+      <AskAi />
     </>
   );
 }
