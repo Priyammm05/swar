@@ -2,6 +2,11 @@
   <rect width="1024" height="1024" fill="#FFFFFF"/>
   <g transform="translate(-55.76 -55.76) scale(1.24)">
     <circle cx="457.87" cy="457.87" r="317.5" transform="rotate(-50 457.87 457.87)" stroke="#2F5547" stroke-width="15"/>
+    <!-- The mark's strokes sit 32 units (measured on a 1024 render) above the
+         circle's centre, which reads as the glyph floating high with too much
+         space beneath it. The circle itself is exactly centred, so only the
+         glyph is nudged: 25.8 local units, which is 32 after the 1.24 scale. -->
+    <g transform="translate(0 25.8)">
     <path d="M374.725 197.168L233.278 365.737" stroke="#2F5547" stroke-width="25" stroke-linecap="round"/>
     <line x1="228.434" y1="438.161" x2="374.846" y2="263.673" stroke="#2F5547" stroke-width="25" stroke-linecap="round"/>
     <line x1="236.191" y1="494.756" x2="383.329" y2="319.403" stroke="#2F5547" stroke-width="25" stroke-linecap="round"/>
@@ -13,5 +18,6 @@
     <line x1="535.07" y1="543.729" x2="680.032" y2="370.97" stroke="#2F5547" stroke-width="25" stroke-linecap="round"/>
     <line x1="543.658" y1="601.021" x2="690.071" y2="426.533" stroke="#2F5547" stroke-width="25" stroke-linecap="round"/>
     <line x1="543.542" y1="668.687" x2="681.976" y2="503.708" stroke="#2F5547" stroke-width="25" stroke-linecap="round"/>
+    </g>
   </g>
 </svg>
