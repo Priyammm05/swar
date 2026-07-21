@@ -219,7 +219,6 @@ final class _GeneralSettings extends StatelessWidget {
   Widget build(BuildContext context) {
     final settings = viewModel.settings;
     final modelInstalled = sessionViewModel.recommendedModelStatus.installed;
-    final indicInstalled = sessionViewModel.indicPackStatus.installed;
     return _SettingsScaffold(
       title: 'General',
       section: section,
@@ -251,24 +250,6 @@ final class _GeneralSettings extends StatelessWidget {
               trailing: _MicrophoneSelector(
                 viewModel: viewModel,
                 sessionViewModel: sessionViewModel,
-              ),
-            ),
-            _SettingRow(
-              title: 'Dictation language',
-              description:
-                  'Auto detect handles English, Hindi, and Hinglish locally.',
-              trailing: _MenuDropdown<SwarLanguagePreference>(
-                fieldKey: const Key('language-setting'),
-                value: settings.language,
-                minWidth: 160,
-                labelFor: (value) => switch (value) {
-                  SwarLanguagePreference.automatic => 'Auto detect',
-                  SwarLanguagePreference.english => 'English',
-                  SwarLanguagePreference.hindi => 'Hindi',
-                  SwarLanguagePreference.hinglish => 'Hinglish',
-                },
-                items: SwarLanguagePreference.values,
-                onChanged: viewModel.setLanguage,
               ),
             ),
             _SettingRow(
@@ -317,30 +298,6 @@ final class _GeneralSettings extends StatelessWidget {
               ),
             ),
             _SettingRow(
-              title: 'Indian languages',
-              descriptionWidget: Text(
-                indicInstalled
-                    ? 'Fast Hindi, Hinglish, and 9 more Indian languages installed.'
-                    : 'Add fast Hindi, Hinglish, and 9 more Indian languages (~670 MB). English works without it.',
-                style: SwarType.description.copyWith(
-                  color: context.tokens.inkSecondary,
-                ),
-              ),
-              trailing: SwarPrimaryButton(
-                key: const Key('install-indian-languages-button'),
-                label: indicInstalled ? 'Installed' : 'Download pack',
-                icon: indicInstalled
-                    ? Icons.check_circle_outline_rounded
-                    : Icons.download_rounded,
-                busy: sessionViewModel.isInstallingLanguagePack,
-                onPressed: indicInstalled
-                    ? null
-                    : () async {
-                        await sessionViewModel.installIndicModels();
-                      },
-              ),
-            ),
-            _SettingRow(
               title: 'Personal vocabulary',
               description:
                   '${personalizationViewModel.entries.length} local pronunciation and spelling preferences.',
@@ -378,7 +335,7 @@ final class _GeneralSettings extends StatelessWidget {
                         DictationEngineConfig(
                           modelPath: settings.modelPath,
                           microphoneId: settings.microphoneId,
-                          language: settings.language.name,
+                          language: 'english',
                           writingMode: settings.writingMode.name,
                           pasteAutomatically: settings.pasteAutomatically,
                           restoreClipboard: settings.restoreClipboard,

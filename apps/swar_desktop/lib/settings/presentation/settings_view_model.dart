@@ -18,10 +18,6 @@ final class SettingsViewModel extends ChangeNotifier {
   SwarSettings get settings => _settings;
   String get providerApiKey => _providerApiKey;
 
-  void setLanguage(SwarLanguagePreference language) {
-    _save(_settings.copyWith(language: language));
-  }
-
   void setWritingMode(SwarWritingMode writingMode) {
     _save(_settings.copyWith(writingMode: writingMode));
   }

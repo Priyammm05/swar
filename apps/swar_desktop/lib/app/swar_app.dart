@@ -156,7 +156,8 @@ final class _SwarAppState extends State<SwarApp> {
       DictationEngineConfig(
         modelPath: settings.modelPath,
         microphoneId: settings.microphoneId,
-        language: settings.language.name,
+        // Swar recognises English only.
+        language: 'english',
         writingMode: settings.writingMode.name,
         pasteAutomatically: settings.pasteAutomatically,
         restoreClipboard: settings.restoreClipboard,
@@ -224,7 +225,8 @@ final class _SwarAppState extends State<SwarApp> {
           // so there is no confirmed segment to draw in white until the final
           // text is inserted.
           transcriptPartial: _dictationSessionViewModel.partialText ?? '',
-          language: _overlayLanguageLabel(settings.language),
+          // Swar recognises English only, so the chip is fixed.
+          language: 'EN',
           elapsedMs: _recordingElapsed().inMilliseconds,
           writingMode: switch (settings.writingMode) {
             SwarWritingMode.raw => SwarOverlayWritingMode.raw,
@@ -263,14 +265,6 @@ final class _SwarAppState extends State<SwarApp> {
   /// engine detects it mid-transcription, so claiming Hindi while someone speaks
   /// English would be wrong. Surfacing the detected language needs the engine to
   /// report it back, which it does not do yet.
-  String _overlayLanguageLabel(SwarLanguagePreference language) {
-    return switch (language) {
-      SwarLanguagePreference.automatic => 'AUTO',
-      SwarLanguagePreference.english => 'EN',
-      SwarLanguagePreference.hindi => 'HI',
-      SwarLanguagePreference.hinglish => 'HI+EN',
-    };
-  }
 
   Duration _recordingElapsed() {
     final startedAt = _recordingStartedAt;

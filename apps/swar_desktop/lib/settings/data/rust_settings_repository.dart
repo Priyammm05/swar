@@ -19,7 +19,6 @@ final class RustSettingsRepository implements SettingsRepository {
         ? installedModel.path
         : value.modelPath;
     return SwarSettings(
-      language: SwarLanguagePreference.values.byName(value.language),
       writingMode: SwarWritingMode.values.byName(value.writingMode),
       launchAtLogin: value.launchAtLogin,
       showInDock: value.showInDock,
@@ -56,7 +55,9 @@ final class RustSettingsRepository implements SettingsRepository {
   void save(SwarSettings settings) {
     native.saveSettings(
       settings: native.NativeSettings(
-        language: settings.language.name,
+        // Retained in the persisted record for compatibility; Swar
+        // recognises English only and the core ignores this field.
+        language: 'english',
         writingMode: settings.writingMode.name,
         launchAtLogin: settings.launchAtLogin,
         showInDock: settings.showInDock,

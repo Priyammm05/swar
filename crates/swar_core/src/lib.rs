@@ -15,7 +15,6 @@ mod enhancement;
 mod eval;
 mod frb_generated;
 mod insertion;
-mod language;
 // Client for the out-of-process cleanup helper (`swar_llm_server`). No llama.cpp
 // links into this framework, so whisper.cpp's ggml never collides with it.
 mod llm_client;

@@ -135,7 +135,6 @@ void main() {
         settingsRepository: InMemorySettingsRepository(
           initial: const SwarSettings(
             modelPath: '/test/model.bin',
-            language: SwarLanguagePreference.hindi,
             writingMode: SwarWritingMode.intent,
           ),
         ),
@@ -164,7 +163,8 @@ void main() {
     // confirmed segment until the final text is inserted.
     expect(snapshot!.transcriptPartial, 'kal milte');
     expect(snapshot.transcriptFinal, isEmpty);
-    expect(snapshot.language, 'HI');
+    // Swar recognises English only, so the chip is fixed.
+    expect(snapshot.language, 'EN');
     expect(snapshot.writingMode, SwarOverlayWritingMode.intent);
     // An installed model, granted permission and a non-secure field leave the
     // ordinary recording flow with no exceptional condition.

@@ -48,11 +48,6 @@ enum ModelCommand {
         preview: bool,
         response: Sender<Result<String, String>>,
     },
-    DetectLanguage {
-        model_path: String,
-        samples: Vec<f32>,
-        response: Sender<Result<String, String>>,
-    },
     Unload {
         response: Sender<()>,
     },
@@ -197,19 +192,6 @@ impl ModelRegistry {
         await_worker_response(&result, PREVIEW_DECODE_TIMEOUT, "generating a preview")?
     }
 
-    fn detect_language(&self, model_path: &str, samples: &[f32]) -> Result<String, String> {
-        ensure_model_file(model_path)?;
-        let (response, result) = mpsc::channel();
-        self.commands
-            .send(ModelCommand::DetectLanguage {
-                model_path: model_path.to_owned(),
-                samples: samples.to_vec(),
-                response,
-            })
-            .map_err(|_| "the ASR worker is unavailable".to_owned())?;
-        await_worker_response(&result, PREVIEW_DECODE_TIMEOUT, "detecting the language")?
-    }
-
     fn unload(&self) -> Result<(), String> {
         let (response, result) = mpsc::channel();
         self.commands
@@ -232,16 +214,10 @@ fn await_worker_response<T>(
     })
 }
 
+/// Warms the whisper fallback so a first dictation that needs it does not pay
+/// the cold model load.
 pub(crate) fn prepare(model_path: &str) -> Result<ModelStatus, String> {
     MODEL_REGISTRY.prepare(model_path)
-}
-
-pub(crate) fn prepare_for_language(
-    model_path: &str,
-    language: &str,
-) -> Result<ModelStatus, String> {
-    let selected = model_path_for_language(Path::new(model_path), language);
-    MODEL_REGISTRY.prepare(&selected.to_string_lossy())
 }
 
 pub(crate) fn transcribe(
@@ -250,8 +226,7 @@ pub(crate) fn transcribe(
     samples: &[f32],
     hotwords: &str,
 ) -> Result<String, String> {
-    let selected = model_path_for_language(Path::new(model_path), language);
-    MODEL_REGISTRY.transcribe(&selected.to_string_lossy(), language, samples, hotwords)
+    MODEL_REGISTRY.transcribe(model_path, language, samples, hotwords)
 }
 
 pub(crate) fn transcribe_preview(
@@ -259,27 +234,7 @@ pub(crate) fn transcribe_preview(
     language: &str,
     samples: &[f32],
 ) -> Result<String, String> {
-    let selected = model_path_for_language(Path::new(model_path), language);
-    MODEL_REGISTRY.transcribe_preview(&selected.to_string_lossy(), language, samples)
-}
-
-/// Detects the spoken language via the warm whisper context, returning its ISO
-/// code (e.g. "en", "hi"). Used only to route Auto mode to the correct fast engine.
-pub(crate) fn detect_language(model_path: &str, samples: &[f32]) -> Result<String, String> {
-    MODEL_REGISTRY.detect_language(model_path, samples)
-}
-
-/// The whisper model file that best fits `hint`, falling back to the user's
-/// selected model when no specialist is installed.
-///
-/// Auto uses this to act on what its own detection heard, instead of sending
-/// every Auto utterance to one model. `hint` accepts a mode name ("hindi") or
-/// whisper's ISO code ("hi"); an empty hint means nothing is known and keeps the
-/// general model.
-pub(crate) fn whisper_model_for(model_path: &str, hint: &str) -> String {
-    model_path_for_language(Path::new(model_path), hint)
-        .to_string_lossy()
-        .into_owned()
+    MODEL_REGISTRY.transcribe_preview(model_path, language, samples)
 }
 
 pub(crate) fn unload() -> Result<(), String> {
@@ -342,25 +297,6 @@ fn run_worker(receiver: Receiver<ModelCommand>) {
                 });
                 let _ = response.send(result);
             }
-            ModelCommand::DetectLanguage {
-                model_path,
-                samples,
-                response,
-            } => {
-                let outcome = panic::catch_unwind(AssertUnwindSafe(|| {
-                    cache.ensure(&model_path).and_then(|_| {
-                        let model = cache
-                            .get(&model_path)
-                            .ok_or_else(|| "the offline model did not remain loaded".to_owned())?;
-                        detect_language_with_context(&model.context, &samples)
-                    })
-                }));
-                let result = outcome.unwrap_or_else(|_| {
-                    cache.clear();
-                    Err("the offline model failed during language detection".to_owned())
-                });
-                let _ = response.send(result);
-            }
             ModelCommand::Unload { response } => {
                 cache.clear();
                 let _ = response.send(());
@@ -374,23 +310,6 @@ fn run_worker(receiver: Receiver<ModelCommand>) {
 /// engine — English/European to Parakeet, Indian to IndicConformer — since neither
 /// fast engine spans both families. This is a single encoder pass on the warm
 /// whisper context, far cheaper than a full decode.
-fn detect_language_with_context(
-    context: &WhisperContext,
-    samples: &[f32],
-) -> Result<String, String> {
-    let Some(samples) = prepared_decode_input(samples) else {
-        return Ok(String::new());
-    };
-    let mut state = context.create_state().map_err(|error| error.to_string())?;
-    state
-        .pcm_to_mel(samples.as_ref(), available_threads() as usize)
-        .map_err(|error| error.to_string())?;
-    let (lang_id, _probs) = state
-        .lang_detect(0, available_threads() as usize)
-        .map_err(|error| error.to_string())?;
-    Ok(whisper_rs::get_lang_str(lang_id).unwrap_or("en").to_owned())
-}
-
 /// Decodes an utterance of any length, one whisper window at a time.
 ///
 /// Whisper encodes 30 s at a time and decides where the next window starts from
@@ -574,110 +493,21 @@ struct LanguageDecoding {
     detect_language: bool,
 }
 
-/// Each explicit mode forces its language; Auto detects per utterance (swar.md
-/// §7: "leave unset for Auto"). Forcing one language in Auto is wrong for a user
-/// who alternates languages — a forced `hi` turns spoken English ("123 mic test")
-/// into a Hindi-token hallucination loop, and a forced `en` destroys Hinglish.
-/// Detection needs a healthy input level to be reliable (quiet audio is what
-/// makes whisper.cpp misdetect Hindi as Urdu/Arabic), which the §4 gain stage now
-/// provides. Whatever Auto detects, the later language stage romanises any
-/// Devanagari, so English stays English and spoken Hindi comes out Roman.
-fn language_decoding(language: &str) -> LanguageDecoding {
-    match language.trim().to_ascii_lowercase().as_str() {
-        "english" => LanguageDecoding {
-            whisper_language: Some("en"),
-            initial_prompt: None,
-            detect_language: false,
-        },
-        "hindi" => LanguageDecoding {
-            whisper_language: Some("hi"),
-            initial_prompt: None,
-            detect_language: false,
-        },
-        // Explicit Hinglish: the user is telling us it is Hindi-led code-switch,
-        // so decode Hindi and romanise. `en` is banned here by §7.
-        "hinglish" => LanguageDecoding {
-            whisper_language: Some("hi"),
-            initial_prompt: None,
-            detect_language: false,
-        },
-        // Auto: language left unset so whisper.cpp auto-detects AND transcribes
-        // (swar.md §7 / CLAUDE.md §11). `detect_language` MUST stay false —
-        // setting it true triggers whisper.cpp's detection-ONLY mode, which
-        // reports the language and returns an empty transcript.
-        _ => LanguageDecoding {
-            whisper_language: None,
-            initial_prompt: None,
-            detect_language: false,
-        },
+/// Swar recognises English, so whisper is pinned to `en` rather than left to
+/// detect. `detect_language` MUST stay false: setting it true switches
+/// whisper.cpp into detection-ONLY mode, which reports a language and returns an
+/// empty transcript (swar.md §7 / CLAUDE.md §11).
+fn language_decoding(_language: &str) -> LanguageDecoding {
+    LanguageDecoding {
+        whisper_language: Some("en"),
+        initial_prompt: None,
+        detect_language: false,
     }
 }
-
-const HINDI_MODEL_FILE: &str = "ggml-hi-small.bin";
-/// Whisper-medium post-trained by Shunya Labs on Hindi-English code-switched
-/// speech (shunyalabs/zero-stt-hinglish), converted to ggml and quantised q5_0.
-/// Optional: absent means code-switched audio stays on the general multilingual
-/// model, which still works, just less well.
-const HINGLISH_MODEL_FILE: &str = "ggml-zero-stt-hinglish-q5_0.bin";
 
 fn vad_model_next_to(model_path: &Path) -> Option<std::path::PathBuf> {
     let candidate = model_path.parent()?.join("ggml-silero-v6.2.0.bin");
     candidate.is_file().then_some(candidate)
-}
-
-fn sibling_model(model_path: &Path, file: &str) -> Option<std::path::PathBuf> {
-    let candidate = model_path.parent()?.join(file);
-    candidate.is_file().then_some(candidate)
-}
-
-/// Only explicit Hindi mode uses the monolingual Indic fine-tune (accurate
-/// Devanagari). Kept as a pure predicate so routing is locked by a regression
-/// test independent of which model files happen to be installed.
-/// Accepts the ISO code too: Auto's routing hint arrives as whisper's own
-/// detection output ("hi"), not as the mode name the settings screen uses.
-fn uses_hindi_model(language: &str) -> bool {
-    matches!(
-        language.trim().to_ascii_lowercase().as_str(),
-        "hindi" | "hi"
-    )
-}
-
-/// Only explicit Hinglish takes the code-switch fine-tune.
-///
-/// Auto used to be routed here too, on the reasoning that it reaches whisper
-/// only when the router saw an Indic language. That was wrong in the case that
-/// matters: the fine-tune repeats short English utterances, returning
-/// "hello this is svar hello this is svar" for a clip the general model
-/// transcribes perfectly. Auto is the default mode and has to survive whatever
-/// it is given, so it stays on the general multilingual model. A user who knows
-/// they are code-switching can select Hinglish and get the specialist, which is
-/// worth 0.696 to 0.174 on that route.
-fn uses_hinglish_model(language: &str) -> bool {
-    language.trim().eq_ignore_ascii_case("hinglish")
-}
-
-/// Whisper is the fallback engine (the fast ONNX helper is primary). Explicit
-/// Hindi swaps to the monolingual Indic fine-tune; code-switched routes swap to
-/// the Hinglish fine-tune when present, and otherwise stay on the user's
-/// multilingual model, whose Devanagari output the language stage romanises.
-///
-/// Measured on saved fixtures with each model isolated, the Hinglish fine-tune
-/// (whisper-medium, q5_0) cuts Hinglish word error from 0.696 to 0.174, and from
-/// 0.814 to 0.310 on a 45 s realistic passage. On monolingual Hindi it measures
-/// 0.429, the same as the general model, so the narrow swap is about not paying
-/// 514 MB and its decode cost where it buys nothing, not about avoiding harm.
-fn model_path_for_language(model_path: &Path, language: &str) -> std::path::PathBuf {
-    if uses_hindi_model(language) {
-        if let Some(hindi) = sibling_model(model_path, HINDI_MODEL_FILE) {
-            return hindi;
-        }
-    }
-    if uses_hinglish_model(language) {
-        if let Some(hinglish) = sibling_model(model_path, HINGLISH_MODEL_FILE) {
-            return hinglish;
-        }
-    }
-    model_path.to_owned()
 }
 
 fn ensure_model_file(model_path: &str) -> Result<(), String> {
@@ -729,27 +559,6 @@ fn available_threads() -> i32 {
 mod tests {
     use super::*;
 
-    // Opt-in diagnostic: loads the installed whisper model and reports the language
-    // it detects for a 16 kHz mono Int16 WAV. Used to validate that Auto routing
-    // distinguishes English (-> Parakeet) from Indian speech (-> IndicConformer).
-    // No-ops unless both env vars point at real files, so CI never runs it.
-    #[test]
-    fn detect_language_on_env_wav() {
-        let (Ok(model), Ok(wav)) = (
-            std::env::var("SWAR_DETECT_MODEL"),
-            std::env::var("SWAR_DETECT_WAV"),
-        ) else {
-            return;
-        };
-        let bytes = std::fs::read(&wav).expect("read wav");
-        let samples: Vec<f32> = bytes[44..]
-            .chunks_exact(2)
-            .map(|b| i16::from_le_bytes([b[0], b[1]]) as f32 / 32768.0)
-            .collect();
-        let code = detect_language(&model, &samples).expect("detect");
-        println!("DETECTED[{wav}] = {code}");
-    }
-
     #[test]
     fn missing_model_is_rejected_before_the_worker_is_contacted() {
         let error = ensure_model_file("/definitely/not/a/swar/model.bin")
@@ -788,103 +597,6 @@ mod tests {
             let value = dynamic_audio_ctx(16_000 * seconds);
             assert!((128..=1500).contains(&value), "{seconds}s -> {value}");
         }
-    }
-
-    #[test]
-    fn explicit_modes_force_their_language_and_auto_leaves_it_unset() {
-        // Explicit modes pin their language; `en` is banned for Hinglish (§7).
-        assert_eq!(language_decoding("english").whisper_language, Some("en"));
-        assert_eq!(language_decoding("hindi").whisper_language, Some("hi"));
-        assert_eq!(language_decoding("hinglish").whisper_language, Some("hi"));
-
-        // Auto leaves the language unset so whisper.cpp auto-detects AND
-        // transcribes (§7: "leave unset for Auto"). detect_language MUST stay
-        // false — true is whisper.cpp's detection-ONLY mode and returns an empty
-        // transcript (CLAUDE.md §11).
-        let auto = language_decoding("automatic");
-        assert_eq!(auto.whisper_language, None);
-        assert!(
-            !auto.detect_language,
-            "Auto must not use detection-only mode"
-        );
-
-        // No mode enables detection-only mode or biases the decoder with a prompt.
-        for mode in ["english", "hindi", "hinglish", "automatic"] {
-            let decoding = language_decoding(mode);
-            assert!(
-                !decoding.detect_language,
-                "{mode} must not use detection-only mode"
-            );
-            assert!(
-                decoding.initial_prompt.is_none(),
-                "{mode} must not bias the decoder with a prompt"
-            );
-        }
-    }
-
-    #[test]
-    fn only_explicit_hindi_uses_the_monolingual_indic_model() {
-        // Regression: Hinglish was once routed through the Hindi-only fine-tune,
-        // which mangled English words ("complete" -> "kanplit"). Only explicit
-        // Hindi may request the Indic model; every code-switch-capable mode stays
-        // on the multilingual model. Kept file-independent via the pure predicate.
-        assert!(uses_hindi_model("hindi"));
-        assert!(uses_hindi_model("Hindi"));
-        for mode in ["hinglish", "automatic", "english", "", "auto"] {
-            assert!(
-                !uses_hindi_model(mode),
-                "{mode:?} must stay on the multilingual model"
-            );
-        }
-    }
-
-    #[test]
-    fn whisper_fallback_routes_each_language_to_its_best_installed_model() {
-        use std::fs;
-        let dir = std::env::temp_dir().join(format!("swar-fallback-route-{}", std::process::id()));
-        let _ = fs::remove_dir_all(&dir);
-        fs::create_dir_all(&dir).expect("temp dir");
-        let selected = dir.join("ggml-small-q5_1.bin");
-        fs::write(&selected, b"x").expect("write base");
-
-        // With no fine-tune installed, every mode stays on the selected
-        // multilingual model; the language stage romanises its Devanagari.
-        for mode in ["hinglish", "automatic", "auto", "english", ""] {
-            assert_eq!(
-                model_path_for_language(&selected, mode),
-                selected,
-                "{mode:?}"
-            );
-        }
-
-        // Only explicit Hindi swaps to the Indic fine-tune when it sits next to it.
-        let hindi = dir.join(HINDI_MODEL_FILE);
-        fs::write(&hindi, b"x").expect("write hindi");
-        assert_eq!(model_path_for_language(&selected, "hindi"), hindi);
-        assert_eq!(model_path_for_language(&selected, "hinglish"), selected);
-
-        // Explicit Hinglish takes the fine-tune once installed. Measured on the
-        // benchmark cases it cuts Hinglish word error rate from 0.696 to 0.174,
-        // so this swap is worth its 514 MB.
-        let hinglish = dir.join(HINGLISH_MODEL_FILE);
-        fs::write(&hinglish, b"x").expect("write hinglish");
-        assert_eq!(model_path_for_language(&selected, "hinglish"), hinglish);
-
-        // Every other mode keeps the general model, Auto included. The fine-tune
-        // repeats short English ("hello this is svar hello this is svar" for a
-        // clip the general model gets exactly right), and Auto is the default
-        // mode, so it has to survive whatever it is handed. Auto picks its own
-        // model from detection instead; see api::dictation::AsrRoute.
-        for mode in ["automatic", "auto", "", "english"] {
-            assert_eq!(
-                model_path_for_language(&selected, mode),
-                selected,
-                "{mode:?}"
-            );
-        }
-        assert_eq!(model_path_for_language(&selected, "hindi"), hindi);
-
-        let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]

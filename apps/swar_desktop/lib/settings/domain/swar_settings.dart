@@ -1,7 +1,5 @@
 // apps/swar_desktop/lib/settings/domain/swar_settings.dart
 
-enum SwarLanguagePreference { automatic, english, hindi, hinglish }
-
 enum SwarWritingMode { raw, clean, intent }
 
 enum SwarShortcutKey { option, control }
@@ -12,7 +10,6 @@ enum SwarEnhancementProvider { local, byok }
 /// Settings that the Phase 1 shell can edit without owning product logic.
 final class SwarSettings {
   const SwarSettings({
-    this.language = SwarLanguagePreference.automatic,
     this.writingMode = SwarWritingMode.clean,
     this.launchAtLogin = false,
     this.showInDock = true,
@@ -36,7 +33,6 @@ final class SwarSettings {
     this.historyRetentionDays = 365,
   });
 
-  final SwarLanguagePreference language;
   final SwarWritingMode writingMode;
   final bool launchAtLogin;
   final bool showInDock;
@@ -60,7 +56,6 @@ final class SwarSettings {
   final int historyRetentionDays;
 
   SwarSettings copyWith({
-    SwarLanguagePreference? language,
     SwarWritingMode? writingMode,
     bool? launchAtLogin,
     bool? showInDock,
@@ -84,7 +79,6 @@ final class SwarSettings {
     int? historyRetentionDays,
   }) {
     return SwarSettings(
-      language: language ?? this.language,
       writingMode: writingMode ?? this.writingMode,
       launchAtLogin: launchAtLogin ?? this.launchAtLogin,
       showInDock: showInDock ?? this.showInDock,
