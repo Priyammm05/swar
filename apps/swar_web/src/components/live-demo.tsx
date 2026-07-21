@@ -13,8 +13,22 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 type Phase = "idle" | "listening" | "settling" | "done" | "unsupported";
 
+/** Which script is being spoken: the English one, or the one Swar turns down. */
+type Mode = "english" | "other";
+
 /** One spoken phrase, with the delay before the next begins. */
 type Phrase = { text: string; hold: number };
+
+/**
+ * The utterance for the second button. It is shown in Devanagari because the
+ * point of this branch is that you can see, instantly and without reading a
+ * word of copy, that the input was not English. Swar hears it, names it, and
+ * writes nothing.
+ */
+const OTHER_SPEECH = "नमस्ते, ये स्वर है";
+
+/** Milliseconds per character while that utterance is being heard. */
+const HEARD_TICK = 55;
 
 const SCRIPT: Phrase[] = [
   { text: "So the migration touches about forty files,", hold: 1500 },
@@ -35,7 +49,9 @@ const BARS = 28;
 export function LiveDemo() {
   const reduceMotion = useReducedMotion();
   const [phase, setPhase] = useState<Phase>("idle");
+  const [mode, setMode] = useState<Mode>("english");
   const [spoken, setSpoken] = useState(0);
+  const [heard, setHeard] = useState(0);
   const [showCleaned, setShowCleaned] = useState(false);
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
 
@@ -51,7 +67,9 @@ export function LiveDemo() {
   const reset = useCallback(() => {
     clearTimers();
     setPhase("idle");
+    setMode("english");
     setSpoken(0);
+    setHeard(0);
     setShowCleaned(false);
   }, [clearTimers]);
 
@@ -59,7 +77,9 @@ export function LiveDemo() {
 
   const play = useCallback(() => {
     clearTimers();
+    setMode("english");
     setSpoken(0);
+    setHeard(0);
     setShowCleaned(false);
     setPhase("listening");
 
@@ -78,16 +98,28 @@ export function LiveDemo() {
 
   const playUnsupported = useCallback(() => {
     clearTimers();
+    setMode("other");
     setSpoken(0);
+    setHeard(0);
     setShowCleaned(false);
     setPhase("listening");
-    later(() => setPhase("unsupported"), 2200);
-  }, [clearTimers, later]);
+
+    // The utterance arrives a character at a time, so you watch Swar hear it
+    // rather than being told after the fact that it did.
+    for (let index = 1; index <= OTHER_SPEECH.length; index += 1) {
+      later(() => setHeard(index), HEARD_TICK * index);
+    }
+    const spokenFor = HEARD_TICK * OTHER_SPEECH.length;
+    later(() => setPhase("unsupported"), spokenFor + 650);
+    // Hand the demo back rather than stranding it in a dead end.
+    later(() => reset(), spokenFor + 650 + 3400);
+  }, [clearTimers, later, reset]);
 
   const listening = phase === "listening";
   const settled = SCRIPT.slice(0, spoken)
     .map((p) => p.text)
     .join(" ");
+  const busy = phase === "listening" || phase === "settling";
 
   return (
     <div className="w-full">
@@ -104,13 +136,19 @@ export function LiveDemo() {
           />
           {phase === "idle" || phase === "done"
             ? "Play the demo"
-            : "Stop"}
+            : busy && mode === "english"
+              ? "Stop"
+              : "Reset"}
         </button>
         <button
           onClick={playUnsupported}
-          className="rounded-full border border-rule bg-transparent px-6 py-3 text-sm font-medium text-ink-soft transition-colors duration-200 hover:border-ink hover:text-ink"
+          className={`rounded-full border bg-transparent px-6 py-3 text-sm font-medium transition-colors duration-200 hover:border-ink hover:text-ink ${
+            mode === "other" && phase !== "idle"
+              ? "border-ink text-ink"
+              : "border-rule text-ink-soft"
+          }`}
         >
-          Speak something else
+          Say it in Hindi
         </button>
       </div>
 
@@ -131,7 +169,7 @@ export function LiveDemo() {
             <p className="text-pretty text-base leading-relaxed text-ink sm:text-lg">
               {phase === "unsupported" ? (
                 <span className="text-ink-faint">
-                  Waiting for English.
+                  Nothing was written. Your cursor is exactly where you left it.
                 </span>
               ) : showCleaned ? (
                 <CleanedText text={CLEANED} reduceMotion={!!reduceMotion} />
@@ -152,7 +190,7 @@ export function LiveDemo() {
             </p>
 
             {/* What settled versus what is still in flight */}
-            {(listening || phase === "settling") && (
+            {busy && mode === "english" && (
               <div className="mt-5 flex items-center gap-2 font-mono text-[11px] uppercase tracking-wider text-ink-faint">
                 <span className="rounded-full bg-acid/70 px-2 py-0.5 text-ink">
                   {spoken} settled
@@ -166,10 +204,38 @@ export function LiveDemo() {
             )}
           </div>
 
+          {/* What the microphone is picking up, when it is not English. Showing
+              the utterance is the whole point of this branch: you see Swar hear
+              it, and you see the document stay empty. */}
+          <AnimatePresence>
+            {mode === "other" && heard > 0 && (
+              <motion.div
+                initial={{ opacity: 0, y: -6 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.25 }}
+                className="mt-5 flex justify-center sm:mt-6"
+              >
+                <div className="flex max-w-full items-center gap-2.5 rounded-full border border-rule bg-paper px-4 py-2">
+                  <span className="font-mono text-[10px] uppercase tracking-widest text-ink-faint">
+                    heard
+                  </span>
+                  <span className="truncate text-sm text-ink-soft">
+                    {OTHER_SPEECH.slice(0, heard)}
+                  </span>
+                  {phase === "listening" && (
+                    <span className="swar-caret inline-block h-[1em] w-[2px] bg-ink-faint" />
+                  )}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
           {/* The bar itself */}
           <div className="mt-6 flex justify-center sm:mt-8">
             <SwarBar
               phase={phase}
+              mode={mode}
               reduceMotion={!!reduceMotion}
             />
           </div>
@@ -230,9 +296,11 @@ function CleanedText({
  */
 function SwarBar({
   phase,
+  mode,
   reduceMotion,
 }: {
   phase: Phase;
+  mode: Mode;
   reduceMotion: boolean;
 }) {
   const listening = phase === "listening";
@@ -246,11 +314,7 @@ function SwarBar({
           ? { duration: 0 }
           : { type: "spring", stiffness: 260, damping: 26 }
       }
-      className={`flex items-center gap-3 rounded-full border px-4 py-2.5 sm:gap-4 sm:px-5 sm:py-3 ${
-        unsupported
-          ? "border-ink/15 bg-ink text-paper"
-          : "border-ink/10 bg-ink text-paper"
-      }`}
+      className="flex max-w-full items-center gap-3 rounded-full border border-ink/10 bg-ink px-4 py-2.5 text-paper sm:gap-4 sm:px-5 sm:py-3"
       style={{ minWidth: unsupported ? undefined : 200 }}
     >
       <AnimatePresence mode="wait" initial={false}>
@@ -261,13 +325,15 @@ function SwarBar({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.2 }}
-            className="flex items-center gap-2.5 whitespace-nowrap"
+            className="flex items-center gap-2.5"
           >
-            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-violet text-[11px] font-bold text-ink">
+            <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-violet text-[11px] font-bold text-ink">
               !
             </span>
-            <span className="text-sm">
-              That is not English. Swar only writes English.
+            {/* Left to wrap on purpose. Held on one line this ran past the edge
+                of a phone screen. */}
+            <span className="text-sm leading-snug">
+              Not English. Swar wrote nothing.
             </span>
           </motion.div>
         ) : phase === "settling" ? (
@@ -306,8 +372,10 @@ function SwarBar({
             className="flex items-center gap-3"
           >
             <Waveform active={listening} reduceMotion={reduceMotion} />
+            {/* The language chip only claims English once English is what it is
+                hearing. On the other branch it stays a plain question mark. */}
             <span className="font-mono text-[11px] uppercase tracking-widest text-paper/60">
-              {listening ? "EN" : "hold ⌥"}
+              {!listening ? "hold ⌥" : mode === "english" ? "EN" : "??"}
             </span>
           </motion.div>
         )}
