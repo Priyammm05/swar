@@ -32,7 +32,7 @@ export function Hero() {
           className="mb-7 inline-flex items-center gap-2 rounded-full border border-rule bg-paper/70 px-3.5 py-1.5 font-mono text-[11px] uppercase tracking-widest text-ink-soft"
         >
           <span className="h-1.5 w-1.5 rounded-full bg-acid-deep" />
-          runs offline on your Mac
+          runs offline on your machine
         </motion.p>
 
         <motion.h1
@@ -41,7 +41,7 @@ export function Hero() {
           transition={{ duration: 0.6, ease: [0.2, 0.8, 0.2, 1] }}
           className="display-wonk font-display text-[clamp(2.75rem,9vw,6.5rem)] font-normal leading-[0.92] text-ink"
         >
-          Talk to your Mac.
+          Talk to your machine.
           <br />
           <span className="text-ink-faint">Nothing leaves it.</span>
         </motion.h1>
@@ -73,7 +73,7 @@ export function Hero() {
             </span>
           </a>
           <p className="font-mono text-[11px] uppercase tracking-widest text-ink-faint">
-            macOS · English · free while in beta
+            macOS · English · always free
           </p>
         </motion.div>
       </div>

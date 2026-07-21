@@ -16,11 +16,11 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "Swar — dictation that never leaves your Mac",
+  title: "Swar · dictation that never leaves your machine",
   description:
     "Speak, and the words land where your cursor is. Swar transcribes on your machine. No upload, no account, no internet.",
   openGraph: {
-    title: "Swar — dictation that never leaves your Mac",
+    title: "Swar · dictation that never leaves your machine",
     description:
       "Speak, and the words land where your cursor is. Nothing is uploaded.",
     type: "website",

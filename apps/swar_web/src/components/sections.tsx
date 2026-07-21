@@ -122,9 +122,9 @@ export function HowItWorks() {
 export function Numbers() {
   const stats = [
     {
-      value: "92%",
+      value: "85%",
       label: "of words correct",
-      note: "Across 986 saved passages, 20 to 900 words each.",
+      note: "The floor we are willing to promise. Our 986-passage corpus scores above it.",
     },
     {
       value: "4.3s",
@@ -286,7 +286,7 @@ export function Cta() {
               Try the demo
             </a>
             <p className="font-mono text-[11px] uppercase tracking-widest text-ink-faint">
-              macOS · English · free while in beta
+              macOS · English · always free
             </p>
           </div>
         </Reveal>
@@ -314,7 +314,7 @@ export function Footer() {
             Dictation that runs on your own machine.
           </p>
           <p className="font-mono text-[11px] uppercase tracking-widest text-ink-faint">
-            macOS · English · free while in beta
+            macOS · English · always free
           </p>
         </div>
       </div>
