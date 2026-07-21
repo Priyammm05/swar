@@ -7,7 +7,7 @@
 //! degenerate output (empties, truncation, repetition blow-ups, or flipped
 //! negation) across a wide spread of real-shaped dictations.
 
-use std::time::Instant;
+use std::{sync::LazyLock, time::Instant};
 
 use crate::enhancement::{enhance_transcript, EnhancementProviderConfig};
 
@@ -40,28 +40,51 @@ fn has_negation(text: &str) -> bool {
     words.iter().any(|word| NEGATIONS.contains(&word.as_str()))
 }
 
-/// A representative context block, shaped exactly like the one `crate::context`
-/// assembles in production: vocabulary, recent dictations, and surrounding field
-/// text with the caret marker.
+/// The context block, built through the real assembler so the shipped budgets
+/// are what is measured.
+///
+/// The inputs are deliberately larger than the budgets — more dictations than
+/// `HISTORY_ENTRIES`, a field longer than the cursor budgets — so lowering a
+/// constant visibly changes what the model receives. An earlier version of this
+/// used a hand-written string, which meant the eval measured the fixture and not
+/// the code, and a large context shipped without the regression noticing its
+/// cost.
 ///
 /// Set `SWAR_LLM_EVAL_CONTEXT=0` to measure the no-context baseline instead.
-/// This matters because the context block is the thing most likely to make a 3B
-/// model wander — echoing the reference material, or answering it instead of
-/// editing the transcript. Evaluating cleanup without it would no longer be
-/// evaluating what actually ships.
-fn eval_local_context() -> &'static str {
+static EVAL_CONTEXT: LazyLock<String> = LazyLock::new(|| {
     if std::env::var("SWAR_LLM_EVAL_CONTEXT").as_deref() == Ok("0") {
-        return "";
+        return String::new();
     }
-    "Known terms: Oynix, Niyo, Fi\n\n\
-The speaker's recent dictations, newest first:\n\
-- Please push the branch once CI is green\n\
-- Kal ka standup 10 baje hai, calendar check kar lena\n\
-- The invoice for March is still pending approval\n\
-- Let's ship the connector after the review\n\
-- Team ko bata dena release Friday ko hai\n\n\
-Text already in the field, with <CURSOR> where the new text goes:\n\
-Thanks for the update on the migration. <CURSOR>"
+    let dictations: Vec<String> = [
+        "Please push the branch once CI is green and let the team know",
+        "Kal ka standup 10 baje hai, calendar check kar lena please",
+        "The invoice for March is still pending approval from finance",
+        "Let's ship the connector after the review lands on main",
+        "Team ko bata dena release Friday ko hai, testing aaj complete karni hai",
+        "I looked at the Oynix dashboard and the numbers are already updated",
+        "Niyo ke saath call kal subah hai, agenda bhej dena raat tak",
+        "The migration ran clean on staging so production is next",
+        "Fi ka onboarding flow abhi bhi slow hai, profile kar ke dekhte hain",
+        "Send the summary to Priyam before the end of the day",
+    ]
+    .iter()
+    .map(|line| (*line).to_owned())
+    .collect();
+
+    let before = "Hi Priyam,\n\nThanks for the update on the migration. \
+The staging run looked clean and the numbers on the dashboard match what \
+finance sent over last week, so I think we are in good shape for Friday. ";
+    let after = " Let me know if anything looks off.\n\nBest,\nAsha";
+
+    crate::context::assemble(
+        "Oynix, Niyo, Fi, Priyam",
+        &dictations,
+        crate::context::CursorContext { before, after },
+    )
+});
+
+fn eval_local_context() -> &'static str {
+    &EVAL_CONTEXT
 }
 
 #[test]

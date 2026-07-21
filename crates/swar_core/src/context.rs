@@ -41,14 +41,31 @@ pub(crate) struct CursorContext<'a> {
 /// Builds the context block, or an empty string when there is nothing useful to
 /// say. The caller attaches it to the local LLM request only.
 pub(crate) fn build(cursor: CursorContext<'_>) -> String {
+    assemble(
+        &personalization::hotword_prompt(),
+        &recent_dictations(),
+        cursor,
+    )
+}
+
+/// The pure half of `build`: applies every budget to already-fetched inputs.
+///
+/// Separated from the storage read so the cleanup eval can measure the real
+/// budgets against representative data. Evaluating a hand-written fixture only
+/// ever measured the fixture, which is how a large block shipped without the
+/// regression noticing its cost.
+pub(crate) fn assemble(
+    vocabulary: &str,
+    dictations: &[String],
+    cursor: CursorContext<'_>,
+) -> String {
     let mut sections: Vec<String> = Vec::new();
 
-    let vocabulary = personalization::hotword_prompt();
     if !vocabulary.trim().is_empty() {
         sections.push(format!("Known terms: {}", vocabulary.trim()));
     }
 
-    let history = recent_dictations();
+    let history = history_lines(dictations);
     if !history.is_empty() {
         sections.push(format!(
             "The speaker's recent dictations, newest first:\n{}",
@@ -70,19 +87,12 @@ pub(crate) fn build(cursor: CursorContext<'_>) -> String {
     sections.join("\n\n")
 }
 
-/// The most recent dictations, newest first, each trimmed to one line.
-fn recent_dictations() -> Vec<String> {
-    let Ok(page) = storage::load_history_page("", 0, HISTORY_ENTRIES) else {
-        return Vec::new();
-    };
+/// The most recent dictations, newest first, one line each and within budget.
+fn history_lines(dictations: &[String]) -> Vec<String> {
     let mut used = 0usize;
     let mut lines = Vec::new();
-    for entry in page.records {
-        let text = entry
-            .final_text
-            .split_whitespace()
-            .collect::<Vec<_>>()
-            .join(" ");
+    for entry in dictations {
+        let text = entry.split_whitespace().collect::<Vec<_>>().join(" ");
         if text.is_empty() {
             continue;
         }
@@ -94,6 +104,16 @@ fn recent_dictations() -> Vec<String> {
         lines.push(line);
     }
     lines
+}
+
+fn recent_dictations() -> Vec<String> {
+    let Ok(page) = storage::load_history_page("", 0, HISTORY_ENTRIES) else {
+        return Vec::new();
+    };
+    page.records
+        .into_iter()
+        .map(|entry| entry.final_text)
+        .collect()
 }
 
 /// First `budget` characters, split on a character boundary so multi-byte
@@ -164,6 +184,26 @@ mod tests {
         assert!(block.contains("near the caret<CURSOR>close by"));
         // Both halves were trimmed, so the elision marker appears on each side.
         assert!(block.contains("…"));
+    }
+
+    #[test]
+    fn history_is_capped_by_entry_and_total_budget() {
+        // More entries than the budget allows, each longer than the per-entry cap.
+        let dictations: Vec<String> = (0..40)
+            .map(|index| format!("dictation {index} ") + &"word ".repeat(60))
+            .collect();
+        let block = assemble("", &dictations, CursorContext::default());
+        let lines: Vec<&str> = block
+            .lines()
+            .filter(|line| line.starts_with("- "))
+            .collect();
+        assert!(!lines.is_empty());
+        // Every line respects the per-entry cap (plus the "- " and the ellipsis).
+        for line in &lines {
+            assert!(line.len() <= HISTORY_ENTRY_BUDGET + 8, "{line}");
+        }
+        // And the block as a whole respects the total.
+        assert!(lines.iter().map(|line| line.len()).sum::<usize>() <= HISTORY_BUDGET);
     }
 
     #[test]

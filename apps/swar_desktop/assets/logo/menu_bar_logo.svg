@@ -1,6 +1,10 @@
 <svg width="916" height="916" viewBox="0 0 916 916" fill="none" xmlns="http://www.w3.org/2000/svg">
 <circle cx="457.87" cy="457.87" r="317.5" transform="rotate(-50 457.87 457.87)" stroke="black" stroke-width="15"/>
-<g transform="translate(42 20) translate(457.87 457.87) scale(0.8) translate(-457.87 -457.87)">
+<!-- The x offset was 42, which pushed the mark right of the circle's centre by
+     the same amount when measured on a render. The y offset stays: the strokes
+     sit high in their own coordinate space, and +20 (after the 0.8 scale) is
+     what brings them level with the circle. -->
+<g transform="translate(0 20) translate(457.87 457.87) scale(0.8) translate(-457.87 -457.87)">
 <path d="M374.725 197.168L233.278 365.737" stroke="#020202" stroke-width="25" stroke-linecap="round"/>
 <line x1="228.434" y1="438.161" x2="374.846" y2="263.673" stroke="#020202" stroke-width="25" stroke-linecap="round"/>
 <line x1="236.191" y1="494.756" x2="383.329" y2="319.403" stroke="#020202" stroke-width="25" stroke-linecap="round"/>
