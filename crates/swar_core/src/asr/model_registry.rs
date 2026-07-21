@@ -543,6 +543,11 @@ fn language_decoding(language: &str) -> LanguageDecoding {
 }
 
 const HINDI_MODEL_FILE: &str = "ggml-hi-small.bin";
+/// Whisper-medium post-trained by Shunya Labs on Hindi-English code-switched
+/// speech (shunyalabs/zero-stt-hinglish), converted to ggml and quantised q5_0.
+/// Optional: absent means code-switched audio stays on the general multilingual
+/// model, which still works, just less well.
+const HINGLISH_MODEL_FILE: &str = "ggml-zero-stt-hinglish-q5_0.bin";
 
 fn vad_model_next_to(model_path: &Path) -> Option<std::path::PathBuf> {
     let candidate = model_path.parent()?.join("ggml-silero-v6.2.0.bin");
@@ -561,13 +566,36 @@ fn uses_hindi_model(language: &str) -> bool {
     language.trim().eq_ignore_ascii_case("hindi")
 }
 
-/// Whisper is the fallback engine (the fast ONNX helper is primary). Only explicit
-/// Hindi swaps to the monolingual Indic fine-tune; Hinglish and Auto stay on the
-/// user's multilingual model, whose Devanagari output the language stage romanises.
+/// Code-switched routes take the Hinglish fine-tune when it is installed.
+///
+/// Auto is included because it only reaches whisper at all when the router saw
+/// an Indic language somewhere in the clip, which for this product almost always
+/// means English mixed with Hindi.
+fn uses_hinglish_model(language: &str) -> bool {
+    matches!(
+        language.trim().to_ascii_lowercase().as_str(),
+        "hinglish" | "auto" | "automatic" | ""
+    )
+}
+
+/// Whisper is the fallback engine (the fast ONNX helper is primary). Explicit
+/// Hindi swaps to the monolingual Indic fine-tune; code-switched routes swap to
+/// the Hinglish fine-tune when present, and otherwise stay on the user's
+/// multilingual model, whose Devanagari output the language stage romanises.
+///
+/// Measured on the benchmark cases, the Hinglish fine-tune (whisper-medium,
+/// q5_0) cuts Hinglish word error rate from 0.696 to 0.174, and it is *worse*
+/// than the general model on monolingual Hindi (2.714), so the swap is
+/// deliberately narrow.
 fn model_path_for_language(model_path: &Path, language: &str) -> std::path::PathBuf {
     if uses_hindi_model(language) {
         if let Some(hindi) = sibling_model(model_path, HINDI_MODEL_FILE) {
             return hindi;
+        }
+    }
+    if uses_hinglish_model(language) {
+        if let Some(hinglish) = sibling_model(model_path, HINGLISH_MODEL_FILE) {
+            return hinglish;
         }
     }
     model_path.to_owned()
@@ -732,7 +760,7 @@ mod tests {
     }
 
     #[test]
-    fn whisper_fallback_keeps_hinglish_and_auto_on_the_multilingual_model() {
+    fn whisper_fallback_routes_each_language_to_its_best_installed_model() {
         use std::fs;
         let dir = std::env::temp_dir().join(format!("swar-fallback-route-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
@@ -740,9 +768,8 @@ mod tests {
         let selected = dir.join("ggml-small-q5_1.bin");
         fs::write(&selected, b"x").expect("write base");
 
-        // Apex is gone: Hinglish/Auto/English all stay on the selected multilingual
-        // model on the whisper fallback path. The fast ONNX helper (IndicConformer)
-        // is the primary Hinglish engine; the language stage romanises its output.
+        // With no fine-tune installed, every mode stays on the selected
+        // multilingual model; the language stage romanises its Devanagari.
         for mode in ["hinglish", "automatic", "auto", "english", ""] {
             assert_eq!(
                 model_path_for_language(&selected, mode),
@@ -756,6 +783,24 @@ mod tests {
         fs::write(&hindi, b"x").expect("write hindi");
         assert_eq!(model_path_for_language(&selected, "hindi"), hindi);
         assert_eq!(model_path_for_language(&selected, "hinglish"), selected);
+
+        // The Hinglish fine-tune takes the code-switched routes once installed.
+        // Measured on the benchmark cases it cuts Hinglish word error rate from
+        // 0.696 to 0.174, so this swap is worth its 514 MB.
+        let hinglish = dir.join(HINGLISH_MODEL_FILE);
+        fs::write(&hinglish, b"x").expect("write hinglish");
+        for mode in ["hinglish", "automatic", "auto", ""] {
+            assert_eq!(
+                model_path_for_language(&selected, mode),
+                hinglish,
+                "{mode:?}"
+            );
+        }
+        // But never for monolingual routes. The same measurement put it at 2.714
+        // on Hindi against the general model's 0.429, so widening this swap would
+        // make Hindi dramatically worse.
+        assert_eq!(model_path_for_language(&selected, "hindi"), hindi);
+        assert_eq!(model_path_for_language(&selected, "english"), selected);
 
         let _ = fs::remove_dir_all(&dir);
     }
