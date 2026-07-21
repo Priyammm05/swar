@@ -48,6 +48,14 @@ class MainFlutterWindow: NSWindow {
         // nil = Accessibility unavailable/unreadable (caller records coverage),
         // true = password/secure field, false = ordinary field.
         result(FocusedFieldInspector.isSecure().map { NSNumber(value: $0) })
+      case "focusedFieldText":
+        // Reference context for the on-device cleanup model. nil for a secure
+        // field or when Accessibility is unavailable.
+        if let text = FocusedFieldInspector.focusedText() {
+          result(["before": text.before, "after": text.after])
+        } else {
+          result(nil)
+        }
       case "updateDictationOverlay":
         if let arguments = call.arguments as? [String: Any] {
           overlay.update(
@@ -115,6 +123,52 @@ private enum FocusedFieldInspector {
     var value: CFTypeRef?
     guard AXUIElementCopyAttributeValue(element, attribute, &value) == .success else { return nil }
     return value as? String
+  }
+
+  /// The focused field's own text, split at the caret, as reference context for
+  /// the on-device cleanup model.
+  ///
+  /// Returns nil for a secure field, so a password is never read, and nil when
+  /// Accessibility is unavailable. Read-only: this asks for the value and the
+  /// selection range and writes nothing back.
+  ///
+  /// The caller must keep this on-device. It is the contents of the user's own
+  /// document and must never be sent to a BYOK provider.
+  static func focusedText() -> (before: String, after: String)? {
+    guard AXIsProcessTrusted() else { return nil }
+    // A secure field is never read, not even to be discarded later.
+    if isSecure() == true { return nil }
+    let systemWide = AXUIElementCreateSystemWide()
+    var focused: CFTypeRef?
+    guard
+      AXUIElementCopyAttributeValue(
+        systemWide, kAXFocusedUIElementAttribute as CFString, &focused) == .success,
+      let focusedElement = focused
+    else { return nil }
+    let element = focusedElement as! AXUIElement
+
+    var valueRef: CFTypeRef?
+    guard
+      AXUIElementCopyAttributeValue(element, kAXValueAttribute as CFString, &valueRef) == .success,
+      let value = valueRef as? String,
+      !value.isEmpty
+    else { return nil }
+
+    // Without a readable caret, treat the whole field as preceding text: the
+    // model still gets the register, and nothing is invented about position.
+    var caret = value.count
+    var rangeRef: CFTypeRef?
+    if AXUIElementCopyAttributeValue(
+      element, kAXSelectedTextRangeAttribute as CFString, &rangeRef) == .success,
+      let rangeValue = rangeRef
+    {
+      var range = CFRange()
+      if AXValueGetValue(rangeValue as! AXValue, .cfRange, &range), range.location >= 0 {
+        caret = min(value.count, range.location)
+      }
+    }
+    let split = value.index(value.startIndex, offsetBy: caret)
+    return (before: String(value[..<split]), after: String(value[split...]))
   }
 
   /// The focused element's rect in Cocoa screen coordinates, so the overlay can

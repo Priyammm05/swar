@@ -88,6 +88,7 @@ fn cleanup_never_degenerates_across_the_corpus() {
             sentence,
             "clean",
             "",
+            "",
             EnhancementProviderConfig {
                 provider: "embedded-llm",
                 endpoint: "",

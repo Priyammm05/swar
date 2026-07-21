@@ -505,6 +505,11 @@ final class _RecordingDesktopShortcutGateway implements DesktopShortcutGateway {
   Future<bool> focusedFieldIsSecure() async => false;
 
   @override
+  Future<FocusedFieldText> focusedFieldText() async => focusedText;
+
+  FocusedFieldText focusedText = const FocusedFieldText();
+
+  @override
   Future<void> updateOverlay(DesktopOverlaySnapshot snapshot) async {
     lastState = snapshot.state;
     lastSnapshot = snapshot;

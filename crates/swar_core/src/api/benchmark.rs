@@ -165,6 +165,8 @@ pub fn run_text_pipeline_benchmark(iterations: u32) -> TextPipelineBenchmarkRepo
                 &clean,
                 mode,
                 "Benchmark",
+                // The benchmark measures the editor, not context assembly.
+                "",
                 enhancement::EnhancementProviderConfig {
                     provider: "local",
                     endpoint: "",

@@ -46,6 +46,20 @@ final class PlatformDesktopShortcutGateway implements DesktopShortcutGateway {
   }
 
   @override
+  Future<FocusedFieldText> focusedFieldText() async {
+    // Native returns null for a secure field or when Accessibility cannot read
+    // the element; both mean "no context", never a guess.
+    final value = await _channel.invokeMapMethod<String, dynamic>(
+      'focusedFieldText',
+    );
+    if (value == null) return const FocusedFieldText();
+    return FocusedFieldText(
+      before: value['before'] as String? ?? '',
+      after: value['after'] as String? ?? '',
+    );
+  }
+
+  @override
   Future<bool> configureShortcut(String shortcutKey) async {
     return await _channel.invokeMethod<bool>('configureGlobalShortcut', {
           'shortcutKey': shortcutKey,

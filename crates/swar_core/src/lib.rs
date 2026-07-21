@@ -6,6 +6,7 @@ mod asr;
 // links into this framework; recognition falls back to whisper if it is absent.
 mod asr_client;
 mod audio;
+mod context;
 mod dictation;
 mod enhancement;
 // Heavy cleanup evaluation over a fixed corpus; test-only. Runs the real cleanup

@@ -78,6 +78,8 @@ final class DictationEngineConfig {
     this.providerModel = '',
     this.providerApiKey = '',
     this.isSensitive = false,
+    this.cursorTextBefore = '',
+    this.cursorTextAfter = '',
   });
 
   final String modelPath;
@@ -97,6 +99,12 @@ final class DictationEngineConfig {
   /// True when the focused field is a password/secure field. The dictation still
   /// inserts, but nothing is persisted to history (privacy P0).
   final bool isSensitive;
+
+  /// The text already in the focused field, split at the caret. Reference
+  /// context for the on-device cleanup model only: it is never sent to a BYOK
+  /// provider, and it is never read at all from a secure field.
+  final String cursorTextBefore;
+  final String cursorTextAfter;
 }
 
 final class DictationEngineCompletion {

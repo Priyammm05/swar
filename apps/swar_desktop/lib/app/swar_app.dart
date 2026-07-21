@@ -141,6 +141,13 @@ final class _SwarAppState extends State<SwarApp> {
         .focusedFieldIsSecure();
     _sessionFieldIsSecure = isSensitive;
     _recordingStartedAt = DateTime.now();
+    // Read the field's existing text once, before recording, so the local model
+    // can match its register. Native returns nothing for a secure field, and an
+    // excluded application gets no context either — the same rule that already
+    // withholds its name.
+    final cursorText = (isSensitive || excluded)
+        ? const FocusedFieldText()
+        : await widget.desktopShortcutGateway.focusedFieldText();
     if (settings.pasteAutomatically) {
       _insertionPermissionGranted = await widget.desktopShortcutGateway
           .requestInsertionPermission();
@@ -161,6 +168,8 @@ final class _SwarAppState extends State<SwarApp> {
         providerModel: settings.providerModel,
         providerApiKey: _settingsViewModel.providerApiKey,
         isSensitive: isSensitive,
+        cursorTextBefore: cursorText.before,
+        cursorTextAfter: cursorText.after,
       ),
     );
     return _dictationSessionViewModel.state != DictationLifecycleState.failed;

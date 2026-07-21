@@ -1239,6 +1239,8 @@ impl SseDecode for crate::api::dictation::DictationSessionConfig {
         let mut var_providerModel = <String>::sse_decode(deserializer);
         let mut var_providerApiKey = <String>::sse_decode(deserializer);
         let mut var_isSensitive = <bool>::sse_decode(deserializer);
+        let mut var_cursorTextBefore = <String>::sse_decode(deserializer);
+        let mut var_cursorTextAfter = <String>::sse_decode(deserializer);
         return crate::api::dictation::DictationSessionConfig {
             model_path: var_modelPath,
             microphone_id: var_microphoneId,
@@ -1254,6 +1256,8 @@ impl SseDecode for crate::api::dictation::DictationSessionConfig {
             provider_model: var_providerModel,
             provider_api_key: var_providerApiKey,
             is_sensitive: var_isSensitive,
+            cursor_text_before: var_cursorTextBefore,
+            cursor_text_after: var_cursorTextAfter,
         };
     }
 }
@@ -1914,6 +1918,8 @@ impl flutter_rust_bridge::IntoDart for crate::api::dictation::DictationSessionCo
             self.provider_model.into_into_dart().into_dart(),
             self.provider_api_key.into_into_dart().into_dart(),
             self.is_sensitive.into_into_dart().into_dart(),
+            self.cursor_text_before.into_into_dart().into_dart(),
+            self.cursor_text_after.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -2294,6 +2300,8 @@ impl SseEncode for crate::api::dictation::DictationSessionConfig {
         <String>::sse_encode(self.provider_model, serializer);
         <String>::sse_encode(self.provider_api_key, serializer);
         <bool>::sse_encode(self.is_sensitive, serializer);
+        <String>::sse_encode(self.cursor_text_before, serializer);
+        <String>::sse_encode(self.cursor_text_after, serializer);
     }
 }
 

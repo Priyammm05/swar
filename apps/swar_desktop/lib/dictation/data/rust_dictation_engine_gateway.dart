@@ -37,6 +37,8 @@ final class RustDictationEngineGateway implements DictationEngineGateway {
             providerModel: config.providerModel,
             providerApiKey: config.providerApiKey,
             isSensitive: config.isSensitive,
+            cursorTextBefore: config.cursorTextBefore,
+            cursorTextAfter: config.cursorTextAfter,
           ),
         )
         .map(

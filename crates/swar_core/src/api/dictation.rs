@@ -122,6 +122,11 @@ pub struct DictationSessionConfig {
     /// True when the focused field is a secure/password field. The dictation
     /// still runs and inserts, but nothing is written to history (privacy P0).
     pub is_sensitive: bool,
+    /// The text already in the focused field, split at the caret. Used only as
+    /// reference context for the on-device cleanup LLM, never sent to a BYOK
+    /// provider, and never captured at all for a secure field.
+    pub cursor_text_before: String,
+    pub cursor_text_after: String,
 }
 
 // Manual Debug so a stray `{:?}` (in a log line or panic message) can never leak
@@ -151,6 +156,9 @@ impl std::fmt::Debug for DictationSessionConfig {
                 },
             )
             .field("is_sensitive", &self.is_sensitive)
+            // The user's own document text: never printed, only its size.
+            .field("cursor_text_before", &self.cursor_text_before.len())
+            .field("cursor_text_after", &self.cursor_text_after.len())
             .finish()
     }
 }
@@ -477,11 +485,23 @@ fn finish_capture(capture: &mut ActiveCapture) -> Result<DictationCompletion, St
             capture.config.provider_model.as_str(),
         )
     };
+    // Assembled per dictation because history and the focused field both move.
+    // A secure field contributes nothing: its text is never captured, and no
+    // history exists for it to draw on either.
+    let local_context = if capture.config.is_sensitive {
+        String::new()
+    } else {
+        crate::context::build(crate::context::CursorContext {
+            before: &capture.config.cursor_text_before,
+            after: &capture.config.cursor_text_after,
+        })
+    };
     let enhancement = enhancement::enhance_transcript(
         &personalized_raw,
         &clean_text,
         &capture.config.writing_mode,
         &capture.config.source_application,
+        &local_context,
         enhancement::EnhancementProviderConfig {
             provider: enhancement_provider,
             endpoint: &capture.config.provider_endpoint,
@@ -1032,6 +1052,8 @@ mod tests {
             provider_model: "gpt".to_owned(),
             provider_api_key: "super-secret-key".to_owned(),
             is_sensitive: false,
+            cursor_text_before: String::new(),
+            cursor_text_after: String::new(),
         };
         let rendered = format!("{config:?}");
         assert!(

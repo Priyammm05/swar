@@ -6,7 +6,7 @@
 import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `abandon_coordinator_session`, `dictation_stage_error`, `disarm`, `emit_transition`, `event_kind_for_state`, `fail_start`, `finish_capture`, `is_builtin_microphone_name`, `monotonic_timestamp_ms`, `new`, `record_dictation_levels`, `record_dictation_stage`, `select_input_device`, `should_write_history`, `spawn_preview_worker`, `stop_preview`, `take_capture`, `transcript_contains_speech`, `transition_capture`
+// These functions are ignored because they are not marked as `pub`: `abandon_coordinator_session`, `dictation_stage_error`, `disarm`, `emit_transition`, `event_kind_for_state`, `fail_start`, `finish_capture`, `is_builtin_microphone_name`, `is_indic_language`, `monotonic_timestamp_ms`, `new`, `normalized_auto_language`, `record_dictation_levels`, `record_dictation_stage`, `resolve_asr_language`, `select_input_device`, `should_write_history`, `spawn_preview_worker`, `stop_preview`, `take_capture`, `transcript_contains_speech`, `transition_capture`
 // These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `ActiveCapture`, `ReservationGuard`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_receiver_is_total_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `drop`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`
 
@@ -192,6 +192,12 @@ class DictationSessionConfig {
   /// still runs and inserts, but nothing is written to history (privacy P0).
   final bool isSensitive;
 
+  /// The text already in the focused field, split at the caret. Used only as
+  /// reference context for the on-device cleanup LLM, never sent to a BYOK
+  /// provider, and never captured at all for a secure field.
+  final String cursorTextBefore;
+  final String cursorTextAfter;
+
   const DictationSessionConfig({
     required this.modelPath,
     required this.microphoneId,
@@ -207,6 +213,8 @@ class DictationSessionConfig {
     required this.providerModel,
     required this.providerApiKey,
     required this.isSensitive,
+    required this.cursorTextBefore,
+    required this.cursorTextAfter,
   });
 
   @override
@@ -224,7 +232,9 @@ class DictationSessionConfig {
       providerEndpoint.hashCode ^
       providerModel.hashCode ^
       providerApiKey.hashCode ^
-      isSensitive.hashCode;
+      isSensitive.hashCode ^
+      cursorTextBefore.hashCode ^
+      cursorTextAfter.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -244,7 +254,9 @@ class DictationSessionConfig {
           providerEndpoint == other.providerEndpoint &&
           providerModel == other.providerModel &&
           providerApiKey == other.providerApiKey &&
-          isSensitive == other.isSensitive;
+          isSensitive == other.isSensitive &&
+          cursorTextBefore == other.cursorTextBefore &&
+          cursorTextAfter == other.cursorTextAfter;
 }
 
 class MicrophoneDevice {

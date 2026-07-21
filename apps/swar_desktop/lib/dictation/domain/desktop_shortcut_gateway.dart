@@ -8,6 +8,16 @@ final class DesktopShortcutEvent {
 
 enum DesktopOverlayState { idle, preparing, recording, finalising }
 
+/// The text surrounding the caret in the focused field.
+final class FocusedFieldText {
+  const FocusedFieldText({this.before = '', this.after = ''});
+
+  final String before;
+  final String after;
+
+  bool get isEmpty => before.isEmpty && after.isEmpty;
+}
+
 /// The exceptional situation the overlay must surface (overlay spec section 3,
 /// states 6-11). `null` means the ordinary recording and processing flow.
 enum DesktopOverlayCondition {
@@ -95,6 +105,14 @@ abstract interface class DesktopShortcutGateway {
   /// suppress history storage for that dictation (privacy P0).
   Future<bool> focusedFieldIsSecure();
 
+  /// The focused field's own text, split at the caret, as reference context for
+  /// the on-device cleanup model. Empty for a secure field or when
+  /// Accessibility is unavailable.
+  ///
+  /// This is the user's own document text. It must reach the local model only
+  /// and must never be sent to a BYOK provider.
+  Future<FocusedFieldText> focusedFieldText();
+
   Future<void> updateOverlay(DesktopOverlaySnapshot snapshot);
 
   Future<void> hideOverlay();
@@ -122,6 +140,9 @@ final class NoopDesktopShortcutGateway implements DesktopShortcutGateway {
 
   @override
   Future<bool> focusedFieldIsSecure() async => false;
+
+  @override
+  Future<FocusedFieldText> focusedFieldText() async => const FocusedFieldText();
 
   @override
   Future<void> updateOverlay(DesktopOverlaySnapshot snapshot) async {}

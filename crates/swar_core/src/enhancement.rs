@@ -14,6 +14,9 @@ pub(crate) struct EnhancementRequest<'a> {
     pub safe_clean_text: &'a str,
     pub writing_mode: &'a str,
     pub source_application: &'a str,
+    /// Vocabulary, recent dictations, and the text around the caret, assembled by
+    /// `crate::context`. Attached to the on-device LLM only — never to BYOK.
+    pub local_context: &'a str,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -64,6 +67,10 @@ pub(crate) fn cleanup_system_prompt() -> &'static str {
 
 /// The user turn: the transcript, plus the target-application context when it is
 /// known. Shared by every LLM backend so their instructions are identical.
+///
+/// `local_context` is passed only by the embedded backend. It is deliberately not
+/// a parameter every caller supplies, so a future BYOK code path cannot pick it
+/// up by accident.
 fn cleanup_user_message(source_application: &str, safe_clean_text: &str) -> String {
     let application = source_application.trim();
     if application.is_empty() {
@@ -75,13 +82,31 @@ fn cleanup_user_message(source_application: &str, safe_clean_text: &str) -> Stri
     }
 }
 
+/// The user turn for the on-device model, with the local context block in front
+/// of the transcript and an explicit instruction that the context is reference
+/// material rather than something to edit or echo.
+fn embedded_user_message(request: &EnhancementRequest<'_>) -> String {
+    let base = cleanup_user_message(request.source_application, request.safe_clean_text);
+    let context = request.local_context.trim();
+    if context.is_empty() {
+        return base;
+    }
+    format!(
+        "Reference context. Use it only to match spelling, names, and register. \
+Never copy it into your answer and never edit it.\n\n{context}\n\n---\n\nEdit only \
+the transcript below.\n\n{base}"
+    )
+}
+
 impl TranscriptEnhancer for EmbeddedLlamaEnhancer<'_> {
     fn enhance(&self, request: &EnhancementRequest<'_>) -> Result<String, String> {
         let model_path = self.config.model.trim();
         if model_path.is_empty() {
             return Err("no embedded LLM model is installed".to_owned());
         }
-        let user = cleanup_user_message(request.source_application, request.safe_clean_text);
+        // The only path that receives local context: this talks to the on-device
+        // helper over stdio, so nothing here reaches the network.
+        let user = embedded_user_message(request);
         crate::llm_client::generate(model_path, cleanup_system_prompt(), &user)
     }
 }
@@ -168,6 +193,7 @@ pub(crate) fn enhance_transcript(
     safe_clean_text: &str,
     writing_mode: &str,
     source_application: &str,
+    local_context: &str,
     provider_config: EnhancementProviderConfig<'_>,
 ) -> EnhancementOutcome {
     let request = EnhancementRequest {
@@ -175,6 +201,7 @@ pub(crate) fn enhance_transcript(
         safe_clean_text,
         writing_mode,
         source_application,
+        local_context,
     };
     let provider = provider_config.provider;
     let is_byok = provider.eq_ignore_ascii_case("byok");
@@ -569,6 +596,7 @@ mod tests {
             safe_clean_text: source,
             writing_mode: "intent",
             source_application: "",
+            local_context: "",
         }
     }
 
@@ -578,6 +606,7 @@ mod tests {
             "send the note",
             "Send the note",
             "clean",
+            "",
             "",
             local_provider(),
         );
@@ -592,6 +621,7 @@ mod tests {
             "Meet on Tuesday scratch that Wednesday",
             "clean",
             "Calendar",
+            "",
             local_provider(),
         );
         assert!(outcome.applied);
@@ -601,7 +631,7 @@ mod tests {
     #[test]
     fn sorry_as_an_apology_is_not_treated_as_a_correction() {
         let source = "Sorry I missed your call";
-        let outcome = enhance_transcript(source, source, "clean", "", local_provider());
+        let outcome = enhance_transcript(source, source, "clean", "", "", local_provider());
         assert!(!outcome.routed);
         assert_eq!(outcome.text, source);
     }
@@ -630,9 +660,45 @@ mod tests {
     #[test]
     fn restraint_keeps_actually_when_it_is_not_a_correction() {
         let source = "I actually enjoyed the movie";
-        let outcome = enhance_transcript(source, source, "intent", "", local_provider());
+        let outcome = enhance_transcript(source, source, "intent", "", "", local_provider());
         assert_eq!(outcome.text, source);
         assert!(!outcome.validation_fallback);
+    }
+
+    /// Privacy P0: the local context block carries the user's own documents and
+    /// dictation history. Only the on-device model may see it. The shared user
+    /// message — the one the BYOK provider posts to a remote endpoint — must not
+    /// contain it, whatever else changes around it.
+    #[test]
+    fn only_the_embedded_backend_receives_local_context() {
+        let request = EnhancementRequest {
+            raw_transcript: "send it",
+            safe_clean_text: "Send it",
+            writing_mode: "clean",
+            source_application: "Mail",
+            local_context: "Known terms: Oynix\n\nprivate letter to Priyam",
+        };
+
+        let embedded = embedded_user_message(&request);
+        assert!(embedded.contains("private letter to Priyam"));
+        assert!(embedded.contains("Send it"));
+
+        let remote = cleanup_user_message(request.source_application, request.safe_clean_text);
+        assert!(!remote.contains("private letter to Priyam"));
+        assert!(!remote.contains("Oynix"));
+        assert!(remote.contains("Send it"));
+    }
+
+    #[test]
+    fn an_empty_local_context_adds_no_preamble() {
+        let request = EnhancementRequest {
+            raw_transcript: "send it",
+            safe_clean_text: "Send it",
+            writing_mode: "clean",
+            source_application: "",
+            local_context: "   ",
+        };
+        assert_eq!(embedded_user_message(&request), "Send it");
     }
 
     fn local_provider() -> EnhancementProviderConfig<'static> {
@@ -662,6 +728,7 @@ mod tests {
             "Send the note now",
             "clean",
             "",
+            "",
             // Unreachable endpoint → provider errors → safe fallback, but the key
             // signal is that it *routed*.
             local_llm_provider("http://127.0.0.1:59999/v1"),
@@ -676,6 +743,7 @@ mod tests {
             "okay",
             "Okay",
             "clean",
+            "",
             "",
             local_llm_provider("http://127.0.0.1:59999/v1"),
         );
@@ -692,6 +760,7 @@ mod tests {
             "mic testing",
             "Mic testing",
             "clean",
+            "",
             "",
             local_llm_provider("http://127.0.0.1:59999/v1"),
         );
