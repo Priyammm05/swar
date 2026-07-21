@@ -113,7 +113,7 @@ export function Install() {
                 ].map(([name, size, why]) => (
                   <div key={name} className="flex flex-wrap items-baseline gap-x-2.5">
                     <dt className="font-medium text-ink">{name}</dt>
-                    <dd className="font-mono text-xs text-acid-deep">{size}</dd>
+                    <dd className="font-mono text-xs font-medium text-moss">{size}</dd>
                     <dd className="w-full text-xs leading-relaxed text-ink-faint sm:w-auto sm:flex-1">
                       {why}
                     </dd>
@@ -154,7 +154,7 @@ function Step({
       className="overflow-hidden rounded-2xl border border-rule bg-paper"
     >
       <div className="flex items-center gap-3 border-b border-rule px-4 py-3 sm:px-5">
-        <span className="font-mono text-xs text-acid-deep">{n}</span>
+        <span className="font-mono text-xs font-medium text-moss">{n}</span>
         <span className="text-sm font-medium text-ink">{title}</span>
         <CopyButton code={code} />
       </div>

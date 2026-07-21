@@ -15,6 +15,10 @@
   --ink-faint: #8b897a;
   --acid: #d8f651;
   --acid-deep: #b4d92a;
+  /* The mark's own green. The acid tones are for large shapes and fills; at
+     small text sizes on paper they go yellow and lose contrast, so figures use
+     this instead. */
+  --moss: #2f5547;
   --violet: #cbbcff;
   --rule: #dcd5c2;
 
@@ -30,6 +34,7 @@
   --color-ink-faint: var(--ink-faint);
   --color-acid: var(--acid);
   --color-acid-deep: var(--acid-deep);
+  --color-moss: var(--moss);
   --color-violet: var(--violet);
   --color-rule: var(--rule);
   --color-background: var(--background);
