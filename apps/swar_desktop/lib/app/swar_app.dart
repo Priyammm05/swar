@@ -249,11 +249,14 @@ final class _SwarAppState extends State<SwarApp> {
     };
   }
 
-  /// The language chip. Automatic reads `HI+EN` because Swar's automatic route
-  /// detects between Hindustani and English rather than committing to one.
+  /// The language chip names the mode the user chose, never a guess. Automatic
+  /// reads `AUTO` rather than `HI+EN`: the language is not decided until the
+  /// engine detects it mid-transcription, so claiming Hindi while someone speaks
+  /// English would be wrong. Surfacing the detected language needs the engine to
+  /// report it back, which it does not do yet.
   String _overlayLanguageLabel(SwarLanguagePreference language) {
     return switch (language) {
-      SwarLanguagePreference.automatic => 'HI+EN',
+      SwarLanguagePreference.automatic => 'AUTO',
       SwarLanguagePreference.english => 'EN',
       SwarLanguagePreference.hindi => 'HI',
       SwarLanguagePreference.hinglish => 'HI+EN',

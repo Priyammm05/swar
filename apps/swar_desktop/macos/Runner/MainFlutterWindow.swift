@@ -799,6 +799,9 @@ private final class DictationOverlayView: NSView {
   private var languageLabel = ""
   private var elapsedMs = 0
   private var writingMode = "clean"
+  /// Memoised result of the two-line middle-truncation search, keyed on the
+  /// transcript text and the available width.
+  private var transcriptFitCache: (key: String, value: NSAttributedString)?
 
   // Spring-morphed capsule geometry (spec §5.1). Resting "dock" is intentionally
   // tiny — a subtle indicator, not a button.
@@ -896,8 +899,7 @@ private final class DictationOverlayView: NSView {
     case "recording", "preparing":
       // State 3b: once partial text exists the SAME capsule grows taller to hold
       // it above the recording row. It never spawns a second floating element.
-      let transcriptHeight = transcriptBlockHeight(forWidth: recordingWidth - 2 * transcriptInset)
-      return (recordingWidth, recordingRowHeight + transcriptHeight, 15)
+      return (recordingWidth, recordingRowHeight + transcriptBlockHeight(), 15)
     case "finalising":
       return (processingWidth, 30, 15)
     default: // idle
@@ -914,9 +916,11 @@ private final class DictationOverlayView: NSView {
   /// Horizontal padding for the transcript block inside the capsule.
   private let transcriptInset: CGFloat = 14
 
-  /// The live transcript, final words white and the not-yet-final tail muted.
-  /// Empty when nothing has been recognised yet.
-  private func transcriptText(opacity: CGFloat = 1) -> NSAttributedString? {
+  /// The live transcript at full opacity, final words white and the not-yet-final
+  /// tail muted. Empty when nothing has been recognised yet. The fade is applied
+  /// by the context when drawing, so the measured and drawn strings are the same
+  /// object and can be cached.
+  private func transcriptText() -> NSAttributedString? {
     let final = transcriptFinal.trimmingCharacters(in: .whitespacesAndNewlines)
     let partial = transcriptPartial.trimmingCharacters(in: .whitespacesAndNewlines)
     if final.isEmpty, partial.isEmpty { return nil }
@@ -925,30 +929,111 @@ private final class DictationOverlayView: NSView {
     if !final.isEmpty {
       result.append(NSAttributedString(string: final, attributes: [
         .font: font,
-        .foregroundColor: OverlayPalette.onPill.withAlphaComponent(opacity),
+        .foregroundColor: OverlayPalette.onPill,
       ]))
     }
     if !partial.isEmpty {
       if result.length > 0 { result.append(NSAttributedString(string: " ")) }
       result.append(NSAttributedString(string: partial, attributes: [
         .font: font,
-        .foregroundColor: OverlayPalette.onPillMut.withAlphaComponent(opacity),
+        .foregroundColor: OverlayPalette.onPillMut,
       ]))
     }
     return result
   }
 
-  /// How much taller the capsule must grow to hold the transcript, capped so a
-  /// long dictation cannot grow the pill without bound.
-  private func transcriptBlockHeight(forWidth width: CGFloat) -> CGFloat {
-    guard let text = transcriptText(), width > 0 else { return 0 }
+  /// The transcript never grows past two lines, so the capsule settles at one of
+  /// three heights instead of creeping taller with every word.
+  private static let transcriptMaxLines: CGFloat = 2
+  private static let transcriptLineHeight: CGFloat = 16
+
+  /// The width the transcript is laid out against. Deliberately the *settled*
+  /// recording width rather than the animating capsule width: fitting against a
+  /// width that changes every frame would re-run the truncation search each
+  /// frame and make the capsule's height chase itself while it morphs.
+  private var transcriptContentWidth: CGFloat { recordingWidth - 2 * transcriptInset }
+
+  /// How much taller the capsule must grow to hold the transcript.
+  private func transcriptBlockHeight() -> CGFloat {
+    let width = transcriptContentWidth
+    guard width > 0, let text = fittedTranscript(forWidth: width) else { return 0 }
     let bounds = text.boundingRect(
       with: NSSize(width: width, height: .greatestFiniteMagnitude),
       options: [.usesLineFragmentOrigin, .usesFontLeading]
     )
-    let maxLines: CGFloat = 3
-    let lineHeight: CGFloat = 16
-    return min(ceil(bounds.height), maxLines * lineHeight) + 12
+    let cap = Self.transcriptMaxLines * Self.transcriptLineHeight
+    return min(ceil(bounds.height), cap) + 12
+  }
+
+  /// The transcript trimmed to fit two lines by dropping from the **middle**.
+  ///
+  /// Truncating the head loses how the sentence began; truncating the tail hides
+  /// the words just spoken. Keeping both ends means the first line always starts
+  /// at the beginning and the last line always ends at the newest word.
+  ///
+  /// Recomputed only when the text or the width changes — the search costs
+  /// several layout passes and the view redraws at 60 fps.
+  private func fittedTranscript(forWidth width: CGFloat) -> NSAttributedString? {
+    guard let full = transcriptText() else {
+      transcriptFitCache = nil
+      return nil
+    }
+    let key = "\(transcriptFinal)\u{1}\(transcriptPartial)\u{1}\(Int(width))"
+    if let cache = transcriptFitCache, cache.key == key { return cache.value }
+
+    let limit = NSSize(width: width, height: .greatestFiniteMagnitude)
+    let cap = Self.transcriptMaxLines * Self.transcriptLineHeight + 1
+    func fits(_ candidate: NSAttributedString) -> Bool {
+      candidate.boundingRect(
+        with: limit,
+        options: [.usesLineFragmentOrigin, .usesFontLeading]
+      ).height <= cap
+    }
+
+    var result = full
+    if !fits(full) {
+      // Binary search the largest number of characters that still fits, split
+      // evenly between the head and the tail.
+      let total = full.length
+      var low = 0
+      var high = total
+      var best: NSAttributedString?
+      while low <= high {
+        let keep = (low + high) / 2
+        let candidate = middleTruncated(full, keeping: keep)
+        if fits(candidate) {
+          best = candidate
+          low = keep + 1
+        } else {
+          high = keep - 1
+        }
+      }
+      result = best ?? middleTruncated(full, keeping: 0)
+    }
+    transcriptFitCache = (key: key, value: result)
+    return result
+  }
+
+  /// `full` reduced to `keep` characters, half from the front and half from the
+  /// back, joined by an ellipsis. Attributes ride along, so the final/partial
+  /// white-and-grey split survives the trim.
+  private func middleTruncated(_ full: NSAttributedString, keeping keep: Int) -> NSAttributedString {
+    let total = full.length
+    guard keep < total else { return full }
+    let headLength = max(1, keep / 2)
+    let tailLength = max(1, keep - headLength)
+    guard headLength + tailLength < total else { return full }
+    let output = NSMutableAttributedString()
+    output.append(full.attributedSubstring(from: NSRange(location: 0, length: headLength)))
+    output.append(NSAttributedString(string: " … ", attributes: [
+      .font: NSFont.systemFont(ofSize: 12.5, weight: .regular),
+      .foregroundColor: OverlayPalette.onPillMut,
+    ]))
+    output.append(
+      full.attributedSubstring(
+        from: NSRange(location: total - tailLength, length: tailLength))
+    )
+    return output
   }
 
   private func conditionLabelWidth(_ condition: OverlayCondition) -> CGFloat {
@@ -1182,24 +1267,21 @@ private final class DictationOverlayView: NSView {
   }
 
   /// Spec state 3b: the live transcript drawn inside the capsule, above the
-  /// recording row. Truncated at the tail so the newest words stay visible.
+  /// recording row, trimmed from the middle so both ends stay readable.
   private func drawTranscript(in rect: NSRect, opacity: CGFloat) {
-    guard let text = transcriptText(opacity: opacity) else { return }
-    let paragraph = NSMutableParagraphStyle()
-    paragraph.lineBreakMode = .byTruncatingHead
-    let styled = NSMutableAttributedString(attributedString: text)
-    styled.addAttribute(
-      .paragraphStyle,
-      value: paragraph,
-      range: NSRange(location: 0, length: styled.length)
-    )
+    guard let text = fittedTranscript(forWidth: transcriptContentWidth) else { return }
+    NSGraphicsContext.saveGraphicsState()
+    // Fade the whole block at once rather than baking alpha into every colour,
+    // which keeps the measured and drawn strings identical and cacheable.
+    NSGraphicsContext.current?.cgContext.setAlpha(opacity)
     // Inset the top so the text is not flush against the capsule's shoulder.
-    styled.draw(with: NSRect(
+    text.draw(with: NSRect(
       x: rect.minX,
       y: rect.minY,
       width: rect.width,
       height: max(0, rect.height - 6)
     ), options: [.usesLineFragmentOrigin, .usesFontLeading])
+    NSGraphicsContext.restoreGraphicsState()
   }
 
   /// Spec state 4: the locked (hands-free) chip that replaces cancel.
