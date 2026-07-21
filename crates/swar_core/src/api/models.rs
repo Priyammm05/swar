@@ -33,14 +33,82 @@ const EMBEDDED_LLM_MODEL_SHA256: &str =
     "626b4a6678b86442240e33df819e00132d3ba7dddfe1cdc4fbb18e0a9615c62d";
 const EMBEDDED_LLM_MODEL_BYTES: u64 = 2_104_932_768;
 
-/// Bytes fetched and bytes expected for whatever model is downloading now.
+/// Bytes fetched and bytes expected across every download in flight.
 ///
-/// Published from the download loop so the overlay can say how far along it is.
+/// Published from the download loops so the overlay can say how far along it is.
 /// Zeroed when nothing is downloading. Two `u64`s in atomics rather than a
-/// mutex: the writer is one download thread, the reader is the Dart UI isolate
+/// mutex: the writers are download threads, the reader is the Dart UI isolate
 /// polling on every overlay frame, and a torn read is one stale percentage.
+///
+/// Both counters are *additive*: each download registers what it expects to
+/// fetch and withdraws it again when it ends (see [`ProgressShare`]). Storing
+/// the current file's figures instead made the percentage restart from zero at
+/// every file boundary of the four-file Parakeet bundle, and let a foreground
+/// Settings install and the background bundle overwrite each other's numbers.
 static DOWNLOAD_RECEIVED_BYTES: AtomicU64 = AtomicU64::new(0);
 static DOWNLOAD_TOTAL_BYTES: AtomicU64 = AtomicU64::new(0);
+
+/// One download's stake in the shared progress counters.
+///
+/// Construction adds this download's expected size to the global total; drop
+/// withdraws both that total and whatever it had reported receiving, on every
+/// path including a `?` early return. A single share spans a whole multi-file
+/// bundle, so the overlay sees one percentage climbing once to 100.
+struct ProgressShare {
+    total_bytes: u64,
+    /// Bytes fetched by files of this download that have already finished.
+    completed_bytes: u64,
+    /// What this share last contributed to `DOWNLOAD_RECEIVED_BYTES`, so the
+    /// contribution can be adjusted rather than added to twice.
+    published_bytes: u64,
+}
+
+impl ProgressShare {
+    fn new(total_bytes: u64) -> Self {
+        DOWNLOAD_TOTAL_BYTES.fetch_add(total_bytes, Ordering::Relaxed);
+        Self {
+            total_bytes,
+            completed_bytes: 0,
+            published_bytes: 0,
+        }
+    }
+
+    /// Reports progress through the file currently being fetched.
+    fn report_current_file(&mut self, received_bytes: u64) {
+        self.publish(self.completed_bytes + received_bytes);
+    }
+
+    /// Banks a finished file so the next one counts on top of it instead of
+    /// rewinding the percentage to this download's starting point.
+    fn finish_file(&mut self, size_bytes: u64) {
+        self.completed_bytes += size_bytes;
+        self.publish(self.completed_bytes);
+    }
+
+    /// Discards a failed file's partial bytes; its data is deleted from disk and
+    /// will be fetched again from the start.
+    fn discard_current_file(&mut self) {
+        self.publish(self.completed_bytes);
+    }
+
+    fn publish(&mut self, received_bytes: u64) {
+        if received_bytes >= self.published_bytes {
+            DOWNLOAD_RECEIVED_BYTES
+                .fetch_add(received_bytes - self.published_bytes, Ordering::Relaxed);
+        } else {
+            DOWNLOAD_RECEIVED_BYTES
+                .fetch_sub(self.published_bytes - received_bytes, Ordering::Relaxed);
+        }
+        self.published_bytes = received_bytes;
+    }
+}
+
+impl Drop for ProgressShare {
+    fn drop(&mut self) {
+        DOWNLOAD_TOTAL_BYTES.fetch_sub(self.total_bytes, Ordering::Relaxed);
+        DOWNLOAD_RECEIVED_BYTES.fetch_sub(self.published_bytes, Ordering::Relaxed);
+    }
+}
 
 /// How far the current model download has got, or `None` when none is running.
 #[derive(Clone, Debug)]
@@ -98,6 +166,7 @@ pub fn install_recommended_model() -> Result<OfflineModelStatus, String> {
             &destination,
             MINIMUM_MODEL_BYTES,
             RECOMMENDED_MODEL_SHA256,
+            &mut ProgressShare::new(MINIMUM_MODEL_BYTES),
         )?;
     }
     Ok(status_for(destination))
@@ -108,17 +177,17 @@ fn download_verified(
     destination: &Path,
     minimum_bytes: u64,
     expected_sha256: &str,
+    progress: &mut ProgressShare,
 ) -> Result<(), String> {
     let partial = destination.with_extension("bin.partial");
     // Guarantee the partial is removed on every failure path (network error,
     // disk-full mid-write, or a verification mismatch), not only on mismatch.
-    let outcome = download_to_partial(url, &partial, minimum_bytes, expected_sha256);
-    // Whether it finished or failed, nothing is in flight any more. Left set,
-    // the overlay would sit at a frozen percentage forever.
-    DOWNLOAD_TOTAL_BYTES.store(0, Ordering::Relaxed);
-    DOWNLOAD_RECEIVED_BYTES.store(0, Ordering::Relaxed);
+    let outcome = download_to_partial(url, &partial, minimum_bytes, expected_sha256, progress);
     if outcome.is_err() {
         let _ = fs::remove_file(&partial);
+        progress.discard_current_file();
+    } else {
+        progress.finish_file(minimum_bytes);
     }
     outcome?;
     fs::rename(&partial, destination).map_err(|error| error.to_string())
@@ -129,6 +198,7 @@ fn download_to_partial(
     partial: &Path,
     minimum_bytes: u64,
     expected_sha256: &str,
+    progress: &mut ProgressShare,
 ) -> Result<(), String> {
     let agent = ureq::AgentBuilder::new()
         .timeout_connect(DOWNLOAD_CONNECT_TIMEOUT)
@@ -143,11 +213,11 @@ fn download_to_partial(
     let mut hasher = Sha256::new();
     let mut buffer = [0_u8; 64 * 1024];
     let mut size_bytes = 0_u64;
-    // Publish against the expected size rather than Content-Length: the minimum
-    // is pinned and verified, so it is the number we already trust, and it is
-    // available even when the server sends a chunked response with no length.
-    DOWNLOAD_TOTAL_BYTES.store(minimum_bytes, Ordering::Relaxed);
-    DOWNLOAD_RECEIVED_BYTES.store(0, Ordering::Relaxed);
+    // Progress is published against the pinned expected sizes rather than
+    // Content-Length: they are the numbers already verified against, and they
+    // are available even when the server sends a chunked response with no
+    // length. The share owns the totals, so nothing is stored here.
+    progress.report_current_file(0);
     loop {
         let count = reader
             .read(&mut buffer)
@@ -159,7 +229,7 @@ fn download_to_partial(
             .map_err(|error| error.to_string())?;
         hasher.update(&buffer[..count]);
         size_bytes += count as u64;
-        DOWNLOAD_RECEIVED_BYTES.store(size_bytes, Ordering::Relaxed);
+        progress.report_current_file(size_bytes);
     }
     file.sync_all().map_err(|error| error.to_string())?;
     let digest = format!("{:x}", hasher.finalize());
@@ -254,6 +324,7 @@ pub fn install_embedded_llm_model() -> Result<OfflineModelStatus, String> {
             &destination,
             EMBEDDED_LLM_MODEL_BYTES,
             EMBEDDED_LLM_MODEL_SHA256,
+            &mut ProgressShare::new(EMBEDDED_LLM_MODEL_BYTES),
         )?;
     }
     Ok(status_for(destination))
@@ -342,16 +413,32 @@ fn bundle_installed(bundle: &AsrBundle) -> bool {
 /// existing file. Callers must run this off the UI thread.
 fn install_bundle(bundle: &AsrBundle) -> Result<(), String> {
     let base = models_dir()?.join(&bundle.dir);
-    for file in &bundle.files {
+    // Verify up front, so the total the overlay counts towards is the whole
+    // outstanding bundle. Reporting each file separately made the percentage
+    // run to 100 and drop back to nearly zero four times over, which reads as a
+    // download that keeps restarting.
+    let outstanding: Vec<&AsrFile> = bundle
+        .files
+        .iter()
+        .filter(|file| !verified_file(&base.join(&file.path), file.bytes, &file.sha256))
+        .collect();
+    if outstanding.is_empty() {
+        return Ok(());
+    }
+    let mut progress = ProgressShare::new(outstanding.iter().map(|file| file.bytes).sum());
+    for file in outstanding {
         let destination = base.join(&file.path);
-        if verified_file(&destination, file.bytes, &file.sha256) {
-            continue;
-        }
         let parent = destination
             .parent()
             .ok_or_else(|| "asr model directory is unavailable".to_owned())?;
         fs::create_dir_all(parent).map_err(|error| error.to_string())?;
-        download_verified(&file.url, &destination, file.bytes, &file.sha256)?;
+        download_verified(
+            &file.url,
+            &destination,
+            file.bytes,
+            &file.sha256,
+            &mut progress,
+        )?;
     }
     Ok(())
 }
@@ -445,6 +532,49 @@ mod tests {
         );
 
         fs::remove_dir_all(&dir).ok();
+    }
+
+    /// The reported failure: the overlay percentage kept starting over. Parakeet
+    /// is four files, and each one used to store its own size as the total, so
+    /// the counter ran to 100% and dropped back at every file boundary; a
+    /// Settings install running at the same time overwrote it again. Progress
+    /// must be one number for everything in flight.
+    ///
+    /// Both halves live in one test on purpose: the counters are process-wide
+    /// statics, so two tests touching them in parallel would fight.
+    #[test]
+    fn progress_counts_every_download_in_flight_as_one() {
+        let mut bundle = ProgressShare::new(100);
+        bundle.report_current_file(30);
+        bundle.finish_file(40);
+        bundle.report_current_file(10);
+
+        let progress = model_download_progress().expect("a download is in flight");
+        assert_eq!(
+            progress.received_bytes, 50,
+            "the next file must count on top of the finished one"
+        );
+        assert_eq!(progress.total_bytes, 100);
+
+        let mut whisper = ProgressShare::new(400);
+        whisper.report_current_file(100);
+        let progress = model_download_progress().expect("two downloads are in flight");
+        assert_eq!(
+            progress.total_bytes, 500,
+            "totals add up, they do not replace"
+        );
+        assert_eq!(progress.received_bytes, 150);
+
+        drop(whisper);
+        let progress = model_download_progress().expect("the bundle is still going");
+        assert_eq!(progress.total_bytes, 100);
+        assert_eq!(progress.received_bytes, 50);
+
+        drop(bundle);
+        assert!(
+            model_download_progress().is_none(),
+            "an idle app must report no download, not a frozen percentage"
+        );
     }
 
     #[test]
